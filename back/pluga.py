@@ -11,7 +11,7 @@ class pluga():
         self.color = color
         self.number_of_mahalkha = number_of_mahalkha
         self.mahalkot = mahalkot
-        mahlaka_to_add = "INSERT INTO table_name (column1, column2)"
+
         for i in range(number_of_mahalkha):
             print("adding mahlaka number ", i+1)
             mahlaka_color = input("what color do your mahalkha is ? ")

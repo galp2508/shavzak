@@ -4,13 +4,13 @@ import sqlite3
 
 class pluga():
     
-    def __init__(self, name: str, gdud : str = "", color : str = "#FFFFFF",
-                 number_of_mahalkha: int = 0, mahalkot : list = []):
+    def __init__(self, name: str, gdud: str = "", color: str = "#FFFFFF",
+                 number_of_mahalkha: int = 0, mahalkot: list = None):
         self.name = name.strip()
         self.gdud = gdud.strip()
         self.color = color
         self.number_of_mahalkha = number_of_mahalkha
-        self.mahalkot = mahalkot
+        self.mahalkot = mahalkot if mahalkot is not None else []
 
         for i in range(number_of_mahalkha):
             print("adding mahlaka number ", i+1)
@@ -24,15 +24,15 @@ class pluga():
                                           number=number, color=color)
         self.mahalkot.append(mahlaka_to_add)
 
-    def check_available_soldiers(self, on_date = None):
-        drivers =[]
+    def check_available_soldiers(self, on_date=None):
+        drivers = []
         staff = [] 
         soldiers = []
 
-        for i in self.number_of_mahalkha:
-            soldiers += [ i.check_available_soldiers(on_date=on_date) ]
-            drivers += i.check_available_drivers(on_date=on_date)
-            staff += [ i.check_available_staff(on_date=on_date) ]
+        for mahlaka_obj in self.mahalkot:
+            soldiers.append(mahlaka_obj.check_available_soldiers(on_date=on_date))
+            drivers += mahlaka_obj.check_available_drivers(on_date=on_date)
+            staff.append(mahlaka_obj.check_available_staff(on_date=on_date))
 
         for i in range(len(soldiers)):
             print(f"מחלקה מספר {i+1}:")
@@ -41,7 +41,6 @@ class pluga():
             
             print("צוות זמינים:")
             print(staff[i])
-
 
         print("נהגים זמינים:")
         print(drivers)

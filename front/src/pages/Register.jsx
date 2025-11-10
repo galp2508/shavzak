@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Shield, UserPlus, AlertCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const Register = () => {
   const { register } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -47,6 +48,8 @@ const Register = () => {
 
     if (result.success) {
       toast.success('נרשמת בהצלחה!');
+      // ניווט לדף הבית
+      navigate('/', { replace: true });
     } else {
       setError(result.error);
       toast.error(result.error);

@@ -42,9 +42,10 @@ export const AuthProvider = ({ children }) => {
       const response = await api.post('/login', { username, password });
       const { token: newToken, user: userData } = response.data;
       
+      // ⚡ עדכון בסדר הנכון
+      localStorage.setItem('token', newToken);
       setToken(newToken);
       setUser(userData);
-      localStorage.setItem('token', newToken);
       
       return { success: true };
     } catch (error) {
@@ -64,9 +65,10 @@ export const AuthProvider = ({ children }) => {
       });
       const { token: newToken, user: userData } = response.data;
       
+      // ⚡ עדכון בסדר הנכון
+      localStorage.setItem('token', newToken);
       setToken(newToken);
       setUser(userData);
-      localStorage.setItem('token', newToken);
       
       return { success: true };
     } catch (error) {
@@ -99,7 +101,8 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     isRole,
-    isAuthenticated: !!token && !!user,
+    // ✅ שינוי קריטי: isAuthenticated מבוסס על token בלבד!
+    isAuthenticated: !!token,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -15,16 +15,24 @@ import Loading from './components/Loading';
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
+  // ⏳ אם עדיין טוען, הצג מסך טעינה
   if (loading) {
     return <Loading />;
   }
 
+  // 🔒 אם אין token, redirect ל-login
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
+  // ⏳ אם יש token אבל עדיין לא טען user, המתן
+  if (!user) {
+    return <Loading />;
+  }
+
+  // ✅ הכל טוב, הצג את התוכן
   return children;
 };
 

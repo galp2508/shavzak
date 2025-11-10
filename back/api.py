@@ -85,7 +85,7 @@ def login():
         if not user or not user.check_password(data['password']):
             return jsonify({'error': 'שם משתמש או סיסמה שגויים'}), 401
         
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now()
         session.commit()
         
         token = create_token(user)

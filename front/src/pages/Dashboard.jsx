@@ -10,20 +10,74 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 const Dashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
+  const [pluga, setPluga] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadStats();
-  }, []);
+    // Load stats once user is available (we need pluga_id)
+    if (user) {
+      loadPluga();
+      loadStats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  useEffect(() => {
+    // if no user (not authenticated) stop loading spinner
+    if (!user) setLoading(false);
+  }, [user]);
 
   const loadStats = async () => {
     try {
-      const response = await api.get('/stats');
-      setStats(response.data.stats);
+      // נסה את נקודת הקצה /stats אם קיימת
+      const res = await api.get('/stats').catch(() => null);
+      if (res && res.data && res.data.stats) {
+        setStats(res.data.stats);
+        return;
+      }
+
+      // Fallback: חישוב סטטיסטיקות בעזרת נקודות הקצה הקיימות
+      if (!user?.pluga_id) {
+        setStats({});
+        return;
+      }
+
+      // רשימת מחלקות של הפלוגה
+      const mahRes = await api.get(`/plugot/${user.pluga_id}/mahalkot`);
+      const mahalkot = mahRes.data.mahalkot || [];
+
+      // רשימת שיבוצים של הפלוגה
+      const shavRes = await api.get(`/plugot/${user.pluga_id}/shavzakim`);
+      const shavzakim = shavRes.data.shavzakim || [];
+
+      // סכום חיילים בכל מחלקה (מקביל לקריאות /mahalkot/:id/soldiers)
+      const soldierCountsPromises = mahalkot.map((m) =>
+        api.get(`/mahalkot/${m.id}/soldiers`).then((r) => r.data.soldiers?.length || 0).catch(() => 0)
+      );
+      const counts = await Promise.all(soldierCountsPromises);
+      const totalSoldiers = counts.reduce((a, b) => a + b, 0);
+
+      setStats({
+        mahalkot: mahalkot.length,
+        total_soldiers: totalSoldiers,
+        commanders: 0, // לא קיים endpoint ישיר — ניתן להרחיב בעתיד
+        shavzakim: shavzakim.length,
+      });
     } catch (error) {
       console.error('Failed to load stats:', error);
+      setStats({});
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPluga = async () => {
+    try {
+      if (!user?.pluga_id) return;
+      const res = await api.get(`/plugot/${user.pluga_id}`);
+      setPluga(res.data.pluga || null);
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -83,7 +137,7 @@ const Dashboard = () => {
               שלום, {user?.full_name} 👋
             </h1>
             <p className="text-military-100">
-              {user?.role} · {user?.pluga?.name || 'טוען...'}
+              {user?.role} · {pluga?.name || user?.pluga_id || 'טוען...'}
             </p>
           </div>
           <Activity className="w-16 h-16 opacity-50" />

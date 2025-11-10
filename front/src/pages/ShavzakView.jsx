@@ -16,7 +16,8 @@ const ShavzakView = () => {
   const loadShavzak = async () => {
     try {
       const response = await api.get(`/shavzakim/${id}`);
-      setShavzak(response.data);
+      // backend מחזיר { shavzak: {...}, assignments: [...] }
+      setShavzak(response.data || {});
     } catch (error) {
       toast.error('שגיאה בטעינת שיבוץ');
     } finally {
@@ -29,10 +30,9 @@ const ShavzakView = () => {
   }
 
   const groupedByDay = {};
-  shavzak.assignments.forEach(assignment => {
-    if (!groupedByDay[assignment.day]) {
-      groupedByDay[assignment.day] = [];
-    }
+  const assignments = shavzak?.assignments || [];
+  assignments.forEach((assignment) => {
+    if (!groupedByDay[assignment.day]) groupedByDay[assignment.day] = [];
     groupedByDay[assignment.day].push(assignment);
   });
 

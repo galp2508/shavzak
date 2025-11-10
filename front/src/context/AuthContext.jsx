@@ -18,22 +18,60 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     if (token) {
-      // טען את מידע המשתמש
-      loadUserData();
+      // טען את מידע המשתמש מתוך ה-JWT במקום לקרוא /me שמה-backend אין
+      const payload = decodeJwt(token);
+      if (payload) {
+        // המפתח names תואם ל-payload שנוצר ב-backend
+        setUser({
+          id: payload.user_id,
+          username: payload.username,
+          full_name: payload.full_name || payload.username,
+          role: payload.role,
+          pluga_id: payload.pluga_id,
+          mahlaka_id: payload.mahlaka_id,
+          kita: payload.kita,
+        });
+        setLoading(false);
+      } else {
+        logout();
+      }
     } else {
       setLoading(false);
     }
   }, [token]);
 
   const loadUserData = async () => {
+    // פונקציה נשארת כדי לשמור על תאימות אבל אינה מצויה בשימוש כרגע
     try {
-      const response = await api.get('/me');
-      setUser(response.data.user);
-    } catch (error) {
-      console.error('Failed to load user data:', error);
-      logout();
-    } finally {
       setLoading(false);
+    } catch (error) {
+      setLoading(false);
+    }
+  };
+
+  // מפענח JWT פשוט (בצד הלקוח) כדי להוציא payload בלי אימות
+  const decodeJwt = (token) => {
+    try {
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+      const payload = parts[1];
+      // base64url -> base64
+      let base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      while (base64.length % 4) {
+        base64 += '=';
+      }
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(function (c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+          })
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      console.error('Failed to decode token', e);
+      return null;
     }
   };
 

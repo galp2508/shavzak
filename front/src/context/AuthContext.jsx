@@ -123,6 +123,14 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
   };
 
+  // Update the user object stored in context (shallow merge)
+  const updateUser = (updates) => {
+    setUser((prev) => {
+      if (!prev) return { ...updates };
+      return { ...prev, ...updates };
+    });
+  };
+
   const isRole = (roles) => {
     if (!user) return false;
     if (Array.isArray(roles)) {
@@ -138,6 +146,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    updateUser,
     isRole,
     // ✅ שינוי קריטי: isAuthenticated מבוסס על token בלבד!
     isAuthenticated: !!token,

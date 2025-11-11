@@ -73,6 +73,38 @@ def register():
         session.close()
 
 
+@app.route('/api/mahalkot/<int:mahlaka_id>', methods=['DELETE'])
+@token_required
+def delete_mahlaka(mahlaka_id, current_user):
+    """מחיקת מחלקה (עם בדיקות הרשאה)"""
+    try:
+        session = get_db()
+
+        mahlaka = session.query(Mahlaka).filter_by(id=mahlaka_id).first()
+        if not mahlaka:
+            return jsonify({'error': 'מחלקה לא נמצאה'}), 404
+
+        # Authorization
+        if not can_edit_mahlaka(current_user, mahlaka_id, session):
+            return jsonify({'error': 'אין לך הרשאה למחוק מחלקה זו'}), 403
+
+        # Clear any users referencing this mahlaka
+        users = session.query(User).filter_by(mahlaka_id=mahlaka_id).all()
+        for u in users:
+            u.mahlaka_id = None
+
+        # Deleting mahlaka will cascade-delete soldiers due to model cascade
+        session.delete(mahlaka)
+        session.commit()
+
+        return jsonify({'message': 'המחלקה נמחקה בהצלחה'}), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @app.route('/api/login', methods=['POST'])
 def login():
     """התחברות"""
@@ -268,6 +300,79 @@ def create_mahlaka(current_user):
         session.close()
 
 
+@app.route('/api/mahalkot/bulk', methods=['POST'])
+@token_required
+@role_required(['מפ'])
+def create_mahalkot_bulk(current_user):
+    """יצירת מחלקות בכמות גדולה (רשימה)"""
+    try:
+        data = request.json
+        session = get_db()
+        
+        pluga_id = data.get('pluga_id', current_user['pluga_id'])
+        
+        if not can_edit_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+        
+        mahalkot_list = data.get('mahalkot', [])
+        if not mahalkot_list:
+            return jsonify({'error': 'רשימת מחלקות ריקה'}), 400
+        
+        created = []
+        errors = []
+        
+        for idx, mahlaka_data in enumerate(mahalkot_list):
+            try:
+                # Validate required field
+                if 'number' not in mahlaka_data:
+                    errors.append(f"שורה {idx + 1}: חסר שדה 'number'")
+                    continue
+                
+                # Check if mahlaka with this number already exists in pluga
+                existing = session.query(Mahlaka).filter_by(
+                    pluga_id=pluga_id,
+                    number=mahlaka_data['number']
+                ).first()
+                
+                if existing:
+                    errors.append(f"שורה {idx + 1}: מחלקה {mahlaka_data['number']} כבר קיימת")
+                    continue
+                
+                # Create mahlaka
+                mahlaka = Mahlaka(
+                    number=mahlaka_data['number'],
+                    color=mahlaka_data.get('color', '#FFFFFF'),
+                    pluga_id=pluga_id
+                )
+                
+                session.add(mahlaka)
+                session.flush()
+                
+                created.append({
+                    'id': mahlaka.id,
+                    'number': mahlaka.number,
+                    'color': mahlaka.color
+                })
+            except Exception as e:
+                errors.append(f"שורה {idx + 1}: {str(e)}")
+        
+        session.commit()
+        
+        return jsonify({
+            'message': f'{len(created)} מחלקות נוצרו בהצלחה',
+            'created': created,
+            'errors': errors,
+            'total': len(mahalkot_list),
+            'success_count': len(created),
+            'error_count': len(errors)
+        }), 201 if created else 400
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @app.route('/api/plugot/<int:pluga_id>/mahalkot', methods=['GET'])
 @token_required
 def list_mahalkot(pluga_id, current_user):
@@ -361,6 +466,129 @@ def create_soldier(current_user):
                 'kita': soldier.kita
             }
         }), 201
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/soldiers/bulk', methods=['POST'])
+@token_required
+def create_soldiers_bulk(current_user):
+    """יצירת חיילים בכמות גדולה (רשימה)"""
+    try:
+        data = request.json
+        session = get_db()
+        
+        soldiers_list = data.get('soldiers', [])
+        if not soldiers_list:
+            return jsonify({'error': 'רשימת חיילים ריקה'}), 400
+        
+        created = []
+        errors = []
+        
+        for idx, soldier_data in enumerate(soldiers_list):
+            try:
+                # Validate required fields
+                if 'name' not in soldier_data:
+                    errors.append(f"שורה {idx + 1}: חסר שדה 'name'")
+                    continue
+                if 'mahlaka_id' not in soldier_data:
+                    errors.append(f"שורה {idx + 1}: חסר שדה 'mahlaka_id'")
+                    continue
+                if 'role' not in soldier_data:
+                    errors.append(f"שורה {idx + 1}: חסר שדה 'role'")
+                    continue
+                
+                mahlaka_id = soldier_data['mahlaka_id']
+                
+                # Authorization check
+                if not can_edit_mahlaka(current_user, mahlaka_id, session):
+                    errors.append(f"שורה {idx + 1}: אין לך הרשאה להוסיף לחיילים למחלקה זו")
+                    continue
+                
+                # Role-based restrictions
+                if current_user['role'] == 'מכ':
+                    if soldier_data.get('kita') != current_user['kita']:
+                        errors.append(f"שורה {idx + 1}: אתה יכול להוסיף חיילים רק לכיתה שלך")
+                        continue
+                
+                # Create soldier
+                soldier = Soldier(
+                    name=soldier_data['name'],
+                    role=soldier_data['role'],
+                    mahlaka_id=mahlaka_id,
+                    kita=soldier_data.get('kita'),
+                    idf_id=soldier_data.get('idf_id'),
+                    personal_id=soldier_data.get('personal_id'),
+                    sex=soldier_data.get('sex'),
+                    phone_number=soldier_data.get('phone_number'),
+                    address=soldier_data.get('address'),
+                    emergency_contact_name=soldier_data.get('emergency_contact_name'),
+                    emergency_contact_number=soldier_data.get('emergency_contact_number'),
+                    pakal=soldier_data.get('pakal'),
+                    is_platoon_commander=soldier_data.get('is_platoon_commander', False),
+                    has_hatashab=soldier_data.get('has_hatashab', False)
+                )
+                
+                # Parse dates if provided
+                if soldier_data.get('recruit_date'):
+                    try:
+                        soldier.recruit_date = datetime.strptime(soldier_data['recruit_date'], '%Y-%m-%d').date()
+                    except:
+                        pass
+                if soldier_data.get('birth_date'):
+                    try:
+                        soldier.birth_date = datetime.strptime(soldier_data['birth_date'], '%Y-%m-%d').date()
+                    except:
+                        pass
+                if soldier_data.get('home_round_date'):
+                    try:
+                        soldier.home_round_date = datetime.strptime(soldier_data['home_round_date'], '%Y-%m-%d').date()
+                    except:
+                        pass
+                
+                session.add(soldier)
+                session.flush()
+                
+                # Add unavailable_date if provided
+                if soldier_data.get('unavailable_date'):
+                    try:
+                        # Parse DD.MM.YYYY format
+                        date_str = soldier_data['unavailable_date'].strip()
+                        unavailable = datetime.strptime(date_str, '%d.%m.%Y').date()
+                        unavailable_record = UnavailableDate(soldier_id=soldier.id, date=unavailable)
+                        session.add(unavailable_record)
+                    except Exception as e:
+                        # Silently fail if date parsing fails
+                        pass
+                
+                # Add certifications if provided
+                if 'certifications' in soldier_data:
+                    for cert_name in soldier_data['certifications']:
+                        cert = Certification(soldier_id=soldier.id, certification_name=cert_name)
+                        session.add(cert)
+                
+                created.append({
+                    'id': soldier.id,
+                    'name': soldier.name,
+                    'role': soldier.role,
+                    'kita': soldier.kita
+                })
+            except Exception as e:
+                errors.append(f"שורה {idx + 1}: {str(e)}")
+        
+        session.commit()
+        
+        return jsonify({
+            'message': f'{len(created)} חיילים נוצרו בהצלחה',
+            'created': created,
+            'errors': errors,
+            'total': len(soldiers_list),
+            'success_count': len(created),
+            'error_count': len(errors)
+        }), 201 if created else 400
     except Exception as e:
         session.rollback()
         return jsonify({'error': str(e)}), 500

@@ -5,6 +5,7 @@ import {
   UserPlus, Search, Edit, Trash2, X, 
   Award, Phone, MapPin, Shield, Calendar 
 } from 'lucide-react';
+import ROLES from '../constants/roles';
 import { toast } from 'react-toastify';
 
 const Soldiers = () => {
@@ -302,11 +303,9 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
                 className="input-field"
                 required
               >
-                <option value="לוחם">לוחם</option>
-                <option value="נהג">נהג</option>
-                <option value="ממ">מ״מ</option>
-                <option value="מכ">מ״כ</option>
-                <option value="סמל">סמל</option>
+                {ROLES.map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
               </select>
             </div>
 

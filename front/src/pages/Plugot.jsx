@@ -5,7 +5,7 @@ import { Shield, Edit, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const Plugot = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [pluga, setPluga] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -16,26 +16,32 @@ const Plugot = () => {
   });
 
   useEffect(() => {
+    // Reload pluga when the user's pluga_id changes (e.g., after creating a pluga)
     loadPluga();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.pluga_id]);
 
   const loadPluga = async () => {
-    if (!user.pluga_id) {
+    if (!user?.pluga_id) {
       setLoading(false);
       return;
     }
 
     try {
       const response = await api.get(`/plugot/${user.pluga_id}`);
-      setPluga(response.data.pluga);
-      setFormData({
-        name: response.data.pluga.name,
-        gdud: response.data.pluga.gdud,
-        color: response.data.pluga.color,
-      });
+      const plugaData = response.data?.pluga;
+      if (plugaData) {
+        setPluga(plugaData);
+        setFormData({
+          name: plugaData.name || '',
+          gdud: plugaData.gdud || '',
+          color: plugaData.color || '#FFFFFF',
+        });
+      }
+      setLoading(false);
     } catch (error) {
+      console.error('Error loading pluga:', error);
       toast.error('שגיאה בטעינת פרטי הפלוגה');
-    } finally {
       setLoading(false);
     }
   };
@@ -48,7 +54,17 @@ const Plugot = () => {
         await api.put(`/plugot/${pluga.id}`, formData);
         toast.success('הפלוגה עודכנה בהצלחה');
       } else {
-        await api.post('/plugot', formData);
+        const res = await api.post('/plugot', formData);
+        // server מחזיר את הפלוגה שנוצרה
+        const created = res.data?.pluga;
+        if (created) {
+          setPluga(created);
+          // עדכון ה-user בהקשר כדי לשקף את השיוך החדש
+          // useAuth לא חשוף כאן, נטען מטופס העליון
+          if (typeof updateUser === 'function') {
+            updateUser({ pluga_id: created.id });
+          }
+        }
         toast.success('הפלוגה נוצרה בהצלחה');
       }
       setEditing(false);

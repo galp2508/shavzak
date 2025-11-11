@@ -1,8 +1,8 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Home, Users, Shield, UserPlus, FileText, 
-  Calendar, LogOut, User, Menu, X 
+import {
+  Home, Users, Shield, FileText,
+  Calendar, LogOut, User, Menu, X, UserCheck
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -15,10 +15,19 @@ const Layout = () => {
     { name: 'דשבורד', href: '/', icon: Home, roles: ['מפ', 'ממ', 'מכ'] },
     { name: 'פלוגות', href: '/plugot', icon: Shield, roles: ['מפ'] },
     { name: 'מחלקות', href: '/mahalkot', icon: Users, roles: ['מפ', 'ממ'] },
-    { name: 'חיילים', href: '/soldiers', icon: UserPlus, roles: ['מפ', 'ממ', 'מכ'] },
     { name: 'תבניות משימות', href: '/templates', icon: FileText, roles: ['מפ'] },
     { name: 'שיבוצים', href: '/shavzakim', icon: Calendar, roles: ['מפ', 'ממ', 'מכ'] },
   ];
+
+  // הוסף "בקשות הצטרפות" רק למפ ראשי (מפ ללא pluga_id)
+  if (user?.role === 'מפ' && !user?.pluga_id) {
+    navigation.push({
+      name: 'בקשות הצטרפות',
+      href: '/join-requests',
+      icon: UserCheck,
+      roles: ['מפ']
+    });
+  }
 
   const filteredNav = navigation.filter(item => 
     item.roles.includes(user?.role)

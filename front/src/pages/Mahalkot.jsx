@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Shield, Plus, Users, Trash2 } from 'lucide-react';
+import { Shield, Plus, Users, Trash2, X, Edit, Award, Phone, MapPin, Calendar } from 'lucide-react';
 import ROLES from '../constants/roles';
 import { toast } from 'react-toastify';
 
@@ -10,6 +10,8 @@ const Mahalkot = () => {
   const [mahalkot, setMahalkot] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [viewingMahlaka, setViewingMahlaka] = useState(null);
+  const [showSoldiersModal, setShowSoldiersModal] = useState(false);
 
   useEffect(() => {
     // Reload mahalkot when the user's pluga_id changes (after creating a pluga)
@@ -69,7 +71,10 @@ const Mahalkot = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {mahalkot.map((mahlaka) => (
-          <div key={mahlaka.id} className="card hover:shadow-lg transition-shadow" style={{ borderTop: `4px solid ${mahlaka.color}` }}>
+          <div key={mahlaka.id} className="card hover:shadow-lg transition-shadow cursor-pointer" style={{ borderTop: `4px solid ${mahlaka.color}` }} onClick={() => {
+            setViewingMahlaka(mahlaka);
+            setShowSoldiersModal(true);
+          }}>
             <div className="flex items-center justify-between mb-4">
               <div className="bg-gray-100 p-3 rounded-lg" style={{ backgroundColor: `${mahlaka.color}20` }}>
                 <Shield className="w-8 h-8" style={{ color: mahlaka.color }} />
@@ -78,7 +83,10 @@ const Mahalkot = () => {
                 <span className="badge badge-blue">{mahlaka.soldiers_count} חיילים</span>
                 {user.role === 'מפ' && (
                   <button
-                    onClick={() => deleteMahlaka(mahlaka.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteMahlaka(mahlaka.id);
+                    }}
                     className="btn-ghost text-red-600"
                     title="מחק מחלקה"
                   >
@@ -109,6 +117,17 @@ const Mahalkot = () => {
           onClose={() => setShowModal(false)}
           onSave={() => {
             setShowModal(false);
+            loadMahalkot();
+          }}
+        />
+      )}
+
+      {showSoldiersModal && viewingMahlaka && (
+        <MahlakaSoldiersModal
+          mahlaka={viewingMahlaka}
+          onClose={() => {
+            setShowSoldiersModal(false);
+            setViewingMahlaka(null);
             loadMahalkot();
           }}
         />
@@ -712,6 +731,541 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
             <button type="button" onClick={onClose} className="flex-1 btn-secondary">ביטול</button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// Modal for viewing soldiers in a mahlaka
+const MahlakaSoldiersModal = ({ mahlaka, onClose }) => {
+  const [soldiers, setSoldiers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [viewingSoldier, setViewingSoldier] = useState(null);
+  const [editingSoldier, setEditingSoldier] = useState(null);
+
+  useEffect(() => {
+    loadSoldiers();
+  }, [mahlaka.id]);
+
+  const loadSoldiers = async () => {
+    try {
+      const response = await api.get(`/mahalkot/${mahlaka.id}/soldiers`);
+      setSoldiers(response.data.soldiers || []);
+    } catch (error) {
+      toast.error('שגיאה בטעינת חיילים');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewDetails = async (soldierId) => {
+    try {
+      const response = await api.get(`/soldiers/${soldierId}`);
+      setViewingSoldier(response.data.soldier);
+    } catch (error) {
+      toast.error('שגיאה בטעינת פרטי חייל');
+    }
+  };
+
+  const handleDelete = async (soldierId) => {
+    if (!window.confirm('האם אתה בטוח שברצונך למחוק את החייל?')) return;
+
+    try {
+      await api.delete(`/soldiers/${soldierId}`);
+      toast.success('החייל נמחק בהצלחה');
+      loadSoldiers();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה במחיקת חייל');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-gradient-to-r from-military-600 to-military-700 text-white px-6 py-4 flex items-center justify-between rounded-t-xl">
+          <div className="flex items-center gap-3">
+            <Shield size={28} style={{ color: mahlaka.color }} />
+            <h2 className="text-2xl font-bold">מחלקה {mahlaka.number}</h2>
+          </div>
+          <button onClick={onClose} className="text-white hover:text-gray-200">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="spinner"></div>
+            </div>
+          ) : (
+            <>
+              {soldiers.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">אין חיילים במחלקה זו</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {soldiers.map((soldier) => (
+                    <div
+                      key={soldier.id}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div
+                        className="flex-1 cursor-pointer"
+                        onClick={() => handleViewDetails(soldier.id)}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="bg-military-100 p-2 rounded-full">
+                            <Shield size={16} className="text-military-600" />
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-bold text-gray-900 hover:text-military-600 transition-colors">
+                              {soldier.name}
+                            </h3>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-sm text-gray-600">{soldier.role}</span>
+                              {soldier.kita && (
+                                <>
+                                  <span className="text-gray-400">·</span>
+                                  <span className="text-sm text-gray-600">כיתה {soldier.kita}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingSoldier(soldier);
+                            handleViewDetails(soldier.id);
+                          }}
+                          className="text-blue-600 hover:text-blue-800 p-2"
+                          title="ערוך חייל"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(soldier.id)}
+                          className="text-red-600 hover:text-red-800 p-2"
+                          title="מחק חייל"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex justify-end rounded-b-xl border-t">
+          <button onClick={onClose} className="btn-secondary">
+            סגור
+          </button>
+        </div>
+      </div>
+
+      {/* Soldier Details/Edit Modal */}
+      {viewingSoldier && (
+        <SoldierDetailsEditModal
+          soldier={viewingSoldier}
+          isEditing={editingSoldier !== null}
+          onClose={() => {
+            setViewingSoldier(null);
+            setEditingSoldier(null);
+          }}
+          onSave={() => {
+            setViewingSoldier(null);
+            setEditingSoldier(null);
+            loadSoldiers();
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// Combined modal for viewing and editing soldier details
+const SoldierDetailsEditModal = ({ soldier, isEditing: initialIsEditing, onClose, onSave }) => {
+  const [isEditing, setIsEditing] = useState(initialIsEditing);
+  const [formData, setFormData] = useState({
+    name: soldier?.name || '',
+    role: soldier?.role || 'לוחם',
+    kita: soldier?.kita || '',
+    phone_number: soldier?.phone_number || '',
+    idf_id: soldier?.idf_id || '',
+    personal_id: soldier?.personal_id || '',
+    address: soldier?.address || '',
+    pakal: soldier?.pakal || '',
+    emergency_contact_name: soldier?.emergency_contact_name || '',
+    emergency_contact_number: soldier?.emergency_contact_number || '',
+    has_hatashab: soldier?.has_hatashab || false,
+    is_platoon_commander: soldier?.is_platoon_commander || false,
+  });
+  const [loading, setLoading] = useState(false);
+
+  const calculateCurrentRound = () => {
+    if (!soldier.home_round_date) return null;
+
+    const homeRoundDate = new Date(soldier.home_round_date);
+    const today = new Date();
+    const diffTime = Math.abs(today - homeRoundDate);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const roundNumber = Math.floor(diffDays / 21);
+    const daysIntoCurrentRound = diffDays % 21;
+    const nextRoundDate = new Date(homeRoundDate);
+    nextRoundDate.setDate(nextRoundDate.getDate() + ((roundNumber + 1) * 21));
+
+    return {
+      roundNumber: roundNumber + 1,
+      daysIntoRound: daysIntoCurrentRound,
+      nextRoundDate: nextRoundDate.toLocaleDateString('he-IL'),
+      daysUntilNextRound: 21 - daysIntoCurrentRound
+    };
+  };
+
+  const currentRound = calculateCurrentRound();
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await api.put(`/soldiers/${soldier.id}`, formData);
+      toast.success('החייל עודכן בהצלחה');
+      onSave();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה בשמירה');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-gradient-to-r from-military-600 to-military-700 text-white px-6 py-4 flex items-center justify-between rounded-t-xl">
+          <div className="flex items-center gap-3">
+            <Shield size={28} />
+            <h2 className="text-2xl font-bold">{soldier.name}</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isEditing && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="text-white hover:text-gray-200 p-2"
+                title="עריכה"
+              >
+                <Edit size={20} />
+              </button>
+            )}
+            <button onClick={onClose} className="text-white hover:text-gray-200">
+              <X size={24} />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {isEditing ? (
+            // Edit Mode
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="label">שם מלא</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="label">תפקיד</label>
+                  <select
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    className="input-field"
+                  >
+                    {ROLES.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">כיתה</label>
+                  <input
+                    type="text"
+                    value={formData.kita}
+                    onChange={(e) => setFormData({ ...formData, kita: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="label">טלפון</label>
+                  <input
+                    type="tel"
+                    value={formData.phone_number}
+                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="label">מספר אישי</label>
+                  <input
+                    type="text"
+                    value={formData.idf_id}
+                    onChange={(e) => setFormData({ ...formData, idf_id: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="label">תעודת זהות</label>
+                  <input
+                    type="text"
+                    value={formData.personal_id}
+                    onChange={(e) => setFormData({ ...formData, personal_id: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="label">כתובת</label>
+                  <input
+                    type="text"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="label">פק"ל</label>
+                  <input
+                    type="text"
+                    value={formData.pakal}
+                    onChange={(e) => setFormData({ ...formData, pakal: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="label">איש קשר לחירום - שם</label>
+                  <input
+                    type="text"
+                    value={formData.emergency_contact_name}
+                    onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="label">איש קשר לחירום - טלפון</label>
+                  <input
+                    type="tel"
+                    value={formData.emergency_contact_number}
+                    onChange={(e) => setFormData({ ...formData, emergency_contact_number: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.has_hatashab}
+                    onChange={(e) => setFormData({ ...formData, has_hatashab: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <span>יש התש״ב</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_platoon_commander}
+                    onChange={(e) => setFormData({ ...formData, is_platoon_commander: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <span>מפקד כיתה</span>
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  onClick={handleSave}
+                  disabled={loading}
+                  className="flex-1 btn-primary"
+                >
+                  {loading ? 'שומר...' : 'שמור שינויים'}
+                </button>
+                <button
+                  onClick={() => setIsEditing(false)}
+                  className="flex-1 btn-secondary"
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          ) : (
+            // View Mode (same as SoldierDetailsModal from Soldiers.jsx)
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500 uppercase">תפקיד</label>
+                  <p className="font-medium text-gray-900">{soldier.role}</p>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500 uppercase">כיתה</label>
+                  <p className="font-medium text-gray-900">{soldier.kita || 'אין כיתה'}</p>
+                </div>
+              </div>
+
+              {(soldier.idf_id || soldier.personal_id) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                  {soldier.idf_id && (
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-500 uppercase">מספר אישי</label>
+                      <p className="font-medium text-gray-900">{soldier.idf_id}</p>
+                    </div>
+                  )}
+                  {soldier.personal_id && (
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-500 uppercase">תעודת זהות</label>
+                      <p className="font-medium text-gray-900">{soldier.personal_id}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(soldier.phone_number || soldier.address) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                  {soldier.phone_number && (
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
+                        <Phone size={14} />
+                        טלפון
+                      </label>
+                      <p className="font-medium text-gray-900">{soldier.phone_number}</p>
+                    </div>
+                  )}
+                  {soldier.address && (
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
+                        <MapPin size={14} />
+                        כתובת
+                      </label>
+                      <p className="font-medium text-gray-900">{soldier.address}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(soldier.emergency_contact_name || soldier.emergency_contact_number) && (
+                <div className="pt-4 border-t">
+                  <h3 className="font-bold text-gray-900 mb-3">איש קשר לחירום</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {soldier.emergency_contact_name && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-gray-500 uppercase">שם</label>
+                        <p className="font-medium text-gray-900">{soldier.emergency_contact_name}</p>
+                      </div>
+                    )}
+                    {soldier.emergency_contact_number && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-gray-500 uppercase">טלפון</label>
+                        <p className="font-medium text-gray-900">{soldier.emergency_contact_number}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {currentRound && (
+                <div className="pt-4 border-t">
+                  <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <Calendar size={20} className="text-military-600" />
+                    סבב יציאה נוכחי
+                  </h3>
+                  <div className="bg-military-50 rounded-lg p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700">סבב מספר:</span>
+                      <span className="font-bold text-military-700">{currentRound.roundNumber}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700">יום בסבב:</span>
+                      <span className="font-bold text-military-700">{currentRound.daysIntoRound + 1} מתוך 21</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700">ימים עד סבב הבא:</span>
+                      <span className="font-bold text-military-700">{currentRound.daysUntilNextRound}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-military-200">
+                      <span className="text-gray-700">תאריך סבב הבא:</span>
+                      <span className="font-bold text-military-700">{currentRound.nextRoundDate}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {soldier.certifications && soldier.certifications.length > 0 && (
+                <div className="pt-4 border-t">
+                  <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <Award size={20} className="text-military-600" />
+                    הסמכות
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {soldier.certifications.map((cert, idx) => (
+                      <span key={idx} className="badge badge-blue">
+                        {cert}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4 border-t">
+                <h3 className="font-bold text-gray-900 mb-3">סטטוס</h3>
+                <div className="flex flex-wrap gap-2">
+                  {soldier.has_hatashab && (
+                    <span className="badge badge-yellow">התש״ב</span>
+                  )}
+                  {soldier.is_platoon_commander && (
+                    <span className="badge badge-purple">מפקד כיתה</span>
+                  )}
+                  {!soldier.has_hatashab && !soldier.is_platoon_commander && (
+                    <span className="text-gray-500">אין סטטוס מיוחד</span>
+                  )}
+                </div>
+              </div>
+
+              {soldier.unavailable_dates && soldier.unavailable_dates.length > 0 && (
+                <div className="pt-4 border-t">
+                  <h3 className="font-bold text-gray-900 mb-3">תאריכי חופשה / אי זמינות</h3>
+                  <div className="space-y-2">
+                    {soldier.unavailable_dates.map((unavailable) => (
+                      <div key={unavailable.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-gray-900">
+                            {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                          </span>
+                          {unavailable.reason && (
+                            <span className="text-sm text-gray-600">{unavailable.reason}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {!isEditing && (
+          <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex justify-end rounded-b-xl border-t">
+            <button onClick={onClose} className="btn-secondary">
+              סגור
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

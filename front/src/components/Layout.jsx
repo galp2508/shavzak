@@ -14,8 +14,7 @@ const Layout = () => {
   const navigation = [
     { name: 'דשבורד', href: '/', icon: Home, roles: ['מפ', 'ממ', 'מכ'] },
     { name: 'פלוגות', href: '/plugot', icon: Shield, roles: ['מפ'] },
-    { name: 'מחלקות', href: '/mahalkot', icon: Users, roles: ['מפ', 'ממ'] },
-    { name: 'חיילים', href: '/soldiers', icon: UserPlus, roles: ['מפ', 'ממ', 'מכ'] },
+    { name: 'מחלקות', href: '/mahalkot', icon: Users, roles: ['מפ', 'ממ', 'מכ'] },
     { name: 'תבניות משימות', href: '/templates', icon: FileText, roles: ['מפ'] },
     { name: 'שיבוצים', href: '/shavzakim', icon: Calendar, roles: ['מפ', 'ממ', 'מכ'] },
   ];

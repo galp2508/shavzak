@@ -250,7 +250,6 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
     kita: soldier?.kita || '',
     phone_number: soldier?.phone_number || '',
     has_hatashab: soldier?.has_hatashab || false,
-    is_platoon_commander: soldier?.is_platoon_commander || false,
   });
   const [loading, setLoading] = useState(false);
 
@@ -358,17 +357,7 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
                 onChange={(e) => setFormData({ ...formData, has_hatashab: e.target.checked })}
                 className="w-4 h-4 text-military-600"
               />
-              <span className="text-gray-700">יש התש״ב</span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.is_platoon_commander}
-                onChange={(e) => setFormData({ ...formData, is_platoon_commander: e.target.checked })}
-                className="w-4 h-4 text-military-600"
-              />
-              <span className="text-gray-700">מפקד כיתה</span>
+              <span className="text-gray-700">יש התש 2</span>
             </label>
           </div>
 
@@ -401,19 +390,35 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
     if (!soldier.home_round_date) return null;
 
     const homeRoundDate = new Date(soldier.home_round_date);
+    homeRoundDate.setHours(0, 0, 0, 0); // אפס את השעות
     const today = new Date();
-    const diffTime = Math.abs(today - homeRoundDate);
+    today.setHours(0, 0, 0, 0); // אפס את השעות
+
+    // חישוב ההפרש בימים (יכול להיות חיובי או שלילי)
+    const diffTime = today - homeRoundDate;
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    // חישוב מספר הסבב הנוכחי
     const roundNumber = Math.floor(diffDays / 21);
     const daysIntoCurrentRound = diffDays % 21;
+
+    // חישוב התאריך של הסבב הבא (חייב להיות בעתיד)
     const nextRoundDate = new Date(homeRoundDate);
     nextRoundDate.setDate(nextRoundDate.getDate() + ((roundNumber + 1) * 21));
 
+    // אם התאריך הבא עדיין בעבר (או היום), להוסיף עוד 21 יום
+    while (nextRoundDate <= today) {
+      nextRoundDate.setDate(nextRoundDate.getDate() + 21);
+    }
+
+    // חישוב כמה ימים נשארו עד הסבב הבא
+    const daysUntilNext = Math.ceil((nextRoundDate - today) / (1000 * 60 * 60 * 24));
+
     return {
       roundNumber: roundNumber + 1,
-      daysIntoRound: daysIntoCurrentRound,
+      daysIntoRound: daysIntoCurrentRound >= 0 ? daysIntoCurrentRound : 0,
       nextRoundDate: nextRoundDate.toLocaleDateString('he-IL'),
-      daysUntilNextRound: 21 - daysIntoCurrentRound
+      daysUntilNextRound: daysUntilNext
     };
   };
 
@@ -580,12 +585,9 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
             <h3 className="font-bold text-gray-900 mb-3">סטטוס</h3>
             <div className="flex flex-wrap gap-2">
               {soldier.has_hatashab && (
-                <span className="badge badge-yellow">התש״ב</span>
+                <span className="badge badge-yellow">התש 2</span>
               )}
-              {soldier.is_platoon_commander && (
-                <span className="badge badge-purple">מפקד כיתה</span>
-              )}
-              {!soldier.has_hatashab && !soldier.is_platoon_commander && (
+              {!soldier.has_hatashab && (
                 <span className="text-gray-500">אין סטטוס מיוחד</span>
               )}
             </div>

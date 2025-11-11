@@ -14,10 +14,14 @@ const Register = () => {
     confirmPassword: '',
     fullName: '',
     plugaId: '',
-    role: 'חייל'
+    plugaName: '',
+    gdud: '',
+    role: 'חייל',
+    isNewMaf: false
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [plugot, setPlugot] = useState([]);
   const [isFirstUser, setIsFirstUser] = useState(false);
 
@@ -38,11 +42,13 @@ const Register = () => {
   }, []);
 
   const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: type === 'checkbox' ? checked : value,
     });
     setError('');
+    setSuccess('');
   };
 
   const handleSubmit = async (e) => {
@@ -58,30 +64,62 @@ const Register = () => {
       return;
     }
 
-    // אם לא משתמש ראשון, חובה לבחור פלוגה
-    if (!isFirstUser && !formData.plugaId) {
+    // אם לא משתמש ראשון ולא מפ חדש, חובה לבחור פלוגה
+    if (!isFirstUser && !formData.isNewMaf && !formData.plugaId) {
       setError('חובה לבחור פלוגה');
+      return;
+    }
+
+    // אם מפ חדש, חובה שם פלוגה
+    if (!isFirstUser && formData.isNewMaf && !formData.plugaName) {
+      setError('חובה להזין שם פלוגה');
       return;
     }
 
     setLoading(true);
     setError('');
+    setSuccess('');
 
-    const result = await register(
-      formData.username,
-      formData.password,
-      formData.fullName,
-      isFirstUser ? null : formData.plugaId,
-      isFirstUser ? null : formData.role
-    );
+    try {
+      if (formData.isNewMaf) {
+        // בקשת הצטרפות למפ חדש
+        const response = await api.post('/register', {
+          username: formData.username,
+          password: formData.password,
+          full_name: formData.fullName,
+          pluga_name: formData.plugaName,
+          gdud: formData.gdud
+        });
 
-    if (result.success) {
-      toast.success('נרשמת בהצלחה!');
-      // ניווט לדף הבית
-      navigate('/', { replace: true });
-    } else {
-      setError(result.error);
-      toast.error(result.error);
+        if (response.data.message) {
+          setSuccess(response.data.message);
+          toast.success(response.data.message);
+          // אחרי 3 שניות, נווט ללוגין
+          setTimeout(() => {
+            navigate('/login');
+          }, 3000);
+        }
+      } else {
+        // רישום רגיל
+        const result = await register(
+          formData.username,
+          formData.password,
+          formData.fullName,
+          isFirstUser ? null : formData.plugaId,
+          isFirstUser ? null : formData.role
+        );
+
+        if (result.success) {
+          toast.success('נרשמת בהצלחה!');
+          navigate('/', { replace: true });
+        } else {
+          setError(result.error);
+          toast.error(result.error);
+        }
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'שגיאה ברישום');
+      toast.error(err.response?.data?.error || 'שגיאה ברישום');
     }
 
     setLoading(false);
@@ -127,6 +165,13 @@ const Register = () => {
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
+
+          {success && (
+            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+              <Shield className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-green-800">{success}</p>
             </div>
           )}
 
@@ -182,41 +227,96 @@ const Register = () => {
               />
             </div>
 
-            {!isFirstUser && plugot.length > 0 && (
+            {!isFirstUser && (
               <>
-                <div>
-                  <label className="label">פלוגה *</label>
-                  <select
-                    name="plugaId"
-                    value={formData.plugaId}
-                    onChange={handleChange}
-                    className="input-field"
-                    required
-                  >
-                    <option value="">בחר פלוגה</option>
-                    {plugot.map((pluga) => (
-                      <option key={pluga.id} value={pluga.id}>
-                        פלוגה {pluga.name} {pluga.gdud && `- גדוד ${pluga.gdud}`}
-                      </option>
-                    ))}
-                  </select>
+                <div className="border-t border-gray-200 pt-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="isNewMaf"
+                      checked={formData.isNewMaf}
+                      onChange={handleChange}
+                      className="w-4 h-4 text-military-600 rounded"
+                    />
+                    <span className="text-gray-700 font-medium">
+                      אני מפקד פלוגה חדש (בקשת הצטרפות)
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1 mr-7">
+                    סמן אם אתה מפקד פלוגה חדש ורוצה להצטרף למערכת
+                  </p>
                 </div>
 
-                <div>
-                  <label className="label">תפקיד</label>
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    className="input-field"
-                  >
-                    <option value="חייל">חייל</option>
-                    <option value="מכ">מפקד כיתה (מ״כ)</option>
-                    <option value="ממ">מפקד מחלקה (מ״מ)</option>
-                    <option value="מפ">מפקד פלוגה (מ״פ)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">בחר את התפקיד שלך ביחידה</p>
-                </div>
+                {formData.isNewMaf ? (
+                  <>
+                    <div>
+                      <label className="label">שם הפלוגה *</label>
+                      <input
+                        type="text"
+                        name="plugaName"
+                        value={formData.plugaName}
+                        onChange={handleChange}
+                        className="input-field"
+                        placeholder="לדוגמה: פלוגה א', פלוגה 1"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="label">גדוד (אופציונלי)</label>
+                      <input
+                        type="text"
+                        name="gdud"
+                        value={formData.gdud}
+                        onChange={handleChange}
+                        className="input-field"
+                        placeholder="לדוגמה: גדוד נחל, גדוד 52"
+                      />
+                    </div>
+
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-sm text-yellow-800">
+                        ⚠️ הבקשה תישלח לאישור המפקד הראשי במערכת. תקבל הודעה כשהבקשה תאושר.
+                      </p>
+                    </div>
+                  </>
+                ) : plugot.length > 0 ? (
+                  <>
+                    <div>
+                      <label className="label">פלוגה *</label>
+                      <select
+                        name="plugaId"
+                        value={formData.plugaId}
+                        onChange={handleChange}
+                        className="input-field"
+                        required
+                      >
+                        <option value="">בחר פלוגה</option>
+                        {plugot.map((pluga) => (
+                          <option key={pluga.id} value={pluga.id}>
+                            פלוגה {pluga.name} {pluga.gdud && `- גדוד ${pluga.gdud}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="label">תפקיד</label>
+                      <select
+                        name="role"
+                        value={formData.role}
+                        onChange={handleChange}
+                        className="input-field"
+                      >
+                        <option value="חייל">חייל</option>
+                        <option value="מכ">מפקד כיתה (מ״כ)</option>
+                        <option value="ממ">מפקד מחלקה (מ״מ)</option>
+                        <option value="מפ">מפקד פלוגה (מ״פ)</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">בחר את התפקיד שלך ביחידה</p>
+                    </div>
+                  </>
+                ) : null}
               </>
             )}
 

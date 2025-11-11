@@ -192,14 +192,36 @@ class Assignment(Base):
 class AssignmentSoldier(Base):
     """קישור בין משימה לחייל"""
     __tablename__ = 'assignment_soldiers'
-    
+
     id = Column(Integer, primary_key=True)
     assignment_id = Column(Integer, ForeignKey('assignments.id'), nullable=False)
     soldier_id = Column(Integer, ForeignKey('soldiers.id'), nullable=False)
     role_in_assignment = Column(String(50), nullable=False)
-    
+
     assignment = relationship("Assignment", back_populates="soldiers_assigned")
     soldier = relationship("Soldier", back_populates="assignments")
+
+
+class JoinRequest(Base):
+    """בקשת הצטרפות למפ חדש"""
+    __tablename__ = 'join_requests'
+
+    id = Column(Integer, primary_key=True)
+    full_name = Column(String(100), nullable=False)
+    username = Column(String(50), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+
+    pluga_name = Column(String(100), nullable=False)
+    gdud = Column(String(100), nullable=True)
+
+    status = Column(String(20), default='pending')  # 'pending', 'approved', 'rejected'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+    processed_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+
+    def set_password(self, password):
+        """הצפנת סיסמה"""
+        self.password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
 def init_db(db_path='shavzak.db'):

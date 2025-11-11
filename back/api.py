@@ -9,9 +9,9 @@ from sqlalchemy import func
 import traceback
 
 from models import (
-    init_db, get_session, User, Pluga, Mahlaka, Soldier, 
-    Certification, UnavailableDate, AssignmentTemplate, 
-    Shavzak, Assignment, AssignmentSoldier
+    init_db, get_session, User, Pluga, Mahlaka, Soldier,
+    Certification, UnavailableDate, AssignmentTemplate,
+    Shavzak, Assignment, AssignmentSoldier, JoinRequest
 )
 from auth import (
     create_token, token_required, role_required,
@@ -36,7 +36,7 @@ def get_db():
 
 @app.route('/api/register', methods=['POST'])
 def register():
-    """רישום משתמש חדש"""
+    """רישום משתמש חדש / בקשת הצטרפות"""
     try:
         data = request.json
         session = get_db()
@@ -46,51 +46,90 @@ def register():
         if existing_user:
             return jsonify({'error': 'שם המשתמש כבר קיים'}), 400
 
+        # בדיקה אם שם המשתמש כבר קיים בבקשות ממתינות
+        existing_request = session.query(JoinRequest).filter_by(
+            username=data['username'],
+            status='pending'
+        ).first()
+        if existing_request:
+            return jsonify({'error': 'שם המשתמש כבר קיים בבקשה ממתינה'}), 400
+
         # אם אין משתמשים במערכת, המשתמש הראשון יהיה מפקד פלוגה
         existing_users_count = session.query(User).count()
 
         if existing_users_count == 0:
-            # משתמש ראשון - יהיה מ"פ
+            # משתמש ראשון - יהיה מ"פ ראשי (יקבל אישור אוטומטי)
             user = User(
                 username=data['username'],
                 full_name=data['full_name'],
                 role='מפ'
             )
+            user.set_password(data['password'])
+            session.add(user)
+            session.commit()
+
+            token = create_token(user)
+
+            return jsonify({
+                'message': 'משתמש נוצר בהצלחה',
+                'token': token,
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'full_name': user.full_name,
+                    'role': user.role,
+                    'pluga_id': user.pluga_id
+                }
+            }), 201
         else:
-            # משתמשים נוספים - צריך לבחור פלוגה ותפקיד
-            if 'pluga_id' not in data or not data['pluga_id']:
-                return jsonify({'error': 'חובה לבחור פלוגה'}), 400
+            # משתמשים נוספים (מפ חדש) - יוצרים בקשת הצטרפות
+            # בודקים אם זה בקשת הצטרפות למפ (אין pluga_id)
+            if 'pluga_id' not in data or not data.get('pluga_id'):
+                # בקשת הצטרפות למפ חדש
+                join_request = JoinRequest(
+                    username=data['username'],
+                    full_name=data['full_name'],
+                    pluga_name=data.get('pluga_name', ''),
+                    gdud=data.get('gdud', '')
+                )
+                join_request.set_password(data['password'])
+                session.add(join_request)
+                session.commit()
 
-            # וידוא שהפלוגה קיימת
-            pluga = session.query(Pluga).filter_by(id=data['pluga_id']).first()
-            if not pluga:
-                return jsonify({'error': 'פלוגה לא נמצאה'}), 404
+                return jsonify({
+                    'message': 'בקשת ההצטרפות נשלחה בהצלחה. אנא המתן לאישור המפקד הראשי.',
+                    'request_id': join_request.id
+                }), 201
+            else:
+                # רישום רגיל למשתמש בפלוגה קיימת
+                pluga = session.query(Pluga).filter_by(id=data['pluga_id']).first()
+                if not pluga:
+                    return jsonify({'error': 'פלוגה לא נמצאה'}), 404
 
-            user = User(
-                username=data['username'],
-                full_name=data['full_name'],
-                role=data.get('role', 'חייל'),
-                pluga_id=data['pluga_id']
-            )
+                user = User(
+                    username=data['username'],
+                    full_name=data['full_name'],
+                    role=data.get('role', 'חייל'),
+                    pluga_id=data['pluga_id']
+                )
+                user.set_password(data['password'])
+                session.add(user)
+                session.commit()
 
-        user.set_password(data['password'])
+                token = create_token(user)
 
-        session.add(user)
-        session.commit()
+                return jsonify({
+                    'message': 'משתמש נוצר בהצלחה',
+                    'token': token,
+                    'user': {
+                        'id': user.id,
+                        'username': user.username,
+                        'full_name': user.full_name,
+                        'role': user.role,
+                        'pluga_id': user.pluga_id
+                    }
+                }), 201
 
-        token = create_token(user)
-
-        return jsonify({
-            'message': 'משתמש נוצר בהצלחה',
-            'token': token,
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'full_name': user.full_name,
-                'role': user.role,
-                'pluga_id': user.pluga_id
-            }
-        }), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1326,6 +1365,163 @@ def list_shavzakim(pluga_id, current_user):
         } for s in shavzakim]
         
         return jsonify({'shavzakim': result}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# JOIN REQUESTS
+# ============================================================================
+
+@app.route('/api/join-requests', methods=['GET'])
+@token_required
+def get_join_requests(current_user):
+    """קבלת כל בקשות ההצטרפות (רק למפ ראשי)"""
+    try:
+        session = get_db()
+
+        # רק מפ ראשי יכול לראות בקשות
+        if current_user.role != 'מפ' or current_user.pluga_id is not None:
+            return jsonify({'error': 'אין הרשאה'}), 403
+
+        requests = session.query(JoinRequest).filter_by(status='pending').order_by(
+            JoinRequest.created_at.desc()
+        ).all()
+
+        result = [{
+            'id': req.id,
+            'full_name': req.full_name,
+            'username': req.username,
+            'pluga_name': req.pluga_name,
+            'gdud': req.gdud,
+            'status': req.status,
+            'created_at': req.created_at.isoformat()
+        } for req in requests]
+
+        return jsonify({'requests': result}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/join-requests/<int:request_id>/approve', methods=['POST'])
+@token_required
+def approve_join_request(current_user, request_id):
+    """אישור בקשת הצטרפות"""
+    try:
+        session = get_db()
+
+        # רק מפ ראשי יכול לאשר בקשות
+        if current_user.role != 'מפ' or current_user.pluga_id is not None:
+            return jsonify({'error': 'אין הרשאה'}), 403
+
+        join_request = session.query(JoinRequest).filter_by(id=request_id).first()
+        if not join_request:
+            return jsonify({'error': 'בקשה לא נמצאה'}), 404
+
+        if join_request.status != 'pending':
+            return jsonify({'error': 'הבקשה כבר עובדה'}), 400
+
+        # יצירת פלוגה חדשה עבור המפ החדש
+        pluga = Pluga(
+            name=join_request.pluga_name,
+            gdud=join_request.gdud
+        )
+        session.add(pluga)
+        session.flush()
+
+        # יצירת משתמש חדש
+        user = User(
+            username=join_request.username,
+            full_name=join_request.full_name,
+            password_hash=join_request.password_hash,
+            role='מפ',
+            pluga_id=pluga.id
+        )
+        session.add(user)
+
+        # עדכון הבקשה
+        join_request.status = 'approved'
+        join_request.processed_at = datetime.utcnow()
+        join_request.processed_by = current_user.id
+
+        session.commit()
+
+        return jsonify({
+            'message': 'הבקשה אושרה בהצלחה',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'full_name': user.full_name,
+                'role': user.role,
+                'pluga_id': user.pluga_id
+            },
+            'pluga': {
+                'id': pluga.id,
+                'name': pluga.name,
+                'gdud': pluga.gdud
+            }
+        }), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/join-requests/<int:request_id>/reject', methods=['POST'])
+@token_required
+def reject_join_request(current_user, request_id):
+    """דחיית בקשת הצטרפות"""
+    try:
+        session = get_db()
+
+        # רק מפ ראשי יכול לדחות בקשות
+        if current_user.role != 'מפ' or current_user.pluga_id is not None:
+            return jsonify({'error': 'אין הרשאה'}), 403
+
+        join_request = session.query(JoinRequest).filter_by(id=request_id).first()
+        if not join_request:
+            return jsonify({'error': 'בקשה לא נמצאה'}), 404
+
+        if join_request.status != 'pending':
+            return jsonify({'error': 'הבקשה כבר עובדה'}), 400
+
+        join_request.status = 'rejected'
+        join_request.processed_at = datetime.utcnow()
+        join_request.processed_by = current_user.id
+
+        session.commit()
+
+        return jsonify({'message': 'הבקשה נדחתה'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/join-requests/<int:request_id>', methods=['DELETE'])
+@token_required
+def delete_join_request(current_user, request_id):
+    """מחיקת בקשת הצטרפות"""
+    try:
+        session = get_db()
+
+        # רק מפ ראשי יכול למחוק בקשות
+        if current_user.role != 'מפ' or current_user.pluga_id is not None:
+            return jsonify({'error': 'אין הרשאה'}), 403
+
+        join_request = session.query(JoinRequest).filter_by(id=request_id).first()
+        if not join_request:
+            return jsonify({'error': 'בקשה לא נמצאה'}), 404
+
+        session.delete(join_request)
+        session.commit()
+
+        return jsonify({'message': 'הבקשה נמחקה'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:

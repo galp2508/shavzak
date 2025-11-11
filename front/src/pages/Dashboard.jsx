@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { 
-  Users, Shield, Calendar, TrendingUp, 
-  Activity, Award, Clock, CheckCircle 
+import {
+  Users, Shield, Calendar,
+  Activity, Award, Clock, CheckCircle
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -95,36 +94,25 @@ const Dashboard = () => {
       value: stats?.mahalkot || 0,
       icon: Shield,
       color: 'bg-blue-500',
-      change: '+2',
     },
     {
       title: 'סה״כ חיילים',
       value: stats?.total_soldiers || 0,
       icon: Users,
       color: 'bg-green-500',
-      change: '+12',
     },
     {
       title: 'מפקדים',
       value: stats?.commanders || 0,
       icon: Award,
       color: 'bg-purple-500',
-      change: '+1',
     },
     {
       title: 'שיבוצים',
       value: stats?.shavzakim || 0,
       icon: Calendar,
       color: 'bg-orange-500',
-      change: '+3',
     },
-  ];
-
-  const chartData = [
-    { name: 'מחלקה 1', soldiers: 25, commanders: 3, drivers: 4 },
-    { name: 'מחלקה 2', soldiers: 23, commanders: 3, drivers: 3 },
-    { name: 'מחלקה 3', soldiers: 27, commanders: 4, drivers: 5 },
-    { name: 'מחלקה 4', soldiers: 20, commanders: 2, drivers: 3 },
   ];
 
   return (
@@ -158,9 +146,6 @@ const Dashboard = () => {
                 <div className={`${stat.color} p-3 rounded-lg text-white`}>
                   <Icon size={24} />
                 </div>
-                <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">
-                  {stat.change}
-                </span>
               </div>
               <h3 className="text-gray-600 text-sm mb-1">{stat.title}</h3>
               <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
@@ -169,29 +154,8 @@ const Dashboard = () => {
         })}
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Bar Chart */}
-        <div className="card">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <TrendingUp size={24} className="text-military-600" />
-            התפלגות כוח אדם
-          </h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="soldiers" fill="#34996e" name="לוחמים" />
-              <Bar dataKey="commanders" fill="#D4AF37" name="מפקדים" />
-              <Bar dataKey="drivers" fill="#3b82f6" name="נהגים" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Quick Actions */}
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 gap-6">
         <div className="card">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <Clock size={24} className="text-military-600" />
@@ -207,10 +171,10 @@ const Dashboard = () => {
                   href="/shavzakim"
                 />
                 <QuickAction
-                  title="הוספת חייל"
-                  description="רישום חייל חדש במערכת"
+                  title="ניהול מחלקות"
+                  description="ניהול חיילים במחלקות"
                   icon={Users}
-                  href="/soldiers"
+                  href="/mahalkot"
                 />
                 <QuickAction
                   title="ניהול תבניות"
@@ -226,7 +190,7 @@ const Dashboard = () => {
                   title="ניהול המחלקה"
                   description="צפייה בחיילי המחלקה"
                   icon={Shield}
-                  href="/soldiers"
+                  href="/mahalkot"
                 />
                 <QuickAction
                   title="שיבוצים פעילים"
@@ -242,7 +206,7 @@ const Dashboard = () => {
                   title="חיילי הכיתה"
                   description="ניהול חיילי כיתה {user?.kita}"
                   icon={Users}
-                  href="/soldiers"
+                  href="/mahalkot"
                 />
                 <QuickAction
                   title="שיבוצים"
@@ -253,31 +217,6 @@ const Dashboard = () => {
               </>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="card">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <Activity size={24} className="text-military-600" />
-          פעילות אחרונה
-        </h2>
-        <div className="space-y-4">
-          <ActivityItem
-            title="שיבוץ שבוע 46 נוצר"
-            time="לפני שעתיים"
-            type="success"
-          />
-          <ActivityItem
-            title="נוסף חייל חדש למחלקה 2"
-            time="לפני 4 שעות"
-            type="info"
-          />
-          <ActivityItem
-            title="עודכן תבנית משימה 'סיור'"
-            time="אתמול"
-            type="warning"
-          />
         </div>
       </div>
     </div>
@@ -298,24 +237,6 @@ const QuickAction = ({ title, description, icon: Icon, href }) => {
         <p className="text-sm text-gray-600">{description}</p>
       </div>
     </a>
-  );
-};
-
-const ActivityItem = ({ title, time, type }) => {
-  const colors = {
-    success: 'bg-green-100 text-green-800',
-    info: 'bg-blue-100 text-blue-800',
-    warning: 'bg-yellow-100 text-yellow-800',
-  };
-
-  return (
-    <div className="flex items-center gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-      <div className={`w-2 h-2 rounded-full ${colors[type]}`}></div>
-      <div className="flex-1">
-        <p className="font-medium text-gray-900">{title}</p>
-        <p className="text-sm text-gray-500">{time}</p>
-      </div>
-    </div>
   );
 };
 

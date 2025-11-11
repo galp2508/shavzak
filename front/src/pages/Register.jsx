@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Shield, UserPlus, AlertCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
+import api from '../services/api';
 
 const Register = () => {
   const { register } = useAuth();
@@ -12,9 +13,29 @@ const Register = () => {
     password: '',
     confirmPassword: '',
     fullName: '',
+    plugaId: '',
+    role: 'חייל'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [plugot, setPlugot] = useState([]);
+  const [isFirstUser, setIsFirstUser] = useState(false);
+
+  useEffect(() => {
+    const loadPlugot = async () => {
+      try {
+        const response = await api.get('/plugot');
+        setPlugot(response.data.plugot || []);
+        // אם אין פלוגות, זה אומר שאין משתמשים (משתמש ראשון יוצר את הפלוגה)
+        if (response.data.plugot.length === 0) {
+          setIsFirstUser(true);
+        }
+      } catch (error) {
+        console.error('Error loading plugot:', error);
+      }
+    };
+    loadPlugot();
+  }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -26,7 +47,7 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (formData.password !== formData.confirmPassword) {
       setError('הסיסמאות אינן תואמות');
       return;
@@ -37,13 +58,21 @@ const Register = () => {
       return;
     }
 
+    // אם לא משתמש ראשון, חובה לבחור פלוגה
+    if (!isFirstUser && !formData.plugaId) {
+      setError('חובה לבחור פלוגה');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     const result = await register(
       formData.username,
       formData.password,
-      formData.fullName
+      formData.fullName,
+      isFirstUser ? null : formData.plugaId,
+      isFirstUser ? null : formData.role
     );
 
     if (result.success) {
@@ -78,11 +107,21 @@ const Register = () => {
             רישום למערכת
           </h2>
 
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
-              ℹ️ המשתמש הראשון במערכת יקבל הרשאות מ"פ אוטומטית
-            </p>
-          </div>
+          {isFirstUser && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                ℹ️ המשתמש הראשון במערכת יקבל הרשאות מ"פ אוטומטית
+              </p>
+            </div>
+          )}
+
+          {!isFirstUser && plugot.length > 0 && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm text-green-800">
+                ℹ️ אנא בחר את הפלוגה שאליה אתה משתייך
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
@@ -142,6 +181,44 @@ const Register = () => {
                 required
               />
             </div>
+
+            {!isFirstUser && plugot.length > 0 && (
+              <>
+                <div>
+                  <label className="label">פלוגה *</label>
+                  <select
+                    name="plugaId"
+                    value={formData.plugaId}
+                    onChange={handleChange}
+                    className="input-field"
+                    required
+                  >
+                    <option value="">בחר פלוגה</option>
+                    {plugot.map((pluga) => (
+                      <option key={pluga.id} value={pluga.id}>
+                        פלוגה {pluga.name} {pluga.gdud && `- גדוד ${pluga.gdud}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">תפקיד</label>
+                  <select
+                    name="role"
+                    value={formData.role}
+                    onChange={handleChange}
+                    className="input-field"
+                  >
+                    <option value="חייל">חייל</option>
+                    <option value="מכ">מפקד כיתה (מ״כ)</option>
+                    <option value="ממ">מפקד מחלקה (מ״מ)</option>
+                    <option value="מפ">מפקד פלוגה (מ״פ)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">בחר את התפקיד שלך ביחידה</p>
+                </div>
+              </>
+            )}
 
             <button
               type="submit"

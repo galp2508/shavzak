@@ -36,27 +36,50 @@ def get_db():
 
 @app.route('/api/register', methods=['POST'])
 def register():
-    """רישום משתמש ראשוני"""
+    """רישום משתמש חדש"""
     try:
         data = request.json
         session = get_db()
-        
-        existing_users = session.query(User).count()
-        if existing_users > 0:
-            return jsonify({'error': 'לא ניתן להירשם ישירות. צור קשר עם מ"פ'}), 403
-        
-        user = User(
-            username=data['username'],
-            full_name=data['full_name'],
-            role='מפ'
-        )
+
+        # בדיקה אם שם המשתמש כבר קיים
+        existing_user = session.query(User).filter_by(username=data['username']).first()
+        if existing_user:
+            return jsonify({'error': 'שם המשתמש כבר קיים'}), 400
+
+        # אם אין משתמשים במערכת, המשתמש הראשון יהיה מפקד פלוגה
+        existing_users_count = session.query(User).count()
+
+        if existing_users_count == 0:
+            # משתמש ראשון - יהיה מ"פ
+            user = User(
+                username=data['username'],
+                full_name=data['full_name'],
+                role='מפ'
+            )
+        else:
+            # משתמשים נוספים - צריך לבחור פלוגה ותפקיד
+            if 'pluga_id' not in data or not data['pluga_id']:
+                return jsonify({'error': 'חובה לבחור פלוגה'}), 400
+
+            # וידוא שהפלוגה קיימת
+            pluga = session.query(Pluga).filter_by(id=data['pluga_id']).first()
+            if not pluga:
+                return jsonify({'error': 'פלוגה לא נמצאה'}), 404
+
+            user = User(
+                username=data['username'],
+                full_name=data['full_name'],
+                role=data.get('role', 'חייל'),
+                pluga_id=data['pluga_id']
+            )
+
         user.set_password(data['password'])
-        
+
         session.add(user)
         session.commit()
-        
+
         token = create_token(user)
-        
+
         return jsonify({
             'message': 'משתמש נוצר בהצלחה',
             'token': token,
@@ -64,7 +87,8 @@ def register():
                 'id': user.id,
                 'username': user.username,
                 'full_name': user.full_name,
-                'role': user.role
+                'role': user.role,
+                'pluga_id': user.pluga_id
             }
         }), 201
     except Exception as e:
@@ -227,22 +251,42 @@ def create_pluga(current_user):
         session.close()
 
 
+@app.route('/api/plugot', methods=['GET'])
+def list_all_plugot():
+    """קבלת רשימת כל הפלוגות (ללא אימות - לצורך רישום)"""
+    try:
+        session = get_db()
+        plugot = session.query(Pluga).all()
+
+        result = [{
+            'id': p.id,
+            'name': p.name,
+            'gdud': p.gdud
+        } for p in plugot]
+
+        return jsonify({'plugot': result}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @app.route('/api/plugot/<int:pluga_id>', methods=['GET'])
 @token_required
 def get_pluga(pluga_id, current_user):
     """קבלת פרטי פלוגה"""
     try:
         session = get_db()
-        
+
         if not can_view_pluga(current_user, pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
-        
+
         pluga = session.query(Pluga).filter_by(id=pluga_id).first()
         if not pluga:
             return jsonify({'error': 'פלוגה לא נמצאה'}), 404
-        
+
         mahalkot = session.query(Mahlaka).filter_by(pluga_id=pluga_id).all()
-        
+
         return jsonify({
             'pluga': {
                 'id': pluga.id,

@@ -16,6 +16,8 @@ const Soldiers = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingSoldier, setEditingSoldier] = useState(null);
+  const [viewingSoldier, setViewingSoldier] = useState(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -59,6 +61,17 @@ const Soldiers = () => {
       loadData();
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה במחיקת חייל');
+    }
+  };
+
+  const handleViewDetails = async (soldierId) => {
+    try {
+      const response = await api.get(`/soldiers/${soldierId}`);
+      setViewingSoldier(response.data.soldier);
+      setShowDetailsModal(true);
+    } catch (error) {
+      toast.error('שגיאה בטעינת פרטי חייל');
+      console.error(error);
     }
   };
 
@@ -135,12 +148,6 @@ const Soldiers = () => {
                   כיתה
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  הסמכות
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  סטטוס
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   פעולות
                 </th>
               </tr>
@@ -148,13 +155,16 @@ const Soldiers = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredSoldiers.map((soldier) => (
                 <tr key={soldier.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td
+                    className="px-6 py-4 whitespace-nowrap cursor-pointer"
+                    onClick={() => handleViewDetails(soldier.id)}
+                  >
                     <div className="flex items-center gap-3">
                       <div className="bg-military-100 p-2 rounded-full">
                         <Shield size={16} className="text-military-600" />
                       </div>
                       <div>
-                        <div className="font-medium text-gray-900">{soldier.name}</div>
+                        <div className="font-medium text-gray-900 hover:text-military-600 transition-colors">{soldier.name}</div>
                       </div>
                     </div>
                   </td>
@@ -164,24 +174,7 @@ const Soldiers = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {soldier.kita || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex flex-wrap gap-1">
-                      {soldier.certifications?.map((cert, idx) => (
-                        <span key={idx} className="badge badge-blue text-xs">
-                          {cert}
-                        </span>
-                      )) || '-'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {soldier.has_hatashab && (
-                      <span className="badge badge-yellow">התש״ב</span>
-                    )}
-                    {soldier.is_platoon_commander && (
-                      <span className="badge badge-purple mr-1">מ״כ</span>
-                    )}
+                    {soldier.kita || 'אין כיתה'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex gap-2">
@@ -217,7 +210,7 @@ const Soldiers = () => {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Edit Modal */}
       {showModal && (
         <SoldierModal
           soldier={editingSoldier}
@@ -230,6 +223,17 @@ const Soldiers = () => {
             setShowModal(false);
             setEditingSoldier(null);
             loadData();
+          }}
+        />
+      )}
+
+      {/* Details Modal */}
+      {showDetailsModal && viewingSoldier && (
+        <SoldierDetailsModal
+          soldier={viewingSoldier}
+          onClose={() => {
+            setShowDetailsModal(false);
+            setViewingSoldier(null);
           }}
         />
       )}
@@ -385,6 +389,235 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// Soldier Details Modal Component
+const SoldierDetailsModal = ({ soldier, onClose }) => {
+  // חישוב סבב יציאה נוכחי (כל 21 יום)
+  const calculateCurrentRound = () => {
+    if (!soldier.home_round_date) return null;
+
+    const homeRoundDate = new Date(soldier.home_round_date);
+    const today = new Date();
+    const diffTime = Math.abs(today - homeRoundDate);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const roundNumber = Math.floor(diffDays / 21);
+    const daysIntoCurrentRound = diffDays % 21;
+    const nextRoundDate = new Date(homeRoundDate);
+    nextRoundDate.setDate(nextRoundDate.getDate() + ((roundNumber + 1) * 21));
+
+    return {
+      roundNumber: roundNumber + 1,
+      daysIntoRound: daysIntoCurrentRound,
+      nextRoundDate: nextRoundDate.toLocaleDateString('he-IL'),
+      daysUntilNextRound: 21 - daysIntoCurrentRound
+    };
+  };
+
+  const currentRound = calculateCurrentRound();
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-gradient-to-r from-military-600 to-military-700 text-white px-6 py-4 flex items-center justify-between rounded-t-xl">
+          <div className="flex items-center gap-3">
+            <Shield size={28} />
+            <h2 className="text-2xl font-bold">{soldier.name}</h2>
+          </div>
+          <button onClick={onClose} className="text-white hover:text-gray-200">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Basic Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500 uppercase">תפקיד</label>
+              <p className="font-medium text-gray-900">{soldier.role}</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500 uppercase">כיתה</label>
+              <p className="font-medium text-gray-900">{soldier.kita || 'אין כיתה'}</p>
+            </div>
+          </div>
+
+          {/* IDs */}
+          {(soldier.idf_id || soldier.personal_id) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+              {soldier.idf_id && (
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500 uppercase">מספר אישי</label>
+                  <p className="font-medium text-gray-900">{soldier.idf_id}</p>
+                </div>
+              )}
+              {soldier.personal_id && (
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500 uppercase">תעודת זהות</label>
+                  <p className="font-medium text-gray-900">{soldier.personal_id}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Contact Info */}
+          {(soldier.phone_number || soldier.address) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+              {soldier.phone_number && (
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
+                    <Phone size={14} />
+                    טלפון
+                  </label>
+                  <p className="font-medium text-gray-900">{soldier.phone_number}</p>
+                </div>
+              )}
+              {soldier.address && (
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
+                    <MapPin size={14} />
+                    כתובת
+                  </label>
+                  <p className="font-medium text-gray-900">{soldier.address}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Emergency Contact */}
+          {(soldier.emergency_contact_name || soldier.emergency_contact_number) && (
+            <div className="pt-4 border-t">
+              <h3 className="font-bold text-gray-900 mb-3">איש קשר לחירום</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {soldier.emergency_contact_name && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-500 uppercase">שם</label>
+                    <p className="font-medium text-gray-900">{soldier.emergency_contact_name}</p>
+                  </div>
+                )}
+                {soldier.emergency_contact_number && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-500 uppercase">טלפון</label>
+                    <p className="font-medium text-gray-900">{soldier.emergency_contact_number}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Military Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+            {soldier.pakal && (
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">פק״ל</label>
+                <p className="font-medium text-gray-900">{soldier.pakal}</p>
+              </div>
+            )}
+            {soldier.recruit_date && (
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">תאריך גיוס</label>
+                <p className="font-medium text-gray-900">{new Date(soldier.recruit_date).toLocaleDateString('he-IL')}</p>
+              </div>
+            )}
+            {soldier.birth_date && (
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">תאריך לידה</label>
+                <p className="font-medium text-gray-900">{new Date(soldier.birth_date).toLocaleDateString('he-IL')}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Home Round - סבב יציאה */}
+          {currentRound && (
+            <div className="pt-4 border-t">
+              <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Calendar size={20} className="text-military-600" />
+                סבב יציאה נוכחי
+              </h3>
+              <div className="bg-military-50 rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">סבב מספר:</span>
+                  <span className="font-bold text-military-700">{currentRound.roundNumber}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">יום בסבב:</span>
+                  <span className="font-bold text-military-700">{currentRound.daysIntoRound + 1} מתוך 21</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">ימים עד סבב הבא:</span>
+                  <span className="font-bold text-military-700">{currentRound.daysUntilNextRound}</span>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-military-200">
+                  <span className="text-gray-700">תאריך סבב הבא:</span>
+                  <span className="font-bold text-military-700">{currentRound.nextRoundDate}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Certifications */}
+          {soldier.certifications && soldier.certifications.length > 0 && (
+            <div className="pt-4 border-t">
+              <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Award size={20} className="text-military-600" />
+                הסמכות
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {soldier.certifications.map((cert, idx) => (
+                  <span key={idx} className="badge badge-blue">
+                    {cert}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Status */}
+          <div className="pt-4 border-t">
+            <h3 className="font-bold text-gray-900 mb-3">סטטוס</h3>
+            <div className="flex flex-wrap gap-2">
+              {soldier.has_hatashab && (
+                <span className="badge badge-yellow">התש״ב</span>
+              )}
+              {soldier.is_platoon_commander && (
+                <span className="badge badge-purple">מפקד כיתה</span>
+              )}
+              {!soldier.has_hatashab && !soldier.is_platoon_commander && (
+                <span className="text-gray-500">אין סטטוס מיוחד</span>
+              )}
+            </div>
+          </div>
+
+          {/* Unavailable Dates */}
+          {soldier.unavailable_dates && soldier.unavailable_dates.length > 0 && (
+            <div className="pt-4 border-t">
+              <h3 className="font-bold text-gray-900 mb-3">תאריכי חופשה / אי זמינות</h3>
+              <div className="space-y-2">
+                {soldier.unavailable_dates.map((unavailable) => (
+                  <div key={unavailable.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">
+                        {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                      </span>
+                      {unavailable.reason && (
+                        <span className="text-sm text-gray-600">{unavailable.reason}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex justify-end rounded-b-xl border-t">
+          <button onClick={onClose} className="btn-secondary">
+            סגור
+          </button>
+        </div>
       </div>
     </div>
   );

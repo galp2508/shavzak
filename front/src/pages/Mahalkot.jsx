@@ -133,8 +133,9 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
     mkXa: { name: '', date: '' },
     mkXb: { name: '', date: '' },
     mkXg: { name: '', date: '' },
-    kita: { name: '', date: '' },
-    soldiers: [{ name: '', role: 'לוחם' }]
+    kitaA: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
+    kitaB: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
+    kitaG: { soldiers: [{ name: '', role: 'לוחם' }], date: '' }
   });
   const [soldierImportLoading, setSoldierImportLoading] = useState(false);
   const [useSharedDate, setUseSharedDate] = useState(false);
@@ -283,14 +284,40 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
       });
     }
 
-    // Add soldiers
-    soldiersFormData.soldiers.forEach((soldier) => {
+    // Add soldiers from כיתה א
+    soldiersFormData.kitaA.soldiers.forEach((soldier) => {
       if (soldier.name) {
-        soldiers.push({ 
-          name: soldier.name, 
+        soldiers.push({
+          name: soldier.name,
           role: soldier.role,
-          kita: soldiersFormData.kita.name ? `${mahlakaNum}${soldiersFormData.kita.name}` : '',
-          unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.kita.date),
+          kita: `${mahlakaNum}א`,
+          unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.kitaA.date),
+          mahlaka_id: createdMahlakaId
+        });
+      }
+    });
+
+    // Add soldiers from כיתה ב
+    soldiersFormData.kitaB.soldiers.forEach((soldier) => {
+      if (soldier.name) {
+        soldiers.push({
+          name: soldier.name,
+          role: soldier.role,
+          kita: `${mahlakaNum}ב`,
+          unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.kitaB.date),
+          mahlaka_id: createdMahlakaId
+        });
+      }
+    });
+
+    // Add soldiers from כיתה ג
+    soldiersFormData.kitaG.soldiers.forEach((soldier) => {
+      if (soldier.name) {
+        soldiers.push({
+          name: soldier.name,
+          role: soldier.role,
+          kita: `${mahlakaNum}ג`,
+          unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.kitaG.date),
           mahlaka_id: createdMahlakaId
         });
       }
@@ -337,8 +364,9 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
           mkXa: { name: '', date: '' },
           mkXb: { name: '', date: '' },
           mkXg: { name: '', date: '' },
-          kita: { name: '', date: '' },
-          soldiers: [{ name: '', role: 'לוחם' }]
+          kitaA: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
+          kitaB: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
+          kitaG: { soldiers: [{ name: '', role: 'לוחם' }], date: '' }
         });
         onSave();
       }, 1000);
@@ -358,8 +386,9 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
       mkXa: { name: '', date: '' },
       mkXb: { name: '', date: '' },
       mkXg: { name: '', date: '' },
-      kita: { name: '', date: '' },
-      soldiers: [{ name: '', role: 'לוחם' }]
+      kitaA: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
+      kitaB: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
+      kitaG: { soldiers: [{ name: '', role: 'לוחם' }], date: '' }
     });
     onSave();
   };
@@ -483,49 +512,138 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
               </div>
             </div>
 
-            {/* Block 4: חיילים בכיתה */}
+            {/* Block 4: חיילים כיתה א */}
             <div className="border-l-4 border-orange-600 pl-4">
-              <h3 className="font-bold text-lg mb-3">חיילים בכיתה</h3>
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <input
-                  type="text"
-                  placeholder={`בחר כיתה (א/ב/ג)`}
-                  value={soldiersFormData.kita.name}
-                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kita: { ...soldiersFormData.kita, name: e.target.value } })}
-                  className="input-field"
-                />
+              <h3 className="font-bold text-lg mb-3">חיילים כיתה {formData.number}א</h3>
+              <div className="mb-3">
                 <input
                   type="date"
-                  value={soldiersFormData.kita.date}
-                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kita: { ...soldiersFormData.kita, date: e.target.value } })}
-                  className="input-field"
+                  value={soldiersFormData.kitaA.date}
+                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, date: e.target.value } })}
+                  className="input-field w-full"
+                  placeholder="תאריך יציאה"
                 />
               </div>
 
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {soldiersFormData.soldiers.map((soldier, idx) => (
+                {soldiersFormData.kitaA.soldiers.map((soldier, idx) => (
                   <div key={idx} className="grid grid-cols-3 gap-2">
                     <input
                       type="text"
                       placeholder="שם חייל"
                       value={soldier.name}
                       onChange={(e) => {
-                        const newSoldiers = [...soldiersFormData.soldiers];
+                        const newSoldiers = [...soldiersFormData.kitaA.soldiers];
                         newSoldiers[idx].name = e.target.value;
-                        // Auto-add new row if this is the last one and it has content
                         if (idx === newSoldiers.length - 1 && e.target.value.trim()) {
                           newSoldiers.push({ name: '', role: 'לוחם' });
                         }
-                        setSoldiersFormData({ ...soldiersFormData, soldiers: newSoldiers });
+                        setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, soldiers: newSoldiers } });
                       }}
                       className="input-field col-span-2"
                     />
                     <select
                       value={soldier.role}
                       onChange={(e) => {
-                        const newSoldiers = [...soldiersFormData.soldiers];
+                        const newSoldiers = [...soldiersFormData.kitaA.soldiers];
                         newSoldiers[idx].role = e.target.value;
-                        setSoldiersFormData({ ...soldiersFormData, soldiers: newSoldiers });
+                        setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, soldiers: newSoldiers } });
+                      }}
+                      className="input-field"
+                    >
+                      {ROLES.map((role) => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Block 5: חיילים כיתה ב */}
+            <div className="border-l-4 border-purple-600 pl-4">
+              <h3 className="font-bold text-lg mb-3">חיילים כיתה {formData.number}ב</h3>
+              <div className="mb-3">
+                <input
+                  type="date"
+                  value={soldiersFormData.kitaB.date}
+                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, date: e.target.value } })}
+                  className="input-field w-full"
+                  placeholder="תאריך יציאה"
+                />
+              </div>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {soldiersFormData.kitaB.soldiers.map((soldier, idx) => (
+                  <div key={idx} className="grid grid-cols-3 gap-2">
+                    <input
+                      type="text"
+                      placeholder="שם חייל"
+                      value={soldier.name}
+                      onChange={(e) => {
+                        const newSoldiers = [...soldiersFormData.kitaB.soldiers];
+                        newSoldiers[idx].name = e.target.value;
+                        if (idx === newSoldiers.length - 1 && e.target.value.trim()) {
+                          newSoldiers.push({ name: '', role: 'לוחם' });
+                        }
+                        setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, soldiers: newSoldiers } });
+                      }}
+                      className="input-field col-span-2"
+                    />
+                    <select
+                      value={soldier.role}
+                      onChange={(e) => {
+                        const newSoldiers = [...soldiersFormData.kitaB.soldiers];
+                        newSoldiers[idx].role = e.target.value;
+                        setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, soldiers: newSoldiers } });
+                      }}
+                      className="input-field"
+                    >
+                      {ROLES.map((role) => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Block 6: חיילים כיתה ג */}
+            <div className="border-l-4 border-pink-600 pl-4">
+              <h3 className="font-bold text-lg mb-3">חיילים כיתה {formData.number}ג</h3>
+              <div className="mb-3">
+                <input
+                  type="date"
+                  value={soldiersFormData.kitaG.date}
+                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, date: e.target.value } })}
+                  className="input-field w-full"
+                  placeholder="תאריך יציאה"
+                />
+              </div>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {soldiersFormData.kitaG.soldiers.map((soldier, idx) => (
+                  <div key={idx} className="grid grid-cols-3 gap-2">
+                    <input
+                      type="text"
+                      placeholder="שם חייל"
+                      value={soldier.name}
+                      onChange={(e) => {
+                        const newSoldiers = [...soldiersFormData.kitaG.soldiers];
+                        newSoldiers[idx].name = e.target.value;
+                        if (idx === newSoldiers.length - 1 && e.target.value.trim()) {
+                          newSoldiers.push({ name: '', role: 'לוחם' });
+                        }
+                        setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, soldiers: newSoldiers } });
+                      }}
+                      className="input-field col-span-2"
+                    />
+                    <select
+                      value={soldier.role}
+                      onChange={(e) => {
+                        const newSoldiers = [...soldiersFormData.kitaG.soldiers];
+                        newSoldiers[idx].role = e.target.value;
+                        setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, soldiers: newSoldiers } });
                       }}
                       className="input-field"
                     >

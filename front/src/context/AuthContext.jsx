@@ -94,25 +94,35 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (username, password, fullName) => {
+  const register = async (username, password, fullName, plugaId = null, role = null) => {
     try {
-      const response = await api.post('/register', {
+      const payload = {
         username,
         password,
         full_name: fullName
-      });
+      };
+
+      // אם יש plugaId ו-role, הוסף אותם
+      if (plugaId) {
+        payload.pluga_id = parseInt(plugaId);
+      }
+      if (role) {
+        payload.role = role;
+      }
+
+      const response = await api.post('/register', payload);
       const { token: newToken, user: userData } = response.data;
-      
+
       // ⚡ עדכון בסדר הנכון
       localStorage.setItem('token', newToken);
       setToken(newToken);
       setUser(userData);
-      
+
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.error || 'שגיאה ברישום' 
+      return {
+        success: false,
+        error: error.response?.data?.error || 'שגיאה ברישום'
       };
     }
   };

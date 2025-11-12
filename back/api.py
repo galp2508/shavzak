@@ -38,31 +38,53 @@ def check_and_run_migrations():
 
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+
+        # בדיקה 1: שדות חדשים ב-unavailable_dates
         cursor.execute("PRAGMA table_info(unavailable_dates)")
-        columns = [column[1] for column in cursor.fetchall()]
-        conn.close()
+        unavailable_columns = [column[1] for column in cursor.fetchall()]
 
-        # בדיקה אם השדות החדשים קיימים
-        missing_columns = []
-        required_columns = ['end_date', 'unavailability_type', 'quantity']
-        for col in required_columns:
-            if col not in columns:
-                missing_columns.append(col)
+        missing_unavailable_columns = []
+        required_unavailable_columns = ['end_date', 'unavailability_type', 'quantity']
+        for col in required_unavailable_columns:
+            if col not in unavailable_columns:
+                missing_unavailable_columns.append(col)
 
-        if missing_columns:
-            print(f"⚠️  מזהה שדות חסרים בטבלת unavailable_dates: {', '.join(missing_columns)}")
+        if missing_unavailable_columns:
+            print(f"⚠️  מזהה שדות חסרים בטבלת unavailable_dates: {', '.join(missing_unavailable_columns)}")
             print("🔧 מריץ migration אוטומטי...")
+            conn.close()
             from migrate_unavailable_dates import migrate_database
             if migrate_database(DB_PATH):
-                print("✅ Migration הושלם בהצלחה")
-                return True
+                print("✅ Migration לטבלת unavailable_dates הושלם בהצלחה")
             else:
-                print("❌ Migration נכשל")
+                print("❌ Migration לטבלת unavailable_dates נכשל")
                 return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
 
+        # בדיקה 2: הסרת is_platoon_commander מטבלת soldiers
+        cursor.execute("PRAGMA table_info(soldiers)")
+        soldier_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'is_platoon_commander' in soldier_columns:
+            print("⚠️  מזהה עמודה מיותרת: is_platoon_commander")
+            print("🔧 מריץ migration אוטומטי להסרת is_platoon_commander...")
+            conn.close()
+            from migrate_remove_platoon_commander import migrate_database as migrate_remove_pc
+            if migrate_remove_pc(DB_PATH):
+                print("✅ Migration להסרת is_platoon_commander הושלם בהצלחה")
+            else:
+                print("❌ Migration להסרת is_platoon_commander נכשל")
+                return False
+        else:
+            print("✅ is_platoon_commander כבר הוסר")
+
+        conn.close()
         return True
     except Exception as e:
         print(f"⚠️  שגיאה בבדיקת schema: {e}")
+        if 'conn' in locals():
+            conn.close()
         return False
 
 # הרצת migrations בעת אתחול
@@ -562,7 +584,6 @@ def create_soldier(current_user):
             emergency_contact_name=data.get('emergency_contact_name'),
             emergency_contact_number=data.get('emergency_contact_number'),
             pakal=data.get('pakal'),
-            is_platoon_commander=data.get('is_platoon_commander', False),
             has_hatashab=data.get('has_hatashab', False)
         )
         
@@ -654,7 +675,6 @@ def create_soldiers_bulk(current_user):
                     emergency_contact_name=soldier_data.get('emergency_contact_name'),
                     emergency_contact_number=soldier_data.get('emergency_contact_number'),
                     pakal=soldier_data.get('pakal'),
-                    is_platoon_commander=soldier_data.get('is_platoon_commander', False),
                     has_hatashab=soldier_data.get('has_hatashab', False)
                 )
                 
@@ -767,7 +787,6 @@ def get_soldier(soldier_id, current_user):
                 'recruit_date': soldier.recruit_date.isoformat() if soldier.recruit_date else None,
                 'birth_date': soldier.birth_date.isoformat() if soldier.birth_date else None,
                 'home_round_date': soldier.home_round_date.isoformat() if soldier.home_round_date else None,
-                'is_platoon_commander': soldier.is_platoon_commander,
                 'has_hatashab': soldier.has_hatashab,
                 'mahlaka_id': soldier.mahlaka_id,
                 'certifications': cert_list,
@@ -903,7 +922,6 @@ def list_soldiers_by_mahlaka(mahlaka_id, current_user):
                 'role': soldier.role,
                 'kita': soldier.kita,
                 'certifications': cert_list,
-                'is_platoon_commander': soldier.is_platoon_commander,
                 'has_hatashab': soldier.has_hatashab
             })
         
@@ -1338,17 +1356,16 @@ def generate_shavzak(shavzak_id, current_user):
                 
                 certifications = session.query(Certification).filter_by(soldier_id=soldier.id).all()
                 cert_list = [c.certification_name for c in certifications]
-                
+
                 soldier_data = {
                     'id': soldier.id,
                     'name': soldier.name,
                     'role': soldier.role,
                     'kita': soldier.kita,
                     'certifications': cert_list,
-                    'is_platoon_commander': soldier.is_platoon_commander,
                     'unavailable_dates': unavailable_dates
                 }
-                
+
                 if soldier.role in ['ממ', 'מכ', 'סמל']:
                     commanders.append(soldier_data)
                 elif soldier.role == 'נהג':

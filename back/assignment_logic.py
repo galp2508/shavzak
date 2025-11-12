@@ -83,53 +83,52 @@ class AssignmentLogic:
 
             # כללי שיבוץ:
             # 1. מפקד - חובה (אם אין, לוחם יכול למלא את מקומו)
-            # 2. נהג - אופציונלי (אם אין, סיור פרוק)
-            # 3. לוחמים - רצוי 2, אבל אם אין מספיק, מפקד יכול להיות גם לוחם
+            # 2. 2 לוחמים - חובה! (אם יש רק 1, המפקד ימלא גם תפקיד לוחם)
+            # 3. נהג - אופציונלי (אם אין, סיור פרוק)
 
             commander = None
             soldiers = []
             driver_list = []
 
-            # חובה: מפקד (או לוחם במקומו)
+            # חובה: מפקד + 2 לוחמים
             if available_commanders:
                 commander = available_commanders[0]['id']
 
-                # לוחמים - לקחת כמה שיש (0-2)
+                # חובה: 2 לוחמים
                 if len(available_soldiers) >= 2:
+                    # מצוין! יש 2 לוחמים
                     soldiers = [s['id'] for s in available_soldiers[:2]]
                 elif len(available_soldiers) == 1:
+                    # יש רק 1 לוחם - המפקד ימלא גם תפקיד לוחם
                     soldiers = [s['id'] for s in available_soldiers[:1]]
-                    self.warnings.append(f"⚠️ {assign_data['name']}: רק 1 לוחם זמין")
+                    self.warnings.append(f"⚠️ {assign_data['name']}: רק 1 לוחם זמין, המפקד משמש גם כלוחם")
                 else:
-                    # אין לוחמים - המפקד ימלא גם תפקיד לוחם
-                    self.warnings.append(f"⚠️ {assign_data['name']}: אין לוחמים זמינים, המפקד ימלא את התפקידים")
+                    # אין לוחמים בכלל - לא מספיק, עבור למחלקה הבאה
+                    continue
 
-            elif len(available_soldiers) >= 1:
-                # אין מפקד - לוחם ימלא את תפקיד המפקד (חובה!)
+            elif len(available_soldiers) >= 3:
+                # אין מפקד אבל יש לפחות 3 לוחמים - 1 ישמש כמפקד + 2 כלוחמים
                 commander = available_soldiers[0]['id']
+                soldiers = [s['id'] for s in available_soldiers[1:3]]
                 self.warnings.append(f"⚠️ {assign_data['name']}: לא נמצא מפקד, משובץ לוחם כמפקד")
+            else:
+                # לא מספיק כוח אדם במחלקה הזו
+                continue
 
-                # שאר הלוחמים
-                if len(available_soldiers) >= 3:
-                    soldiers = [s['id'] for s in available_soldiers[1:3]]
-                elif len(available_soldiers) >= 2:
-                    soldiers = [s['id'] for s in available_soldiers[1:2]]
+            # אם הגענו לכאן, יש מפקד + 2 לוחמים (או 1 לוחם + מפקד שמשמש גם כלוחם)
+            # נהג - אופציונלי
+            if all_available_drivers:
+                driver_list = [all_available_drivers[0]['id']]
+            else:
+                # אין נהג - סיור פרוק
+                self.warnings.append(f"⚠️ {assign_data['name']}: סיור פרוק - אין נהג זמין")
 
-            # אם יש מפקד (זה חובה!)
-            if commander:
-                # נהג - אופציונלי
-                if all_available_drivers:
-                    driver_list = [all_available_drivers[0]['id']]
-                else:
-                    # אין נהג - סיור פרוק
-                    self.warnings.append(f"⚠️ {assign_data['name']}: סיור פרוק - אין נהג זמין")
-
-                return {
-                    'commanders': [commander],
-                    'drivers': driver_list,  # רשימה ריקה אם אין נהג
-                    'soldiers': soldiers,
-                    'mahlaka_id': mahlaka_info['id']
-                }
+            return {
+                'commanders': [commander],
+                'drivers': driver_list,  # רשימה ריקה אם אין נהג
+                'soldiers': soldiers,
+                'mahlaka_id': mahlaka_info['id']
+            }
 
         # לא נמצאה מחלקה עם מספיק כוח אדם - אסור לערבב מחלקות!
         return None
@@ -166,44 +165,44 @@ class AssignmentLogic:
             soldiers = []
             driver_list = []
 
-            # חובה: מפקד (או לוחם במקומו)
+            # חובה: מפקד + 2 לוחמים (גם במצב חירום!)
             if available_commanders:
                 commander = available_commanders[0]['id']
 
-                # לוחמים - לקחת כמה שיש
+                # חובה: 2 לוחמים
                 if len(available_soldiers) >= 2:
                     soldiers = [s['id'] for s in available_soldiers[:2]]
                 elif len(available_soldiers) == 1:
+                    # יש רק 1 לוחם - המפקד ימלא גם תפקיד לוחם
                     soldiers = [s['id'] for s in available_soldiers[:1]]
+                    self.warnings.append(f"⚠️ {assign_data['name']}: רק 1 לוחם זמין, המפקד משמש גם כלוחם (חירום)")
                 else:
-                    # אין לוחמים - המפקד ימלא גם תפקיד לוחם
-                    pass
+                    # אין לוחמים בכלל - עבור למחלקה הבאה
+                    continue
 
-            elif len(available_soldiers) >= 1:
-                # אין מפקד - לוחם ימלא את תפקיד המפקד
+            elif len(available_soldiers) >= 3:
+                # אין מפקד אבל יש לפחות 3 לוחמים
                 commander = available_soldiers[0]['id']
+                soldiers = [s['id'] for s in available_soldiers[1:3]]
                 self.warnings.append(f"⚠️ {assign_data['name']}: לא נמצא מפקד, משובץ לוחם כמפקד (חירום)")
+            else:
+                # לא מספיק כוח אדם במחלקה הזו
+                continue
 
-                # שאר הלוחמים
-                if len(available_soldiers) >= 3:
-                    soldiers = [s['id'] for s in available_soldiers[1:3]]
-                elif len(available_soldiers) >= 2:
-                    soldiers = [s['id'] for s in available_soldiers[1:2]]
+            # אם הגענו לכאן, יש מפקד + 2 לוחמים
+            # נהג - אופציונלי
+            if all_available_drivers:
+                driver_list = [all_available_drivers[0]['id']]
+            else:
+                self.warnings.append(f"⚠️ {assign_data['name']}: סיור פרוק - אין נהג זמין")
 
-            if commander:
-                # נהג - אופציונלי (מכל מחלקה)
-                if all_available_drivers:
-                    driver_list = [all_available_drivers[0]['id']]
-                else:
-                    self.warnings.append(f"⚠️ {assign_data['name']}: סיור פרוק - אין נהג זמין")
-
-                self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת ל-{reduced_rest} שעות")
-                return {
-                    'commanders': [commander],
-                    'drivers': driver_list,
-                    'soldiers': soldiers,
-                    'mahlaka_id': mahlaka_info['id']
-                }
+            self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת ל-{reduced_rest} שעות")
+            return {
+                'commanders': [commander],
+                'drivers': driver_list,
+                'soldiers': soldiers,
+                'mahlaka_id': mahlaka_info['id']
+            }
 
         # לא נמצאה מחלקה עם מספיק כוח אדם גם במצב חירום
         return None

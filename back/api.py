@@ -734,23 +734,95 @@ def get_soldier(soldier_id, current_user):
         session.close()
 
 
+@app.route('/api/soldiers/<int:soldier_id>', methods=['PUT'])
+@token_required
+def update_soldier(soldier_id, current_user):
+    """עדכון פרטי חייל"""
+    try:
+        session = get_db()
+
+        if not can_edit_soldier(current_user, soldier_id, session):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        soldier = session.query(Soldier).filter_by(id=soldier_id).first()
+        if not soldier:
+            return jsonify({'error': 'חייל לא נמצא'}), 404
+
+        data = request.json
+
+        # עדכון שדות בסיסיים
+        if 'name' in data:
+            soldier.name = data['name']
+        if 'role' in data:
+            soldier.role = data['role']
+        if 'kita' in data:
+            soldier.kita = data['kita']
+        if 'mahlaka_id' in data:
+            soldier.mahlaka_id = data['mahlaka_id']
+        if 'idf_id' in data:
+            soldier.idf_id = data['idf_id']
+        if 'personal_id' in data:
+            soldier.personal_id = data['personal_id']
+        if 'sex' in data:
+            soldier.sex = data['sex']
+        if 'phone_number' in data:
+            soldier.phone_number = data['phone_number']
+        if 'address' in data:
+            soldier.address = data['address']
+        if 'emergency_contact_name' in data:
+            soldier.emergency_contact_name = data['emergency_contact_name']
+        if 'emergency_contact_number' in data:
+            soldier.emergency_contact_number = data['emergency_contact_number']
+        if 'pakal' in data:
+            soldier.pakal = data['pakal']
+        if 'has_hatash_2' in data:
+            soldier.has_hatashab = data['has_hatash_2']
+        if 'has_hatashab' in data:
+            soldier.has_hatashab = data['has_hatashab']
+
+        # עדכון תאריכים
+        if 'recruit_date' in data and data['recruit_date']:
+            soldier.recruit_date = datetime.strptime(data['recruit_date'], '%Y-%m-%d').date()
+        if 'birth_date' in data and data['birth_date']:
+            soldier.birth_date = datetime.strptime(data['birth_date'], '%Y-%m-%d').date()
+        if 'home_round_date' in data and data['home_round_date']:
+            soldier.home_round_date = datetime.strptime(data['home_round_date'], '%Y-%m-%d').date()
+
+        session.commit()
+
+        return jsonify({
+            'message': 'חייל עודכן בהצלחה',
+            'soldier': {
+                'id': soldier.id,
+                'name': soldier.name,
+                'role': soldier.role,
+                'kita': soldier.kita
+            }
+        }), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @app.route('/api/soldiers/<int:soldier_id>', methods=['DELETE'])
 @token_required
 def delete_soldier(soldier_id, current_user):
     """מחיקת חייל"""
     try:
         session = get_db()
-        
+
         if not can_edit_soldier(current_user, soldier_id, session):
             return jsonify({'error': 'אין לך הרשאה'}), 403
-        
+
         soldier = session.query(Soldier).filter_by(id=soldier_id).first()
         if not soldier:
             return jsonify({'error': 'חייל לא נמצא'}), 404
-        
+
         session.delete(soldier)
         session.commit()
-        
+
         return jsonify({'message': 'חייל נמחק בהצלחה'}), 200
     except Exception as e:
         session.rollback()
@@ -906,12 +978,12 @@ def list_assignment_templates(pluga_id, current_user):
     """רשימת תבניות"""
     try:
         session = get_db()
-        
+
         if not can_view_pluga(current_user, pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
-        
+
         templates = session.query(AssignmentTemplate).filter_by(pluga_id=pluga_id).all()
-        
+
         result = [{
             'id': t.id,
             'name': t.name,
@@ -925,9 +997,90 @@ def list_assignment_templates(pluga_id, current_user):
             'requires_certification': t.requires_certification,
             'requires_senior_commander': t.requires_senior_commander
         } for t in templates]
-        
+
         return jsonify({'templates': result}), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/assignment-templates/<int:template_id>', methods=['PUT'])
+@token_required
+@role_required(['מפ'])
+def update_assignment_template(template_id, current_user):
+    """עדכון תבנית משימה"""
+    try:
+        session = get_db()
+
+        template = session.query(AssignmentTemplate).filter_by(id=template_id).first()
+        if not template:
+            return jsonify({'error': 'תבנית לא נמצאה'}), 404
+
+        if not can_edit_pluga(current_user, template.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+
+        if 'name' in data:
+            template.name = data['name']
+        if 'assignment_type' in data:
+            template.assignment_type = data['assignment_type']
+        if 'length_in_hours' in data:
+            template.length_in_hours = data['length_in_hours']
+        if 'times_per_day' in data:
+            template.times_per_day = data['times_per_day']
+        if 'commanders_needed' in data:
+            template.commanders_needed = data['commanders_needed']
+        if 'drivers_needed' in data:
+            template.drivers_needed = data['drivers_needed']
+        if 'soldiers_needed' in data:
+            template.soldiers_needed = data['soldiers_needed']
+        if 'same_mahlaka_required' in data:
+            template.same_mahlaka_required = data['same_mahlaka_required']
+        if 'requires_certification' in data:
+            template.requires_certification = data['requires_certification']
+        if 'requires_senior_commander' in data:
+            template.requires_senior_commander = data['requires_senior_commander']
+
+        session.commit()
+
+        return jsonify({
+            'message': 'תבנית עודכנה בהצלחה',
+            'template': {
+                'id': template.id,
+                'name': template.name,
+                'assignment_type': template.assignment_type
+            }
+        }), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/assignment-templates/<int:template_id>', methods=['DELETE'])
+@token_required
+@role_required(['מפ'])
+def delete_assignment_template(template_id, current_user):
+    """מחיקת תבנית משימה"""
+    try:
+        session = get_db()
+
+        template = session.query(AssignmentTemplate).filter_by(id=template_id).first()
+        if not template:
+            return jsonify({'error': 'תבנית לא נמצאה'}), 404
+
+        if not can_edit_pluga(current_user, template.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        session.delete(template)
+        session.commit()
+
+        return jsonify({'message': 'תבנית נמחקה בהצלחה'}), 200
+    except Exception as e:
+        session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -1348,14 +1501,14 @@ def list_shavzakim(pluga_id, current_user):
     """רשימת שיבוצים"""
     try:
         session = get_db()
-        
+
         if not can_view_pluga(current_user, pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
-        
+
         shavzakim = session.query(Shavzak).filter_by(pluga_id=pluga_id).order_by(
             Shavzak.created_at.desc()
         ).all()
-        
+
         result = [{
             'id': s.id,
             'name': s.name,
@@ -1363,9 +1516,154 @@ def list_shavzakim(pluga_id, current_user):
             'days_count': s.days_count,
             'created_at': s.created_at.isoformat()
         } for s in shavzakim]
-        
+
         return jsonify({'shavzakim': result}), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/shavzakim/<int:shavzak_id>', methods=['PUT'])
+@token_required
+def update_shavzak(shavzak_id, current_user):
+    """עדכון שיבוץ"""
+    try:
+        session = get_db()
+
+        shavzak = session.query(Shavzak).filter_by(id=shavzak_id).first()
+        if not shavzak:
+            return jsonify({'error': 'שיבוץ לא נמצא'}), 404
+
+        if not can_view_shavzak(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+
+        if 'name' in data:
+            shavzak.name = data['name']
+        if 'start_date' in data:
+            shavzak.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        if 'days_count' in data:
+            shavzak.days_count = data['days_count']
+        if 'min_rest_hours' in data:
+            shavzak.min_rest_hours = data['min_rest_hours']
+        if 'emergency_mode' in data:
+            shavzak.emergency_mode = data['emergency_mode']
+
+        session.commit()
+
+        return jsonify({
+            'message': 'שיבוץ עודכן בהצלחה',
+            'shavzak': {
+                'id': shavzak.id,
+                'name': shavzak.name,
+                'start_date': shavzak.start_date.isoformat(),
+                'days_count': shavzak.days_count
+            }
+        }), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/shavzakim/<int:shavzak_id>', methods=['DELETE'])
+@token_required
+def delete_shavzak(shavzak_id, current_user):
+    """מחיקת שיבוץ"""
+    try:
+        session = get_db()
+
+        shavzak = session.query(Shavzak).filter_by(id=shavzak_id).first()
+        if not shavzak:
+            return jsonify({'error': 'שיבוץ לא נמצא'}), 404
+
+        if not can_view_shavzak(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        # מחיקה תמחוק גם את כל המשימות בשיבוץ בגלל cascade
+        session.delete(shavzak)
+        session.commit()
+
+        return jsonify({'message': 'שיבוץ נמחק בהצלחה'}), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/assignments/<int:assignment_id>', methods=['PUT'])
+@token_required
+def update_assignment(assignment_id, current_user):
+    """עדכון משימה"""
+    try:
+        session = get_db()
+
+        assignment = session.query(Assignment).filter_by(id=assignment_id).first()
+        if not assignment:
+            return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        shavzak = session.query(Shavzak).filter_by(id=assignment.shavzak_id).first()
+        if not can_view_shavzak(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+
+        if 'name' in data:
+            assignment.name = data['name']
+        if 'assignment_type' in data:
+            assignment.assignment_type = data['assignment_type']
+        if 'day' in data:
+            assignment.day = data['day']
+        if 'start_hour' in data:
+            assignment.start_hour = data['start_hour']
+        if 'length_in_hours' in data:
+            assignment.length_in_hours = data['length_in_hours']
+        if 'assigned_mahlaka_id' in data:
+            assignment.assigned_mahlaka_id = data['assigned_mahlaka_id']
+
+        session.commit()
+
+        return jsonify({
+            'message': 'משימה עודכנה בהצלחה',
+            'assignment': {
+                'id': assignment.id,
+                'name': assignment.name,
+                'type': assignment.assignment_type
+            }
+        }), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/assignments/<int:assignment_id>', methods=['DELETE'])
+@token_required
+def delete_assignment(assignment_id, current_user):
+    """מחיקת משימה"""
+    try:
+        session = get_db()
+
+        assignment = session.query(Assignment).filter_by(id=assignment_id).first()
+        if not assignment:
+            return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        shavzak = session.query(Shavzak).filter_by(id=assignment.shavzak_id).first()
+        if not can_view_shavzak(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        # מחיקה תמחוק גם את החיילים המשובצים בגלל cascade
+        session.delete(assignment)
+        session.commit()
+
+        return jsonify({'message': 'משימה נמחקה בהצלחה'}), 200
+    except Exception as e:
+        session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()

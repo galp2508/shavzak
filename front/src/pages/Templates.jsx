@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { FileText, Plus, Clock, Edit, Trash2, X } from 'lucide-react';
+import { FileText, Plus, Clock, Edit, Trash2, X, Copy } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const Templates = () => {
@@ -37,6 +37,16 @@ const Templates = () => {
       loadTemplates();
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה במחיקת תבנית');
+    }
+  };
+
+  const handleDuplicate = async (id) => {
+    try {
+      await api.post(`/assignment-templates/${id}/duplicate`);
+      toast.success('התבנית שוכפלה בהצלחה');
+      loadTemplates();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה בשכפול תבנית');
     }
   };
 
@@ -80,6 +90,13 @@ const Templates = () => {
               </div>
               {user.role === 'מפ' && (
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDuplicate(template.id)}
+                    className="text-green-600 hover:text-green-800"
+                    title="שכפל תבנית"
+                  >
+                    <Copy size={18} />
+                  </button>
                   <button
                     onClick={() => {
                       setEditingTemplate(template);

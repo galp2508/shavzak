@@ -1140,6 +1140,65 @@ def delete_assignment_template(template_id, current_user):
         session.close()
 
 
+@app.route('/api/assignment-templates/<int:template_id>/duplicate', methods=['POST'])
+@token_required
+@role_required(['מפ'])
+def duplicate_assignment_template(template_id, current_user):
+    """שכפול תבנית משימה"""
+    try:
+        session = get_db()
+
+        # מציאת התבנית המקורית
+        original_template = session.query(AssignmentTemplate).filter_by(id=template_id).first()
+        if not original_template:
+            return jsonify({'error': 'תבנית לא נמצאה'}), 404
+
+        if not can_edit_pluga(current_user, original_template.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        # יצירת תבנית חדשה עם הנתונים של התבנית המקורית
+        new_template = AssignmentTemplate(
+            pluga_id=original_template.pluga_id,
+            name=f"{original_template.name} (עותק)",
+            assignment_type=original_template.assignment_type,
+            length_in_hours=original_template.length_in_hours,
+            times_per_day=original_template.times_per_day,
+            commanders_needed=original_template.commanders_needed,
+            drivers_needed=original_template.drivers_needed,
+            soldiers_needed=original_template.soldiers_needed,
+            same_mahlaka_required=original_template.same_mahlaka_required,
+            requires_certification=original_template.requires_certification,
+            requires_senior_commander=original_template.requires_senior_commander
+        )
+
+        session.add(new_template)
+        session.commit()
+
+        return jsonify({
+            'message': 'תבנית שוכפלה בהצלחה',
+            'template': {
+                'id': new_template.id,
+                'name': new_template.name,
+                'assignment_type': new_template.assignment_type,
+                'length_in_hours': new_template.length_in_hours,
+                'times_per_day': new_template.times_per_day,
+                'commanders_needed': new_template.commanders_needed,
+                'drivers_needed': new_template.drivers_needed,
+                'soldiers_needed': new_template.soldiers_needed,
+                'same_mahlaka_required': new_template.same_mahlaka_required,
+                'requires_certification': new_template.requires_certification,
+                'requires_senior_commander': new_template.requires_senior_commander
+            }
+        }), 201
+    except Exception as e:
+        session.rollback()
+        print(f"Error duplicating template: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 # ============================================================================
 # SHAVZAK (SCHEDULING)
 # ============================================================================

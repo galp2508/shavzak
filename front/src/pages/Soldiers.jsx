@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { 
-  UserPlus, Search, Edit, Trash2, X, 
-  Award, Phone, MapPin, Shield, Calendar 
+import {
+  UserPlus, Search, Edit, Trash2, X, Plus,
+  Award, Phone, MapPin, Shield, Calendar
 } from 'lucide-react';
 import ROLES from '../constants/roles';
 import { toast } from 'react-toastify';
@@ -245,13 +245,66 @@ const Soldiers = () => {
 const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: soldier?.name || '',
+    idf_id: soldier?.idf_id || '',
+    personal_id: soldier?.personal_id || '',
     role: soldier?.role || 'לוחם',
     mahlaka_id: soldier?.mahlaka_id || mahalkot[0]?.id || '',
     kita: soldier?.kita || '',
+    sex: soldier?.sex || '',
     phone_number: soldier?.phone_number || '',
+    address: soldier?.address || '',
+    emergency_contact_name: soldier?.emergency_contact_name || '',
+    emergency_contact_number: soldier?.emergency_contact_number || '',
+    pakal: soldier?.pakal || '',
+    recruit_date: soldier?.recruit_date || '',
+    birth_date: soldier?.birth_date || '',
+    home_round_date: soldier?.home_round_date || '',
+    is_platoon_commander: soldier?.is_platoon_commander || false,
     has_hatashab: soldier?.has_hatashab || false,
   });
   const [loading, setLoading] = useState(false);
+  const [unavailableDates, setUnavailableDates] = useState(soldier?.unavailable_dates || []);
+  const [newUnavailableDate, setNewUnavailableDate] = useState({ date: '', reason: '' });
+
+  const handleAddUnavailableDate = async () => {
+    if (!newUnavailableDate.date) {
+      toast.error('יש להזין תאריך');
+      return;
+    }
+
+    if (!soldier?.id) {
+      // אם זה חייל חדש, נוסיף לרשימה המקומית
+      setUnavailableDates([...unavailableDates, { ...newUnavailableDate, id: Date.now() }]);
+      setNewUnavailableDate({ date: '', reason: '' });
+      toast.success('תאריך נוסף');
+      return;
+    }
+
+    try {
+      const response = await api.post(`/soldiers/${soldier.id}/unavailable`, newUnavailableDate);
+      setUnavailableDates([...unavailableDates, response.data.unavailable_date]);
+      setNewUnavailableDate({ date: '', reason: '' });
+      toast.success('תאריך נוסף בהצלחה');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה בהוספת תאריך');
+    }
+  };
+
+  const handleDeleteUnavailableDate = async (unavailableId) => {
+    if (!soldier?.id) {
+      // אם זה חייל חדש, נמחק מהרשימה המקומית
+      setUnavailableDates(unavailableDates.filter(u => u.id !== unavailableId));
+      return;
+    }
+
+    try {
+      await api.delete(`/unavailable/${unavailableId}`);
+      setUnavailableDates(unavailableDates.filter(u => u.id !== unavailableId));
+      toast.success('תאריך נמחק בהצלחה');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה במחיקת תאריך');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -286,79 +339,302 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="label">שם מלא *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="input-field"
-                required
-              />
-            </div>
+          {/* פרטים בסיסיים */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">פרטים בסיסיים</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">שם מלא *</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input-field"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="label">תפקיד *</label>
-              <select
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                className="input-field"
-                required
-              >
-                {ROLES.map(r => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
+              <div>
+                <label className="label">תפקיד *</label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  className="input-field"
+                  required
+                >
+                  {ROLES.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="label">מחלקה *</label>
-              <select
-                value={formData.mahlaka_id}
-                onChange={(e) => setFormData({ ...formData, mahlaka_id: parseInt(e.target.value) })}
-                className="input-field"
-                required
-              >
-                {mahalkot.map(m => (
-                  <option key={m.id} value={m.id}>מחלקה {m.number}</option>
-                ))}
-              </select>
-            </div>
+              <div>
+                <label className="label">מחלקה *</label>
+                <select
+                  value={formData.mahlaka_id}
+                  onChange={(e) => setFormData({ ...formData, mahlaka_id: parseInt(e.target.value) })}
+                  className="input-field"
+                  required
+                >
+                  {mahalkot.map(m => (
+                    <option key={m.id} value={m.id}>מחלקה {m.number}</option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="label">כיתה</label>
-              <input
-                type="text"
-                value={formData.kita}
-                onChange={(e) => setFormData({ ...formData, kita: e.target.value })}
-                className="input-field"
-                placeholder="א, ב, ג..."
-              />
-            </div>
+              <div>
+                <label className="label">כיתה</label>
+                <input
+                  type="text"
+                  value={formData.kita}
+                  onChange={(e) => setFormData({ ...formData, kita: e.target.value })}
+                  className="input-field"
+                  placeholder="א, ב, ג..."
+                />
+              </div>
 
-            <div>
-              <label className="label">טלפון</label>
-              <input
-                type="tel"
-                value={formData.phone_number}
-                onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                className="input-field"
-                placeholder="050-1234567"
-              />
+              <div>
+                <label className="label">מין</label>
+                <select
+                  value={formData.sex}
+                  onChange={(e) => setFormData({ ...formData, sex: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">בחר...</option>
+                  <option value="זכר">זכר</option>
+                  <option value="נקבה">נקבה</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.has_hatashab}
-                onChange={(e) => setFormData({ ...formData, has_hatashab: e.target.checked })}
-                className="w-4 h-4 text-military-600"
-              />
-              <span className="text-gray-700">יש התש 2</span>
-            </label>
+          {/* מספרי זיהוי */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">מספרי זיהוי</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">מספר אישי (מ.א)</label>
+                <input
+                  type="text"
+                  value={formData.idf_id}
+                  onChange={(e) => setFormData({ ...formData, idf_id: e.target.value })}
+                  className="input-field"
+                  placeholder="1234567"
+                />
+              </div>
+
+              <div>
+                <label className="label">תעודת זהות</label>
+                <input
+                  type="text"
+                  value={formData.personal_id}
+                  onChange={(e) => setFormData({ ...formData, personal_id: e.target.value })}
+                  className="input-field"
+                  placeholder="123456789"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* פרטי קשר */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">פרטי קשר</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">טלפון</label>
+                <input
+                  type="tel"
+                  value={formData.phone_number}
+                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                  className="input-field"
+                  placeholder="050-1234567"
+                />
+              </div>
+
+              <div>
+                <label className="label">כתובת</label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="input-field"
+                  placeholder="רחוב, עיר"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* איש קשר לחירום */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">איש קשר לחירום</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">שם איש קשר</label>
+                <input
+                  type="text"
+                  value={formData.emergency_contact_name}
+                  onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                  className="input-field"
+                  placeholder="שם מלא"
+                />
+              </div>
+
+              <div>
+                <label className="label">טלפון איש קשר</label>
+                <input
+                  type="tel"
+                  value={formData.emergency_contact_number}
+                  onChange={(e) => setFormData({ ...formData, emergency_contact_number: e.target.value })}
+                  className="input-field"
+                  placeholder="050-1234567"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* מידע צבאי */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">מידע צבאי</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">פק״ל</label>
+                <input
+                  type="text"
+                  value={formData.pakal}
+                  onChange={(e) => setFormData({ ...formData, pakal: e.target.value })}
+                  className="input-field"
+                  placeholder="07"
+                />
+              </div>
+
+              <div>
+                <label className="label">תאריך גיוס</label>
+                <input
+                  type="date"
+                  value={formData.recruit_date}
+                  onChange={(e) => setFormData({ ...formData, recruit_date: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="label">תאריך לידה</label>
+                <input
+                  type="date"
+                  value={formData.birth_date}
+                  onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="label">תאריך סבב יציאה</label>
+                <input
+                  type="date"
+                  value={formData.home_round_date}
+                  onChange={(e) => setFormData({ ...formData, home_round_date: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* סטטוסים */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">סטטוסים</h3>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.is_platoon_commander}
+                  onChange={(e) => setFormData({ ...formData, is_platoon_commander: e.target.checked })}
+                  className="w-4 h-4 text-military-600"
+                />
+                <span className="text-gray-700">מפקד כיתה</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.has_hatashab}
+                  onChange={(e) => setFormData({ ...formData, has_hatashab: e.target.checked })}
+                  className="w-4 h-4 text-military-600"
+                />
+                <span className="text-gray-700">יש התש 2</span>
+              </label>
+            </div>
+          </div>
+
+          {/* תאריכי אי זמינות */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b flex items-center gap-2">
+              <Calendar size={20} className="text-military-600" />
+              תאריכי אי זמינות / חופשה
+            </h3>
+
+            {/* תאריכים קיימים */}
+            {unavailableDates.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {unavailableDates.map((unavailable) => (
+                  <div
+                    key={unavailable.id}
+                    className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg p-3"
+                  >
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                      </div>
+                      {unavailable.reason && (
+                        <div className="text-sm text-gray-600">{unavailable.reason}</div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteUnavailableDate(unavailable.id)}
+                      className="text-red-600 hover:text-red-800"
+                      title="מחק"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* הוספת תאריך חדש */}
+            <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="label">תאריך</label>
+                  <input
+                    type="date"
+                    value={newUnavailableDate.date}
+                    onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, date: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">סיבה (אופציונלי)</label>
+                  <input
+                    type="text"
+                    value={newUnavailableDate.reason}
+                    onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, reason: e.target.value })}
+                    className="input-field"
+                    placeholder="חופשה, פטור, מחלה..."
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddUnavailableDate}
+                className="btn-secondary flex items-center gap-2 w-full justify-center"
+              >
+                <Plus size={18} />
+                <span>הוסף תאריך</span>
+              </button>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">

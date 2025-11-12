@@ -901,10 +901,10 @@ def add_unavailable_date(soldier_id, current_user):
     """הוספת תאריך לא זמין"""
     try:
         session = get_db()
-        
+
         if not can_edit_soldier(current_user, soldier_id, session):
             return jsonify({'error': 'אין לך הרשאה'}), 403
-        
+
         data = request.json
         unavailable = UnavailableDate(
             soldier_id=soldier_id,
@@ -912,11 +912,44 @@ def add_unavailable_date(soldier_id, current_user):
             reason=data.get('reason', ''),
             status=data.get('status', 'approved')
         )
-        
+
         session.add(unavailable)
         session.commit()
-        
-        return jsonify({'message': 'תאריך נוסף בהצלחה'}), 201
+
+        return jsonify({
+            'message': 'תאריך נוסף בהצלחה',
+            'unavailable_date': {
+                'id': unavailable.id,
+                'date': unavailable.date.isoformat(),
+                'reason': unavailable.reason,
+                'status': unavailable.status
+            }
+        }), 201
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/unavailable/<int:unavailable_id>', methods=['DELETE'])
+@token_required
+def delete_unavailable_date(unavailable_id, current_user):
+    """מחיקת תאריך אי זמינות"""
+    try:
+        session = get_db()
+
+        unavailable = session.query(UnavailableDate).filter_by(id=unavailable_id).first()
+        if not unavailable:
+            return jsonify({'error': 'תאריך לא נמצא'}), 404
+
+        if not can_edit_soldier(current_user, unavailable.soldier_id, session):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        session.delete(unavailable)
+        session.commit()
+
+        return jsonify({'message': 'תאריך נמחק בהצלחה'}), 200
     except Exception as e:
         session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -1664,6 +1697,91 @@ def delete_assignment(assignment_id, current_user):
         return jsonify({'message': 'משימה נמחקה בהצלחה'}), 200
     except Exception as e:
         session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/assignments/<int:assignment_id>/duplicate', methods=['POST'])
+@token_required
+def duplicate_assignment(assignment_id, current_user):
+    """שכפול משימה"""
+    try:
+        session = get_db()
+
+        # מציאת המשימה המקורית
+        original_assignment = session.query(Assignment).filter_by(id=assignment_id).first()
+        if not original_assignment:
+            return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        shavzak = session.query(Shavzak).filter_by(id=original_assignment.shavzak_id).first()
+        if not can_view_shavzak(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json or {}
+
+        # יצירת משימה חדשה עם הנתונים של המשימה המקורית
+        new_assignment = Assignment(
+            shavzak_id=original_assignment.shavzak_id,
+            name=data.get('name', f"{original_assignment.name} (עותק)"),
+            assignment_type=original_assignment.assignment_type,
+            day=data.get('day', original_assignment.day),
+            start_hour=data.get('start_hour', original_assignment.start_hour),
+            length_in_hours=original_assignment.length_in_hours,
+            assigned_mahlaka_id=original_assignment.assigned_mahlaka_id
+        )
+
+        session.add(new_assignment)
+        session.flush()  # כדי לקבל את ה-ID של המשימה החדשה
+
+        # שכפול החיילים המשובצים
+        if data.get('duplicate_soldiers', False):
+            original_soldiers = session.query(AssignmentSoldier).filter_by(
+                assignment_id=assignment_id
+            ).all()
+
+            for soldier_assignment in original_soldiers:
+                new_soldier_assignment = AssignmentSoldier(
+                    assignment_id=new_assignment.id,
+                    soldier_id=soldier_assignment.soldier_id,
+                    role_in_assignment=soldier_assignment.role_in_assignment
+                )
+                session.add(new_soldier_assignment)
+
+        session.commit()
+
+        # החזרת המשימה החדשה עם כל הפרטים
+        soldiers = []
+        if data.get('duplicate_soldiers', False):
+            soldier_assignments = session.query(AssignmentSoldier).filter_by(
+                assignment_id=new_assignment.id
+            ).all()
+            for sa in soldier_assignments:
+                soldier = session.query(Soldier).filter_by(id=sa.soldier_id).first()
+                if soldier:
+                    soldiers.append({
+                        'id': soldier.id,
+                        'name': soldier.name,
+                        'role': sa.role_in_assignment
+                    })
+
+        return jsonify({
+            'message': 'משימה שוכפלה בהצלחה',
+            'assignment': {
+                'id': new_assignment.id,
+                'name': new_assignment.name,
+                'assignment_type': new_assignment.assignment_type,
+                'day': new_assignment.day,
+                'start_hour': new_assignment.start_hour,
+                'length_in_hours': new_assignment.length_in_hours,
+                'assigned_mahlaka_id': new_assignment.assigned_mahlaka_id,
+                'soldiers': soldiers
+            }
+        }), 201
+    except Exception as e:
+        session.rollback()
+        print(f"Error duplicating assignment: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()

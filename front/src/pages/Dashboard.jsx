@@ -49,17 +49,26 @@ const Dashboard = () => {
       const shavRes = await api.get(`/plugot/${user.pluga_id}/shavzakim`);
       const shavzakim = shavRes.data.shavzakim || [];
 
-      // סכום חיילים בכל מחלקה (מקביל לקריאות /mahalkot/:id/soldiers)
-      const soldierCountsPromises = mahalkot.map((m) =>
-        api.get(`/mahalkot/${m.id}/soldiers`).then((r) => r.data.soldiers?.length || 0).catch(() => 0)
+      // סכום חיילים בכל מחלקה וספירת מפקדים
+      const soldiersPromises = mahalkot.map((m) =>
+        api.get(`/mahalkot/${m.id}/soldiers`).then((r) => r.data.soldiers || []).catch(() => [])
       );
-      const counts = await Promise.all(soldierCountsPromises);
-      const totalSoldiers = counts.reduce((a, b) => a + b, 0);
+      const soldiersArrays = await Promise.all(soldiersPromises);
+      const allSoldiers = soldiersArrays.flat();
+
+      const totalSoldiers = allSoldiers.length;
+
+      // ספירת מפקדים: ממ, סמל, ומפקדי כיתה
+      const commanderCount = allSoldiers.filter(soldier =>
+        soldier.role === 'ממ' ||
+        soldier.role === 'סמל' ||
+        soldier.is_platoon_commander === true
+      ).length;
 
       setStats({
         mahalkot: mahalkot.length,
         total_soldiers: totalSoldiers,
-        commanders: 0, // לא קיים endpoint ישיר — ניתן להרחיב בעתיד
+        commanders: commanderCount,
         shavzakim: shavzakim.length,
       });
     } catch (error) {

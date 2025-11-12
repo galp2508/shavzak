@@ -185,11 +185,11 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
   const [createdMahlakaId, setCreatedMahlakaId] = useState(null);
   const [showSoldiersImport, setShowSoldiersImport] = useState(false);
   const [soldiersFormData, setSoldiersFormData] = useState({
-    mm: { name: '', date: '' },
-    samal: { name: '', date: '' },
-    mkXa: { name: '', date: '' },
-    mkXb: { name: '', date: '' },
-    mkXg: { name: '', date: '' },
+    mm: { name: '', date: '', role: 'מ"מ' },
+    samal: { name: '', date: '', role: ',סמל' },
+    mkXa: { name: '', date: '', role: 'מ"כ' },
+    mkXb: { name: '', date: '', role: 'מ"כ' },
+    mkXg: { name: '', date: '', role: 'מ"כ'},
     kitaA: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
     kitaB: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
     kitaG: { soldiers: [{ name: '', role: 'לוחם' }], date: '' }

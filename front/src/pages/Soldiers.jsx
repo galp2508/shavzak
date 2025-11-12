@@ -179,9 +179,15 @@ const Soldiers = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex gap-2">
                       <button
-                        onClick={() => {
-                          setEditingSoldier(soldier);
-                          setShowModal(true);
+                        onClick={async () => {
+                          // טען את כל נתוני החייל לפני העריכה
+                          try {
+                            const response = await api.get(`/soldiers/${soldier.id}`);
+                            setEditingSoldier(response.data.soldier);
+                            setShowModal(true);
+                          } catch (error) {
+                            toast.error('שגיאה בטעינת פרטי חייל');
+                          }
                         }}
                         className="text-blue-600 hover:text-blue-800"
                         title="ערוך"
@@ -718,40 +724,51 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
 
 // Soldier Details Modal Component
 const SoldierDetailsModal = ({ soldier, onClose }) => {
-  // חישוב סבב יציאה נוכחי (כל 21 יום)
+  // חישוב סבב יציאה נוכחי (17-4: 4 ימים בית, 17 ימים בסיס)
   const calculateCurrentRound = () => {
     if (!soldier.home_round_date) return null;
 
     const homeRoundDate = new Date(soldier.home_round_date);
-    homeRoundDate.setHours(0, 0, 0, 0); // אפס את השעות
+    homeRoundDate.setHours(0, 0, 0, 0);
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // אפס את השעות
+    today.setHours(0, 0, 0, 0);
 
-    // חישוב ההפרש בימים (יכול להיות חיובי או שלילי)
+    // חישוב ההפרש בימים מתאריך הסבב הראשון
     const diffTime = today - homeRoundDate;
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-    // חישוב מספר הסבב הנוכחי
-    const roundNumber = Math.floor(diffDays / 21);
-    const daysIntoCurrentRound = diffDays % 21;
+    // מחזור של 21 יום: 4 בבית + 17 בבסיס
+    const CYCLE_LENGTH = 21;
+    const HOME_DAYS = 4;
+    const BASE_DAYS = 17;
 
-    // חישוב התאריך של הסבב הבא (חייב להיות בעתיד)
-    const nextRoundDate = new Date(homeRoundDate);
-    nextRoundDate.setDate(nextRoundDate.getDate() + ((roundNumber + 1) * 21));
+    // חישוב מיקום במחזור הנוכחי
+    const daysIntoCurrentCycle = ((diffDays % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH;
+    const cycleNumber = Math.floor(diffDays / CYCLE_LENGTH);
 
-    // אם התאריך הבא עדיין בעבר (או היום), להוסיף עוד 21 יום
-    while (nextRoundDate <= today) {
-      nextRoundDate.setDate(nextRoundDate.getDate() + 21);
+    // האם החייל כרגע בבית? (ימים 0-3 מתוך 21)
+    const isAtHome = daysIntoCurrentCycle < HOME_DAYS;
+    const daysInCurrentStatus = isAtHome ? daysIntoCurrentCycle : (daysIntoCurrentCycle - HOME_DAYS);
+    const daysLeftInStatus = isAtHome ? (HOME_DAYS - daysIntoCurrentCycle - 1) : (BASE_DAYS - (daysIntoCurrentCycle - HOME_DAYS) - 1);
+
+    // חישוב תאריך הסבב הבא (תאריך הבית הבא)
+    const nextHomeDate = new Date(homeRoundDate);
+    nextHomeDate.setDate(nextHomeDate.getDate() + ((cycleNumber + 1) * CYCLE_LENGTH));
+
+    while (nextHomeDate <= today) {
+      nextHomeDate.setDate(nextHomeDate.getDate() + CYCLE_LENGTH);
     }
 
-    // חישוב כמה ימים נשארו עד הסבב הבא
-    const daysUntilNext = Math.ceil((nextRoundDate - today) / (1000 * 60 * 60 * 24));
+    const daysUntilNextHome = Math.ceil((nextHomeDate - today) / (1000 * 60 * 60 * 24));
 
     return {
-      roundNumber: roundNumber + 1,
-      daysIntoRound: daysIntoCurrentRound >= 0 ? daysIntoCurrentRound : 0,
-      nextRoundDate: nextRoundDate.toLocaleDateString('he-IL'),
-      daysUntilNextRound: daysUntilNext
+      cycleNumber: cycleNumber + 1,
+      daysIntoCurrentCycle: daysIntoCurrentCycle,
+      isAtHome,
+      daysInCurrentStatus: daysInCurrentStatus + 1,
+      daysLeftInStatus,
+      nextHomeDate: nextHomeDate.toLocaleDateString('he-IL'),
+      daysUntilNextHome
     };
   };
 
@@ -870,29 +887,57 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
             </div>
           </div>
 
-          {/* Home Round - סבב יציאה */}
+          {/* Home Round - סבב יציאה (17-4) */}
           {currentRound && (
             <div className="pt-4 border-t">
               <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                 <Calendar size={20} className="text-military-600" />
-                סבב יציאה נוכחי
+                סבב יציאה נוכחי (17-4)
               </h3>
-              <div className="bg-military-50 rounded-lg p-4 space-y-2">
+
+              {/* סטטוס נוכחי - בבית או בבסיס */}
+              <div className={`rounded-lg p-4 mb-3 ${currentRound.isAtHome ? 'bg-green-50 border-2 border-green-300' : 'bg-blue-50 border-2 border-blue-300'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-lg">
+                    {currentRound.isAtHome ? '🏠 החייל בבית (סבב)' : '🎖️ החייל בבסיס'}
+                  </span>
+                  <span className={`badge text-sm ${currentRound.isAtHome ? 'badge-green' : 'badge-blue'}`}>
+                    {currentRound.isAtHome ? 'בבית' : 'בבסיס'}
+                  </span>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-700">
+                      {currentRound.isAtHome ? 'יום בבית:' : 'יום בבסיס:'}
+                    </span>
+                    <span className="font-bold">
+                      {currentRound.daysInCurrentStatus} מתוך {currentRound.isAtHome ? '4' : '17'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-700">
+                      {currentRound.isAtHome ? 'ימים שנותרו בבית:' : 'ימים עד סבב הבא:'}
+                    </span>
+                    <span className="font-bold">
+                      {currentRound.isAtHome ? currentRound.daysLeftInStatus : currentRound.daysUntilNextHome}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* מידע נוסף */}
+              <div className="bg-military-50 rounded-lg p-4 space-y-2 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-700">סבב מספר:</span>
-                  <span className="font-bold text-military-700">{currentRound.roundNumber}</span>
+                  <span className="text-gray-700">מחזור מספר:</span>
+                  <span className="font-bold text-military-700">{currentRound.cycleNumber}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-700">יום בסבב:</span>
-                  <span className="font-bold text-military-700">{currentRound.daysIntoRound + 1} מתוך 21</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-700">ימים עד סבב הבא:</span>
-                  <span className="font-bold text-military-700">{currentRound.daysUntilNextRound}</span>
+                  <span className="text-gray-700">יום במחזור:</span>
+                  <span className="font-bold text-military-700">{currentRound.daysIntoCurrentCycle + 1} מתוך 21</span>
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-military-200">
-                  <span className="text-gray-700">תאריך סבב הבא:</span>
-                  <span className="font-bold text-military-700">{currentRound.nextRoundDate}</span>
+                  <span className="text-gray-700">תאריך סבב בית הבא:</span>
+                  <span className="font-bold text-military-700">{currentRound.nextHomeDate}</span>
                 </div>
               </div>
             </div>

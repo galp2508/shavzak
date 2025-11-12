@@ -41,87 +41,145 @@ class AssignmentLogic:
         
         return True
     
-    def assign_patrol(self, assign_data: Dict, mahalkot: List[Dict], 
+    def assign_patrol(self, assign_data: Dict, mahalkot: List[Dict],
                      schedules: Dict, mahlaka_workload: Dict) -> Dict:
-        """שיבוץ סיור"""
+        """שיבוץ סיור - מפקד ולוחמים מאותה מחלקה, נהג יכול להיות מכל מחלקה"""
         result = self._try_assign_patrol_normal(assign_data, mahalkot, schedules, mahlaka_workload)
         if result:
             return result
-        
+
         if self.emergency_mode:
             return self._try_assign_patrol_emergency(assign_data, mahalkot, schedules, mahlaka_workload)
-        
+
         raise Exception(f"לא נמצאה מחלקה זמינה לסיור")
     
     def _try_assign_patrol_normal(self, assign_data, mahalkot, schedules, mahlaka_workload):
-        """ניסיון רגיל לשיבוץ סיור"""
+        """ניסיון רגיל לשיבוץ סיור - מפקד ולוחמים מאותה מחלקה, נהג מכל מחלקה"""
         # מיון לפי עומס
         mahalkot_sorted = sorted(mahalkot, key=lambda x: mahlaka_workload.get(x['id'], 0))
-        
+
+        # איסוף כל הנהגים הזמינים מכל המחלקות (נהג לא חייב להיות מאותה מחלקה)
+        all_available_drivers = []
+        for m in mahalkot:
+            for d in m['drivers']:
+                if self.can_assign_at(schedules.get(d['id'], []), assign_data['day'],
+                                    assign_data['start_hour'], assign_data['length_in_hours'],
+                                    self.min_rest_hours):
+                    all_available_drivers.append(d)
+
         for mahlaka_info in mahalkot_sorted:
             available_commanders = [
                 c for c in mahlaka_info['commanders']
-                if self.can_assign_at(schedules.get(c['id'], []), assign_data['day'], 
-                                    assign_data['start_hour'], assign_data['length_in_hours'], 
-                                    self.min_rest_hours)
-            ]
-            available_drivers = [
-                d for d in mahlaka_info['drivers']
-                if self.can_assign_at(schedules.get(d['id'], []), assign_data['day'], 
-                                    assign_data['start_hour'], assign_data['length_in_hours'], 
+                if self.can_assign_at(schedules.get(c['id'], []), assign_data['day'],
+                                    assign_data['start_hour'], assign_data['length_in_hours'],
                                     self.min_rest_hours)
             ]
             available_soldiers = [
                 s for s in mahlaka_info['soldiers']
-                if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'], 
-                                    assign_data['start_hour'], assign_data['length_in_hours'], 
+                if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                                    assign_data['start_hour'], assign_data['length_in_hours'],
                                     self.min_rest_hours)
             ]
-            
-            if len(available_commanders) >= 1 and len(available_drivers) >= 1 and \
-               len(available_soldiers) >= 2:
-                return {
-                    'commanders': [available_commanders[0]['id']],
-                    'drivers': [available_drivers[0]['id']],
-                    'soldiers': [s['id'] for s in available_soldiers[:2]],
-                    'mahlaka_id': mahlaka_info['id']
-                }
-        
+
+            # בדיקה אם יש מפקד (או לוחם שיכול להיות מפקד) ו-2 לוחמים במחלקה
+            commander = None
+            soldiers = []
+
+            # נסה לקחת מפקד
+            if available_commanders:
+                commander = available_commanders[0]['id']
+                # צריך 2 לוחמים
+                if len(available_soldiers) >= 2:
+                    soldiers = [s['id'] for s in available_soldiers[:2]]
+            elif len(available_soldiers) >= 3:
+                # אין מפקד - קח לוחם כמפקד + 2 לוחמים נוספים
+                commander = available_soldiers[0]['id']
+                soldiers = [s['id'] for s in available_soldiers[1:3]]
+                self.warnings.append(f"⚠️ {assign_data['name']}: לא נמצא מפקד זמין, משובץ לוחם כמפקד")
+
+            # אם יש מפקד ו-2 לוחמים, נחפש נהג (מכל מחלקה)
+            if commander and len(soldiers) == 2:
+                if all_available_drivers:
+                    return {
+                        'commanders': [commander],
+                        'drivers': [all_available_drivers[0]['id']],
+                        'soldiers': soldiers,
+                        'mahlaka_id': mahlaka_info['id']
+                    }
+                elif len(available_soldiers) >= 3:
+                    # אין נהג כלל - קח לוחם נוסף כנהג
+                    driver = available_soldiers[2]['id']
+                    self.warnings.append(f"⚠️ {assign_data['name']}: לא נמצא נהג זמין, משובץ לוחם כנהג")
+                    return {
+                        'commanders': [commander],
+                        'drivers': [driver],
+                        'soldiers': soldiers,
+                        'mahlaka_id': mahlaka_info['id']
+                    }
+
         return None
     
     def _try_assign_patrol_emergency(self, assign_data, mahalkot, schedules, mahlaka_workload):
         """מצב חירום - מקל על הדרישות"""
         reduced_rest = self.min_rest_hours // 2
-        
+
         for mahlaka_info in mahalkot:
             available_commanders = [
                 c for c in mahlaka_info['commanders']
-                if self.can_assign_at(schedules.get(c['id'], []), assign_data['day'], 
-                                    assign_data['start_hour'], assign_data['length_in_hours'], 
+                if self.can_assign_at(schedules.get(c['id'], []), assign_data['day'],
+                                    assign_data['start_hour'], assign_data['length_in_hours'],
                                     reduced_rest)
             ]
             available_drivers = [
                 d for d in mahlaka_info['drivers']
-                if self.can_assign_at(schedules.get(d['id'], []), assign_data['day'], 
-                                    assign_data['start_hour'], assign_data['length_in_hours'], 
+                if self.can_assign_at(schedules.get(d['id'], []), assign_data['day'],
+                                    assign_data['start_hour'], assign_data['length_in_hours'],
                                     reduced_rest)
             ]
             available_soldiers = [
                 s for s in mahlaka_info['soldiers']
-                if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'], 
-                                    assign_data['start_hour'], assign_data['length_in_hours'], 
+                if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                                    assign_data['start_hour'], assign_data['length_in_hours'],
                                     reduced_rest)
             ]
-            
-            if len(available_commanders) >= 1 and len(available_drivers) >= 1 and \
-               len(available_soldiers) >= 2:
-                self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת ל-{reduced_rest} שעות")
-                return {
-                    'commanders': [available_commanders[0]['id']],
-                    'drivers': [available_drivers[0]['id']],
-                    'soldiers': [s['id'] for s in available_soldiers[:2]],
-                    'mahlaka_id': mahlaka_info['id']
-                }
+
+            # חישוב סך כל חיילים זמינים
+            total_available = len(available_commanders) + len(available_drivers) + len(available_soldiers)
+
+            # אם יש מספיק חיילים אבל לא בפילוג הנכון, נשתמש ב-fallback
+            if total_available >= 4:
+                commander = None
+                driver = None
+                soldiers = []
+
+                # נסה לקחת מפקד
+                if available_commanders:
+                    commander = available_commanders[0]['id']
+                elif available_soldiers:
+                    commander = available_soldiers[0]['id']
+                    available_soldiers = available_soldiers[1:]
+                    self.warnings.append(f"⚠️ {assign_data['name']}: לא נמצא מפקד זמין, משובץ לוחם כמפקד")
+
+                # נסה לקחת נהג
+                if available_drivers:
+                    driver = available_drivers[0]['id']
+                elif available_soldiers:
+                    driver = available_soldiers[0]['id']
+                    available_soldiers = available_soldiers[1:]
+                    self.warnings.append(f"⚠️ {assign_data['name']}: לא נמצא נהג זמין, משובץ לוחם כנהג")
+
+                # קח 2 לוחמים
+                if len(available_soldiers) >= 2:
+                    soldiers = [s['id'] for s in available_soldiers[:2]]
+
+                if commander and driver and len(soldiers) == 2:
+                    self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת ל-{reduced_rest} שעות")
+                    return {
+                        'commanders': [commander],
+                        'drivers': [driver],
+                        'soldiers': soldiers,
+                        'mahlaka_id': mahlaka_info['id']
+                    }
         
         # ערבוב מחלקות
         all_commanders = [c for m in mahalkot for c in m['commanders']]

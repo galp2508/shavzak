@@ -117,13 +117,16 @@ class Certification(Base):
 class UnavailableDate(Base):
     """תאריכים שבהם חייל לא זמין"""
     __tablename__ = 'unavailable_dates'
-    
+
     id = Column(Integer, primary_key=True)
     soldier_id = Column(Integer, ForeignKey('soldiers.id'), nullable=False)
     date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=True)  # תאריך סיום (יחושב אוטומטית לגימלים וחק"שים)
     reason = Column(String(200))
     status = Column(String(20), default='approved')
-    
+    unavailability_type = Column(String(20), default='חופשה')  # 'חופשה', 'גימל', 'חק"ש'
+    quantity = Column(Integer, nullable=True)  # כמות גימלים/חק"שים
+
     soldier = relationship("Soldier", back_populates="unavailable_dates")
 
 

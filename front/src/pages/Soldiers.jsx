@@ -264,7 +264,12 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
   });
   const [loading, setLoading] = useState(false);
   const [unavailableDates, setUnavailableDates] = useState(soldier?.unavailable_dates || []);
-  const [newUnavailableDate, setNewUnavailableDate] = useState({ date: '', reason: '' });
+  const [newUnavailableDate, setNewUnavailableDate] = useState({
+    date: '',
+    reason: '',
+    unavailability_type: 'חופשה',
+    quantity: 1
+  });
 
   const handleAddUnavailableDate = async () => {
     if (!newUnavailableDate.date) {
@@ -272,10 +277,23 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
       return;
     }
 
+    // בדיקת שדות חובה לגימלים/חק"שים
+    if (['גימל', 'חק"ש'].includes(newUnavailableDate.unavailability_type)) {
+      if (!newUnavailableDate.quantity || newUnavailableDate.quantity < 1) {
+        toast.error('יש להזין כמות');
+        return;
+      }
+    }
+
     if (!soldier?.id) {
       // אם זה חייל חדש, נוסיף לרשימה המקומית
       setUnavailableDates([...unavailableDates, { ...newUnavailableDate, id: Date.now() }]);
-      setNewUnavailableDate({ date: '', reason: '' });
+      setNewUnavailableDate({
+        date: '',
+        reason: '',
+        unavailability_type: 'חופשה',
+        quantity: 1
+      });
       toast.success('תאריך נוסף');
       return;
     }
@@ -283,7 +301,12 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
     try {
       const response = await api.post(`/soldiers/${soldier.id}/unavailable`, newUnavailableDate);
       setUnavailableDates([...unavailableDates, response.data.unavailable_date]);
-      setNewUnavailableDate({ date: '', reason: '' });
+      setNewUnavailableDate({
+        date: '',
+        reason: '',
+        unavailability_type: 'חופשה',
+        quantity: 1
+      });
       toast.success('תאריך נוסף בהצלחה');
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה בהוספת תאריך');
@@ -580,12 +603,25 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
                     key={unavailable.id}
                     className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg p-3"
                   >
-                    <div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`badge ${
+                          unavailable.unavailability_type === 'גימל' ? 'badge-yellow' :
+                          unavailable.unavailability_type === 'חק"ש' ? 'badge-blue' :
+                          'badge-red'
+                        }`}>
+                          {unavailable.unavailability_type || 'חופשה'}
+                          {unavailable.quantity && ` (${unavailable.quantity})`}
+                        </span>
+                      </div>
                       <div className="font-medium text-gray-900">
                         {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                        {unavailable.end_date && (
+                          <span> - {new Date(unavailable.end_date).toLocaleDateString('he-IL')}</span>
+                        )}
                       </div>
                       {unavailable.reason && (
-                        <div className="text-sm text-gray-600">{unavailable.reason}</div>
+                        <div className="text-sm text-gray-600 mt-1">{unavailable.reason}</div>
                       )}
                     </div>
                     <button
@@ -605,13 +641,45 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
             <div className="bg-gray-50 p-4 rounded-lg space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="label">תאריך</label>
+                  <label className="label">סוג *</label>
+                  <select
+                    value={newUnavailableDate.unavailability_type}
+                    onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, unavailability_type: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="חופשה">חופשה רגילה</option>
+                    <option value="גימל">גימל</option>
+                    <option value="חק"ש">חק״ש</option>
+                  </select>
+                </div>
+
+                {['גימל', 'חק"ש'].includes(newUnavailableDate.unavailability_type) && (
+                  <div>
+                    <label className="label">כמות *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newUnavailableDate.quantity}
+                      onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, quantity: parseInt(e.target.value) || 1 })}
+                      className="input-field"
+                      placeholder="1, 2, 3..."
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="label">תאריך {['גימל', 'חק"ש'].includes(newUnavailableDate.unavailability_type) ? 'התחלה' : ''} *</label>
                   <input
                     type="date"
                     value={newUnavailableDate.date}
                     onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, date: e.target.value })}
                     className="input-field"
                   />
+                  {['גימל', 'חק"ש'].includes(newUnavailableDate.unavailability_type) && newUnavailableDate.date && newUnavailableDate.quantity && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      סיום: {new Date(new Date(newUnavailableDate.date).getTime() + (newUnavailableDate.quantity * 2 - 1) * 24 * 60 * 60 * 1000).toLocaleDateString('he-IL')}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -883,19 +951,30 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
 
           {/* Unavailable Dates */}
           {soldier.unavailable_dates && soldier.unavailable_dates.length > 0 && (
-            <div className="pt-4 border-t">
-              <h3 className="font-bold text-gray-900 mb-3">תאריכי חופשה / אי זמינות</h3>
+            <div>
+              <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">תאריכי חופשה / אי זמינות</h3>
               <div className="space-y-2">
                 {soldier.unavailable_dates.map((unavailable) => (
                   <div key={unavailable.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">
-                        {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`badge ${
+                        unavailable.unavailability_type === 'גימל' ? 'badge-yellow' :
+                        unavailable.unavailability_type === 'חק"ש' ? 'badge-blue' :
+                        'badge-red'
+                      }`}>
+                        {unavailable.unavailability_type || 'חופשה'}
+                        {unavailable.quantity && ` (${unavailable.quantity})`}
                       </span>
-                      {unavailable.reason && (
-                        <span className="text-sm text-gray-600">{unavailable.reason}</span>
+                    </div>
+                    <div className="font-medium text-gray-900">
+                      {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                      {unavailable.end_date && (
+                        <span> - {new Date(unavailable.end_date).toLocaleDateString('he-IL')}</span>
                       )}
                     </div>
+                    {unavailable.reason && (
+                      <div className="text-sm text-gray-600 mt-1">{unavailable.reason}</div>
+                    )}
                   </div>
                 ))}
               </div>

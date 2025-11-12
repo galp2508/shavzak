@@ -39,6 +39,13 @@ const ShavzakView = () => {
       ]);
 
       console.log('Shavzak data received:', shavzakRes.data);
+
+      // וודא שהנתונים מוצגים נכון
+      if (!shavzakRes.data || !shavzakRes.data.shavzak) {
+        toast.error('שגיאה: נתוני שיבוץ לא תקינים');
+        return;
+      }
+
       setShavzak(shavzakRes.data);
       setMahalkot(mahalkotRes.data.mahalkot || []);
     } catch (error) {

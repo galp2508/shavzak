@@ -815,30 +815,32 @@ def update_soldier(soldier_id, current_user):
 
         data = request.json
 
-        # עדכון שדות בסיסיים
-        if 'name' in data:
+        # עדכון שדות בסיסיים (שדות חובה)
+        if 'name' in data and data['name']:
             soldier.name = data['name']
-        if 'role' in data:
+        if 'role' in data and data['role']:
             soldier.role = data['role']
-        if 'kita' in data:
-            soldier.kita = data['kita']
-        if 'mahlaka_id' in data:
+        if 'mahlaka_id' in data and data['mahlaka_id']:
             soldier.mahlaka_id = data['mahlaka_id']
-        if 'idf_id' in data:
+
+        # עדכון שדות אופציונליים (רק אם יש ערך)
+        if 'kita' in data and data['kita']:
+            soldier.kita = data['kita']
+        if 'idf_id' in data and data['idf_id']:
             soldier.idf_id = data['idf_id']
-        if 'personal_id' in data:
+        if 'personal_id' in data and data['personal_id']:
             soldier.personal_id = data['personal_id']
-        if 'sex' in data:
+        if 'sex' in data and data['sex']:
             soldier.sex = data['sex']
-        if 'phone_number' in data:
+        if 'phone_number' in data and data['phone_number']:
             soldier.phone_number = data['phone_number']
-        if 'address' in data:
+        if 'address' in data and data['address']:
             soldier.address = data['address']
-        if 'emergency_contact_name' in data:
+        if 'emergency_contact_name' in data and data['emergency_contact_name']:
             soldier.emergency_contact_name = data['emergency_contact_name']
-        if 'emergency_contact_number' in data:
+        if 'emergency_contact_number' in data and data['emergency_contact_number']:
             soldier.emergency_contact_number = data['emergency_contact_number']
-        if 'pakal' in data:
+        if 'pakal' in data and data['pakal']:
             soldier.pakal = data['pakal']
         if 'has_hatash_2' in data:
             soldier.has_hatashab = data['has_hatash_2']

@@ -715,100 +715,102 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
 
         <div className="p-6 space-y-6">
           {/* Basic Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs text-gray-500 uppercase">תפקיד</label>
-              <p className="font-medium text-gray-900">{soldier.role}</p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-gray-500 uppercase">כיתה</label>
-              <p className="font-medium text-gray-900">{soldier.kita || 'אין כיתה'}</p>
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">פרטים בסיסיים</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">תפקיד</label>
+                <p className="font-medium text-gray-900">{soldier.role || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">כיתה</label>
+                <p className="font-medium text-gray-900">{soldier.kita || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">מין</label>
+                <p className="font-medium text-gray-900">{soldier.sex || '-'}</p>
+              </div>
             </div>
           </div>
 
           {/* IDs */}
-          {(soldier.idf_id || soldier.personal_id) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-              {soldier.idf_id && (
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-500 uppercase">מספר אישי</label>
-                  <p className="font-medium text-gray-900">{soldier.idf_id}</p>
-                </div>
-              )}
-              {soldier.personal_id && (
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-500 uppercase">תעודת זהות</label>
-                  <p className="font-medium text-gray-900">{soldier.personal_id}</p>
-                </div>
-              )}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">מספרי זיהוי</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">מספר אישי (מ.א)</label>
+                <p className="font-medium text-gray-900">{soldier.idf_id || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">תעודת זהות</label>
+                <p className="font-medium text-gray-900">{soldier.personal_id || '-'}</p>
+              </div>
             </div>
-          )}
+          </div>
 
           {/* Contact Info */}
-          {(soldier.phone_number || soldier.address) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-              {soldier.phone_number && (
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
-                    <Phone size={14} />
-                    טלפון
-                  </label>
-                  <p className="font-medium text-gray-900">{soldier.phone_number}</p>
-                </div>
-              )}
-              {soldier.address && (
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
-                    <MapPin size={14} />
-                    כתובת
-                  </label>
-                  <p className="font-medium text-gray-900">{soldier.address}</p>
-                </div>
-              )}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">פרטי קשר</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
+                  <Phone size={14} />
+                  טלפון
+                </label>
+                <p className="font-medium text-gray-900">{soldier.phone_number || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
+                  <MapPin size={14} />
+                  כתובת
+                </label>
+                <p className="font-medium text-gray-900">{soldier.address || '-'}</p>
+              </div>
             </div>
-          )}
+          </div>
 
           {/* Emergency Contact */}
-          {(soldier.emergency_contact_name || soldier.emergency_contact_number) && (
-            <div className="pt-4 border-t">
-              <h3 className="font-bold text-gray-900 mb-3">איש קשר לחירום</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {soldier.emergency_contact_name && (
-                  <div className="space-y-1">
-                    <label className="text-xs text-gray-500 uppercase">שם</label>
-                    <p className="font-medium text-gray-900">{soldier.emergency_contact_name}</p>
-                  </div>
-                )}
-                {soldier.emergency_contact_number && (
-                  <div className="space-y-1">
-                    <label className="text-xs text-gray-500 uppercase">טלפון</label>
-                    <p className="font-medium text-gray-900">{soldier.emergency_contact_number}</p>
-                  </div>
-                )}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">איש קשר לחירום</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">שם</label>
+                <p className="font-medium text-gray-900">{soldier.emergency_contact_name || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">טלפון</label>
+                <p className="font-medium text-gray-900">{soldier.emergency_contact_number || '-'}</p>
               </div>
             </div>
-          )}
+          </div>
 
           {/* Military Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-            {soldier.pakal && (
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">מידע צבאי</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 uppercase">פק״ל</label>
-                <p className="font-medium text-gray-900">{soldier.pakal}</p>
+                <p className="font-medium text-gray-900">{soldier.pakal || '-'}</p>
               </div>
-            )}
-            {soldier.recruit_date && (
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 uppercase">תאריך גיוס</label>
-                <p className="font-medium text-gray-900">{new Date(soldier.recruit_date).toLocaleDateString('he-IL')}</p>
+                <p className="font-medium text-gray-900">
+                  {soldier.recruit_date ? new Date(soldier.recruit_date).toLocaleDateString('he-IL') : '-'}
+                </p>
               </div>
-            )}
-            {soldier.birth_date && (
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 uppercase">תאריך לידה</label>
-                <p className="font-medium text-gray-900">{new Date(soldier.birth_date).toLocaleDateString('he-IL')}</p>
+                <p className="font-medium text-gray-900">
+                  {soldier.birth_date ? new Date(soldier.birth_date).toLocaleDateString('he-IL') : '-'}
+                </p>
               </div>
-            )}
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">תאריך סבב יציאה</label>
+                <p className="font-medium text-gray-900">
+                  {soldier.home_round_date ? new Date(soldier.home_round_date).toLocaleDateString('he-IL') : '-'}
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Home Round - סבב יציאה */}
@@ -857,15 +859,25 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
           )}
 
           {/* Status */}
-          <div className="pt-4 border-t">
-            <h3 className="font-bold text-gray-900 mb-3">סטטוס</h3>
-            <div className="flex flex-wrap gap-2">
-              {soldier.has_hatashab && (
-                <span className="badge badge-yellow">התש 2</span>
-              )}
-              {!soldier.has_hatashab && (
-                <span className="text-gray-500">אין סטטוס מיוחד</span>
-              )}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">סטטוסים</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700">מפקד כיתה</span>
+                {soldier.is_platoon_commander ? (
+                  <span className="badge badge-green">כן</span>
+                ) : (
+                  <span className="badge badge-gray">לא</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700">התש 2</span>
+                {soldier.has_hatashab ? (
+                  <span className="badge badge-yellow">כן</span>
+                ) : (
+                  <span className="badge badge-gray">לא</span>
+                )}
+              </div>
             </div>
           </div>
 

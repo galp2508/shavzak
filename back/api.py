@@ -700,8 +700,11 @@ def get_soldier(soldier_id, current_user):
         unavailable_list = [{
             'id': u.id,
             'date': u.date.isoformat(),
+            'end_date': u.end_date.isoformat() if u.end_date else None,
             'reason': u.reason,
-            'status': u.status
+            'status': u.status,
+            'unavailability_type': u.unavailability_type if hasattr(u, 'unavailability_type') else 'חופשה',
+            'quantity': u.quantity if hasattr(u, 'quantity') else None
         } for u in unavailable]
         
         return jsonify({
@@ -906,11 +909,26 @@ def add_unavailable_date(soldier_id, current_user):
             return jsonify({'error': 'אין לך הרשאה'}), 403
 
         data = request.json
+        start_date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+        unavailability_type = data.get('unavailability_type', 'חופשה')
+        quantity = data.get('quantity')
+
+        # חישוב תאריך סיום אוטומטי לגימלים וחק"צים
+        end_date = None
+        if unavailability_type in ['גימל', 'חק"צ'] and quantity:
+            # כל גימל/חק"צ = 2 ימים
+            # אם הזין את תאריך ההתחלה, נחשב את תאריך הסיום
+            from datetime import timedelta
+            end_date = start_date + timedelta(days=(quantity * 2) - 1)
+
         unavailable = UnavailableDate(
             soldier_id=soldier_id,
-            date=datetime.strptime(data['date'], '%Y-%m-%d').date(),
+            date=start_date,
+            end_date=end_date,
             reason=data.get('reason', ''),
-            status=data.get('status', 'approved')
+            status=data.get('status', 'approved'),
+            unavailability_type=unavailability_type,
+            quantity=quantity
         )
 
         session.add(unavailable)
@@ -921,8 +939,11 @@ def add_unavailable_date(soldier_id, current_user):
             'unavailable_date': {
                 'id': unavailable.id,
                 'date': unavailable.date.isoformat(),
+                'end_date': unavailable.end_date.isoformat() if unavailable.end_date else None,
                 'reason': unavailable.reason,
-                'status': unavailable.status
+                'status': unavailable.status,
+                'unavailability_type': unavailable.unavailability_type,
+                'quantity': unavailable.quantity
             }
         }), 201
     except Exception as e:

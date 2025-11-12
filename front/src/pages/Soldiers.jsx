@@ -264,7 +264,12 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
   });
   const [loading, setLoading] = useState(false);
   const [unavailableDates, setUnavailableDates] = useState(soldier?.unavailable_dates || []);
-  const [newUnavailableDate, setNewUnavailableDate] = useState({ date: '', reason: '' });
+  const [newUnavailableDate, setNewUnavailableDate] = useState({
+    date: '',
+    reason: '',
+    unavailability_type: 'חופשה',
+    quantity: 1
+  });
 
   const handleAddUnavailableDate = async () => {
     if (!newUnavailableDate.date) {
@@ -272,10 +277,23 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
       return;
     }
 
+    // בדיקת שדות חובה לגימלים/חק"צים
+    if (['גימל', 'חק"צ'].includes(newUnavailableDate.unavailability_type)) {
+      if (!newUnavailableDate.quantity || newUnavailableDate.quantity < 1) {
+        toast.error('יש להזין כמות');
+        return;
+      }
+    }
+
     if (!soldier?.id) {
       // אם זה חייל חדש, נוסיף לרשימה המקומית
       setUnavailableDates([...unavailableDates, { ...newUnavailableDate, id: Date.now() }]);
-      setNewUnavailableDate({ date: '', reason: '' });
+      setNewUnavailableDate({
+        date: '',
+        reason: '',
+        unavailability_type: 'חופשה',
+        quantity: 1
+      });
       toast.success('תאריך נוסף');
       return;
     }
@@ -283,7 +301,12 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
     try {
       const response = await api.post(`/soldiers/${soldier.id}/unavailable`, newUnavailableDate);
       setUnavailableDates([...unavailableDates, response.data.unavailable_date]);
-      setNewUnavailableDate({ date: '', reason: '' });
+      setNewUnavailableDate({
+        date: '',
+        reason: '',
+        unavailability_type: 'חופשה',
+        quantity: 1
+      });
       toast.success('תאריך נוסף בהצלחה');
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה בהוספת תאריך');
@@ -580,12 +603,25 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
                     key={unavailable.id}
                     className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg p-3"
                   >
-                    <div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`badge ${
+                          unavailable.unavailability_type === 'גימל' ? 'badge-yellow' :
+                          unavailable.unavailability_type === 'חק"צ' ? 'badge-blue' :
+                          'badge-red'
+                        }`}>
+                          {unavailable.unavailability_type || 'חופשה'}
+                          {unavailable.quantity && ` (${unavailable.quantity})`}
+                        </span>
+                      </div>
                       <div className="font-medium text-gray-900">
                         {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                        {unavailable.end_date && (
+                          <span> - {new Date(unavailable.end_date).toLocaleDateString('he-IL')}</span>
+                        )}
                       </div>
                       {unavailable.reason && (
-                        <div className="text-sm text-gray-600">{unavailable.reason}</div>
+                        <div className="text-sm text-gray-600 mt-1">{unavailable.reason}</div>
                       )}
                     </div>
                     <button
@@ -605,13 +641,45 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
             <div className="bg-gray-50 p-4 rounded-lg space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="label">תאריך</label>
+                  <label className="label">סוג *</label>
+                  <select
+                    value={newUnavailableDate.unavailability_type}
+                    onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, unavailability_type: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="חופשה">חופשה רגילה</option>
+                    <option value="גימל">גימל</option>
+                    <option value="חק"צ">חק״צ</option>
+                  </select>
+                </div>
+
+                {['גימל', 'חק"צ'].includes(newUnavailableDate.unavailability_type) && (
+                  <div>
+                    <label className="label">כמות *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newUnavailableDate.quantity}
+                      onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, quantity: parseInt(e.target.value) || 1 })}
+                      className="input-field"
+                      placeholder="1, 2, 3..."
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="label">תאריך {['גימל', 'חק"צ'].includes(newUnavailableDate.unavailability_type) ? 'התחלה' : ''} *</label>
                   <input
                     type="date"
                     value={newUnavailableDate.date}
                     onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, date: e.target.value })}
                     className="input-field"
                   />
+                  {['גימל', 'חק"צ'].includes(newUnavailableDate.unavailability_type) && newUnavailableDate.date && newUnavailableDate.quantity && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      סיום: {new Date(new Date(newUnavailableDate.date).getTime() + (newUnavailableDate.quantity * 2 - 1) * 24 * 60 * 60 * 1000).toLocaleDateString('he-IL')}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -715,100 +783,102 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
 
         <div className="p-6 space-y-6">
           {/* Basic Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs text-gray-500 uppercase">תפקיד</label>
-              <p className="font-medium text-gray-900">{soldier.role}</p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-gray-500 uppercase">כיתה</label>
-              <p className="font-medium text-gray-900">{soldier.kita || 'אין כיתה'}</p>
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">פרטים בסיסיים</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">תפקיד</label>
+                <p className="font-medium text-gray-900">{soldier.role || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">כיתה</label>
+                <p className="font-medium text-gray-900">{soldier.kita || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">מין</label>
+                <p className="font-medium text-gray-900">{soldier.sex || '-'}</p>
+              </div>
             </div>
           </div>
 
           {/* IDs */}
-          {(soldier.idf_id || soldier.personal_id) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-              {soldier.idf_id && (
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-500 uppercase">מספר אישי</label>
-                  <p className="font-medium text-gray-900">{soldier.idf_id}</p>
-                </div>
-              )}
-              {soldier.personal_id && (
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-500 uppercase">תעודת זהות</label>
-                  <p className="font-medium text-gray-900">{soldier.personal_id}</p>
-                </div>
-              )}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">מספרי זיהוי</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">מספר אישי (מ.א)</label>
+                <p className="font-medium text-gray-900">{soldier.idf_id || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">תעודת זהות</label>
+                <p className="font-medium text-gray-900">{soldier.personal_id || '-'}</p>
+              </div>
             </div>
-          )}
+          </div>
 
           {/* Contact Info */}
-          {(soldier.phone_number || soldier.address) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-              {soldier.phone_number && (
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
-                    <Phone size={14} />
-                    טלפון
-                  </label>
-                  <p className="font-medium text-gray-900">{soldier.phone_number}</p>
-                </div>
-              )}
-              {soldier.address && (
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
-                    <MapPin size={14} />
-                    כתובת
-                  </label>
-                  <p className="font-medium text-gray-900">{soldier.address}</p>
-                </div>
-              )}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">פרטי קשר</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
+                  <Phone size={14} />
+                  טלפון
+                </label>
+                <p className="font-medium text-gray-900">{soldier.phone_number || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase flex items-center gap-1">
+                  <MapPin size={14} />
+                  כתובת
+                </label>
+                <p className="font-medium text-gray-900">{soldier.address || '-'}</p>
+              </div>
             </div>
-          )}
+          </div>
 
           {/* Emergency Contact */}
-          {(soldier.emergency_contact_name || soldier.emergency_contact_number) && (
-            <div className="pt-4 border-t">
-              <h3 className="font-bold text-gray-900 mb-3">איש קשר לחירום</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {soldier.emergency_contact_name && (
-                  <div className="space-y-1">
-                    <label className="text-xs text-gray-500 uppercase">שם</label>
-                    <p className="font-medium text-gray-900">{soldier.emergency_contact_name}</p>
-                  </div>
-                )}
-                {soldier.emergency_contact_number && (
-                  <div className="space-y-1">
-                    <label className="text-xs text-gray-500 uppercase">טלפון</label>
-                    <p className="font-medium text-gray-900">{soldier.emergency_contact_number}</p>
-                  </div>
-                )}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">איש קשר לחירום</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">שם</label>
+                <p className="font-medium text-gray-900">{soldier.emergency_contact_name || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">טלפון</label>
+                <p className="font-medium text-gray-900">{soldier.emergency_contact_number || '-'}</p>
               </div>
             </div>
-          )}
+          </div>
 
           {/* Military Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-            {soldier.pakal && (
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">מידע צבאי</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 uppercase">פק״ל</label>
-                <p className="font-medium text-gray-900">{soldier.pakal}</p>
+                <p className="font-medium text-gray-900">{soldier.pakal || '-'}</p>
               </div>
-            )}
-            {soldier.recruit_date && (
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 uppercase">תאריך גיוס</label>
-                <p className="font-medium text-gray-900">{new Date(soldier.recruit_date).toLocaleDateString('he-IL')}</p>
+                <p className="font-medium text-gray-900">
+                  {soldier.recruit_date ? new Date(soldier.recruit_date).toLocaleDateString('he-IL') : '-'}
+                </p>
               </div>
-            )}
-            {soldier.birth_date && (
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 uppercase">תאריך לידה</label>
-                <p className="font-medium text-gray-900">{new Date(soldier.birth_date).toLocaleDateString('he-IL')}</p>
+                <p className="font-medium text-gray-900">
+                  {soldier.birth_date ? new Date(soldier.birth_date).toLocaleDateString('he-IL') : '-'}
+                </p>
               </div>
-            )}
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 uppercase">תאריך סבב יציאה</label>
+                <p className="font-medium text-gray-900">
+                  {soldier.home_round_date ? new Date(soldier.home_round_date).toLocaleDateString('he-IL') : '-'}
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Home Round - סבב יציאה */}
@@ -857,33 +927,54 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
           )}
 
           {/* Status */}
-          <div className="pt-4 border-t">
-            <h3 className="font-bold text-gray-900 mb-3">סטטוס</h3>
-            <div className="flex flex-wrap gap-2">
-              {soldier.has_hatashab && (
-                <span className="badge badge-yellow">התש 2</span>
-              )}
-              {!soldier.has_hatashab && (
-                <span className="text-gray-500">אין סטטוס מיוחד</span>
-              )}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">סטטוסים</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700">מפקד כיתה</span>
+                {soldier.is_platoon_commander ? (
+                  <span className="badge badge-green">כן</span>
+                ) : (
+                  <span className="badge badge-gray">לא</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700">התש 2</span>
+                {soldier.has_hatashab ? (
+                  <span className="badge badge-yellow">כן</span>
+                ) : (
+                  <span className="badge badge-gray">לא</span>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Unavailable Dates */}
           {soldier.unavailable_dates && soldier.unavailable_dates.length > 0 && (
-            <div className="pt-4 border-t">
-              <h3 className="font-bold text-gray-900 mb-3">תאריכי חופשה / אי זמינות</h3>
+            <div>
+              <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">תאריכי חופשה / אי זמינות</h3>
               <div className="space-y-2">
                 {soldier.unavailable_dates.map((unavailable) => (
                   <div key={unavailable.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">
-                        {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`badge ${
+                        unavailable.unavailability_type === 'גימל' ? 'badge-yellow' :
+                        unavailable.unavailability_type === 'חק"צ' ? 'badge-blue' :
+                        'badge-red'
+                      }`}>
+                        {unavailable.unavailability_type || 'חופשה'}
+                        {unavailable.quantity && ` (${unavailable.quantity})`}
                       </span>
-                      {unavailable.reason && (
-                        <span className="text-sm text-gray-600">{unavailable.reason}</span>
+                    </div>
+                    <div className="font-medium text-gray-900">
+                      {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                      {unavailable.end_date && (
+                        <span> - {new Date(unavailable.end_date).toLocaleDateString('he-IL')}</span>
                       )}
                     </div>
+                    {unavailable.reason && (
+                      <div className="text-sm text-gray-600 mt-1">{unavailable.reason}</div>
+                    )}
                   </div>
                 ))}
               </div>

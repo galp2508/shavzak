@@ -190,6 +190,8 @@ const ShavzakView = () => {
           handleDuplicateAssignment={handleDuplicateAssignment}
           handleDeleteAssignment={handleDeleteAssignment}
           userRole={user.role}
+          openDropdown={openDropdown}
+          setOpenDropdown={setOpenDropdown}
         />
       ) : (
         <>
@@ -330,7 +332,7 @@ const ShavzakView = () => {
 };
 
 // Timeline View Component
-const TimelineView = ({ assignments, sortedDays, getMahlakaColor, handleDuplicateAssignment, handleDeleteAssignment, userRole }) => {
+const TimelineView = ({ assignments, sortedDays, getMahlakaColor, handleDuplicateAssignment, handleDeleteAssignment, userRole, openDropdown, setOpenDropdown }) => {
   // מציאת טווח השעות
   const hours = [];
   let minHour = 24;
@@ -424,13 +426,35 @@ const TimelineView = ({ assignments, sortedDays, getMahlakaColor, handleDuplicat
                             {/* כפתורי פעולה */}
                             {(userRole === 'מפ' || userRole === 'ממ') && (
                               <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                                <button
-                                  onClick={() => handleDuplicateAssignment(assignment.id)}
-                                  className="bg-white p-1 rounded shadow hover:bg-blue-50"
-                                  title="שכפל משימה"
-                                >
-                                  <Copy size={14} className="text-blue-600" />
-                                </button>
+                                {/* תפריט שכפול */}
+                                <div className="relative">
+                                  <button
+                                    onClick={() => setOpenDropdown(openDropdown === `timeline-${assignment.id}` ? null : `timeline-${assignment.id}`)}
+                                    className="bg-white p-1 rounded shadow hover:bg-blue-50 flex items-center gap-0.5"
+                                    title="שכפל משימה"
+                                  >
+                                    <Copy size={14} className="text-blue-600" />
+                                    <ChevronDown size={10} className="text-blue-600" />
+                                  </button>
+                                  {openDropdown === `timeline-${assignment.id}` && (
+                                    <div className="absolute left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 w-44">
+                                      <button
+                                        onClick={() => handleDuplicateAssignment(assignment.id, false)}
+                                        className="w-full px-3 py-1.5 text-right hover:bg-blue-50 flex items-center gap-1.5 text-gray-700 rounded-t-lg text-xs"
+                                      >
+                                        <Copy size={12} />
+                                        <span>שכפל משימה בלבד</span>
+                                      </button>
+                                      <button
+                                        onClick={() => handleDuplicateAssignment(assignment.id, true)}
+                                        className="w-full px-3 py-1.5 text-right hover:bg-blue-50 flex items-center gap-1.5 text-gray-700 border-t rounded-b-lg text-xs"
+                                      >
+                                        <UserPlus size={12} />
+                                        <span>שכפל עם חיילים</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                                 <button
                                   onClick={() => handleDeleteAssignment(assignment.id)}
                                   className="bg-white p-1 rounded shadow hover:bg-red-50"

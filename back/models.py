@@ -90,8 +90,7 @@ class Soldier(Base):
     recruit_date = Column(Date, nullable=True)
     birth_date = Column(Date, nullable=True)
     home_round_date = Column(Date, nullable=True)
-    
-    is_platoon_commander = Column(Boolean, default=False)
+
     has_hatashab = Column(Boolean, default=False)
     
     mahlaka_id = Column(Integer, ForeignKey('mahalkot.id'), nullable=False)

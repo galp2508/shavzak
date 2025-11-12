@@ -259,7 +259,6 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
     recruit_date: soldier?.recruit_date || '',
     birth_date: soldier?.birth_date || '',
     home_round_date: soldier?.home_round_date || '',
-    is_platoon_commander: soldier?.is_platoon_commander || false,
     has_hatashab: soldier?.has_hatashab || false,
   });
   const [loading, setLoading] = useState(false);
@@ -566,16 +565,6 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
           <div>
             <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">סטטוסים</h3>
             <div className="space-y-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.is_platoon_commander}
-                  onChange={(e) => setFormData({ ...formData, is_platoon_commander: e.target.checked })}
-                  className="w-4 h-4 text-military-600"
-                />
-                <span className="text-gray-700">מפקד כיתה</span>
-              </label>
-
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -927,59 +916,59 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
           )}
 
           {/* Status */}
-          <div>
-            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">סטטוסים</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-700">מפקד כיתה</span>
-                {soldier.is_platoon_commander ? (
-                  <span className="badge badge-green">כן</span>
-                ) : (
-                  <span className="badge badge-gray">לא</span>
-                )}
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-700">התש 2</span>
-                {soldier.has_hatashab ? (
-                  <span className="badge badge-yellow">כן</span>
-                ) : (
-                  <span className="badge badge-gray">לא</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Unavailable Dates */}
-          {soldier.unavailable_dates && soldier.unavailable_dates.length > 0 && (
+          {soldier.has_hatashab && (
             <div>
-              <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">תאריכי חופשה / אי זמינות</h3>
-              <div className="space-y-2">
-                {soldier.unavailable_dates.map((unavailable) => (
-                  <div key={unavailable.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={`badge ${
-                        unavailable.unavailability_type === 'גימל' ? 'badge-yellow' :
-                        unavailable.unavailability_type === 'בקשת יציאה' ? 'badge-blue' :
-                        'badge-red'
-                      }`}>
-                        {unavailable.unavailability_type || 'חופשה'}
-                        {unavailable.quantity && ` (${unavailable.quantity})`}
-                      </span>
-                    </div>
-                    <div className="font-medium text-gray-900">
-                      {new Date(unavailable.date).toLocaleDateString('he-IL')}
-                      {unavailable.end_date && (
-                        <span> - {new Date(unavailable.end_date).toLocaleDateString('he-IL')}</span>
-                      )}
-                    </div>
-                    {unavailable.reason && (
-                      <div className="text-sm text-gray-600 mt-1">{unavailable.reason}</div>
-                    )}
-                  </div>
-                ))}
+              <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">סטטוסים</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">התש 2</span>
+                  <span className="badge badge-yellow">כן</span>
+                </div>
               </div>
             </div>
           )}
+
+          {/* Unavailable Dates */}
+          {(() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const upcomingDates = soldier.unavailable_dates?.filter(unavailable => {
+              const endDate = unavailable.end_date ? new Date(unavailable.end_date) : new Date(unavailable.date);
+              endDate.setHours(23, 59, 59, 999);
+              return endDate >= today;
+            }) || [];
+
+            return upcomingDates.length > 0 && (
+              <div>
+                <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">תאריכי חופשה / אי זמינות קרובים</h3>
+                <div className="space-y-2">
+                  {upcomingDates.map((unavailable) => (
+                    <div key={unavailable.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`badge ${
+                          unavailable.unavailability_type === 'גימל' ? 'badge-yellow' :
+                          unavailable.unavailability_type === 'בקשת יציאה' ? 'badge-blue' :
+                          'badge-red'
+                        }`}>
+                          {unavailable.unavailability_type || 'חופשה'}
+                          {unavailable.quantity && ` (${unavailable.quantity})`}
+                        </span>
+                      </div>
+                      <div className="font-medium text-gray-900">
+                        {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                        {unavailable.end_date && (
+                          <span> - {new Date(unavailable.end_date).toLocaleDateString('he-IL')}</span>
+                        )}
+                      </div>
+                      {unavailable.reason && (
+                        <div className="text-sm text-gray-600 mt-1">{unavailable.reason}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex justify-end rounded-b-xl border-t">

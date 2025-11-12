@@ -956,12 +956,21 @@ const SoldiersModal = ({ mahlaka, soldiers, onClose, onDelete, onRefresh }) => {
 const SoldierEditModal = ({ soldier, mahlakaId, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: soldier?.name || '',
+    idf_id: soldier?.idf_id || '',
+    personal_id: soldier?.personal_id || '',
     role: soldier?.role || 'לוחם',
     mahlaka_id: soldier?.mahlaka_id || mahlakaId,
     kita: soldier?.kita || '',
+    sex: soldier?.sex || '',
     phone_number: soldier?.phone_number || '',
+    address: soldier?.address || '',
+    emergency_contact_name: soldier?.emergency_contact_name || '',
+    emergency_contact_number: soldier?.emergency_contact_number || '',
+    pakal: soldier?.pakal || '',
+    recruit_date: soldier?.recruit_date || '',
+    birth_date: soldier?.birth_date || '',
+    home_round_date: soldier?.home_round_date || '',
     has_hatashab: soldier?.has_hatashab || false,
-    is_platoon_commander: soldier?.is_platoon_commander || false,
   });
   const [loading, setLoading] = useState(false);
 
@@ -998,75 +1007,206 @@ const SoldierEditModal = ({ soldier, mahlakaId, onClose, onSave }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="label">שם מלא *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="input-field"
-                required
-              />
-            </div>
+          {/* פרטים בסיסיים */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">פרטים בסיסיים</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">שם מלא *</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input-field"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="label">תפקיד *</label>
-              <select
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                className="input-field"
-                required
-              >
-                {ROLES.map(r => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
+              <div>
+                <label className="label">תפקיד *</label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  className="input-field"
+                  required
+                >
+                  {ROLES.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="label">כיתה</label>
-              <input
-                type="text"
-                value={formData.kita}
-                onChange={(e) => setFormData({ ...formData, kita: e.target.value })}
-                className="input-field"
-                placeholder="א, ב, ג..."
-              />
-            </div>
+              <div>
+                <label className="label">כיתה</label>
+                <input
+                  type="text"
+                  value={formData.kita}
+                  onChange={(e) => setFormData({ ...formData, kita: e.target.value })}
+                  className="input-field"
+                  placeholder="א, ב, ג..."
+                />
+              </div>
 
-            <div>
-              <label className="label">טלפון</label>
-              <input
-                type="tel"
-                value={formData.phone_number}
-                onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                className="input-field"
-                placeholder="050-1234567"
-              />
+              <div>
+                <label className="label">מין</label>
+                <select
+                  value={formData.sex}
+                  onChange={(e) => setFormData({ ...formData, sex: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">בחר...</option>
+                  <option value="זכר">זכר</option>
+                  <option value="נקבה">נקבה</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.has_hatashab}
-                onChange={(e) => setFormData({ ...formData, has_hatashab: e.target.checked })}
-                className="w-4 h-4 text-military-600"
-              />
-              <span className="text-gray-700">יש התש״ב</span>
-            </label>
+          {/* מספרי זיהוי */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">מספרי זיהוי</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">מספר אישי (מ.א)</label>
+                <input
+                  type="text"
+                  value={formData.idf_id}
+                  onChange={(e) => setFormData({ ...formData, idf_id: e.target.value })}
+                  className="input-field"
+                  placeholder="1234567"
+                />
+              </div>
 
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.is_platoon_commander}
-                onChange={(e) => setFormData({ ...formData, is_platoon_commander: e.target.checked })}
-                className="w-4 h-4 text-military-600"
-              />
-              <span className="text-gray-700">מפקד כיתה</span>
-            </label>
+              <div>
+                <label className="label">תעודת זהות</label>
+                <input
+                  type="text"
+                  value={formData.personal_id}
+                  onChange={(e) => setFormData({ ...formData, personal_id: e.target.value })}
+                  className="input-field"
+                  placeholder="123456789"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* פרטי קשר */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">פרטי קשר</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">טלפון</label>
+                <input
+                  type="tel"
+                  value={formData.phone_number}
+                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                  className="input-field"
+                  placeholder="050-1234567"
+                />
+              </div>
+
+              <div>
+                <label className="label">כתובת</label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="input-field"
+                  placeholder="רחוב, עיר"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* איש קשר לחירום */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">איש קשר לחירום</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">שם איש קשר</label>
+                <input
+                  type="text"
+                  value={formData.emergency_contact_name}
+                  onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                  className="input-field"
+                  placeholder="שם מלא"
+                />
+              </div>
+
+              <div>
+                <label className="label">טלפון איש קשר</label>
+                <input
+                  type="tel"
+                  value={formData.emergency_contact_number}
+                  onChange={(e) => setFormData({ ...formData, emergency_contact_number: e.target.value })}
+                  className="input-field"
+                  placeholder="050-1234567"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* מידע צבאי */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">מידע צבאי</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">פק״ל</label>
+                <input
+                  type="text"
+                  value={formData.pakal}
+                  onChange={(e) => setFormData({ ...formData, pakal: e.target.value })}
+                  className="input-field"
+                  placeholder="07"
+                />
+              </div>
+
+              <div>
+                <label className="label">תאריך גיוס</label>
+                <input
+                  type="date"
+                  value={formData.recruit_date}
+                  onChange={(e) => setFormData({ ...formData, recruit_date: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="label">תאריך לידה</label>
+                <input
+                  type="date"
+                  value={formData.birth_date}
+                  onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="label">תאריך סבב יציאה</label>
+                <input
+                  type="date"
+                  value={formData.home_round_date}
+                  onChange={(e) => setFormData({ ...formData, home_round_date: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* סטטוסים */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">סטטוסים</h3>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.has_hatashab}
+                  onChange={(e) => setFormData({ ...formData, has_hatashab: e.target.checked })}
+                  className="w-4 h-4 text-military-600"
+                />
+                <span className="text-gray-700">יש התש״ב</span>
+              </label>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -1273,41 +1413,56 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
           )}
 
           {/* Status */}
-          <div className="pt-4 border-t">
-            <h3 className="font-bold text-gray-900 mb-3">סטטוס</h3>
-            <div className="flex flex-wrap gap-2">
-              {soldier.has_hatashab && (
-                <span className="badge badge-yellow">התש״ב</span>
-              )}
-              {soldier.is_platoon_commander && (
-                <span className="badge badge-purple">מפקד כיתה</span>
-              )}
-              {!soldier.has_hatashab && !soldier.is_platoon_commander && (
-                <span className="text-gray-500">אין סטטוס מיוחד</span>
-              )}
-            </div>
-          </div>
-
-          {/* Unavailable Dates */}
-          {soldier.unavailable_dates && soldier.unavailable_dates.length > 0 && (
+          {soldier.has_hatashab && (
             <div className="pt-4 border-t">
-              <h3 className="font-bold text-gray-900 mb-3">תאריכי חופשה / אי זמינות</h3>
-              <div className="space-y-2">
-                {soldier.unavailable_dates.map((unavailable) => (
-                  <div key={unavailable.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">
-                        {new Date(unavailable.date).toLocaleDateString('he-IL')}
-                      </span>
-                      {unavailable.reason && (
-                        <span className="text-sm text-gray-600">{unavailable.reason}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <h3 className="font-bold text-gray-900 mb-3">סטטוס</h3>
+              <div className="flex flex-wrap gap-2">
+                <span className="badge badge-yellow">התש״ב</span>
               </div>
             </div>
           )}
+
+          {/* Unavailable Dates */}
+          {(() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const upcomingDates = soldier.unavailable_dates?.filter(unavailable => {
+              const endDate = unavailable.end_date ? new Date(unavailable.end_date) : new Date(unavailable.date);
+              endDate.setHours(23, 59, 59, 999);
+              return endDate >= today;
+            }) || [];
+
+            return upcomingDates.length > 0 && (
+              <div className="pt-4 border-t">
+                <h3 className="font-bold text-gray-900 mb-3">תאריכי חופשה / אי זמינות קרובים</h3>
+                <div className="space-y-2">
+                  {upcomingDates.map((unavailable) => (
+                    <div key={unavailable.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`badge ${
+                          unavailable.unavailability_type === 'גימל' ? 'badge-yellow' :
+                          unavailable.unavailability_type === 'בקשת יציאה' ? 'badge-blue' :
+                          'badge-red'
+                        }`}>
+                          {unavailable.unavailability_type || 'חופשה'}
+                          {unavailable.quantity && ` (${unavailable.quantity})`}
+                        </span>
+                      </div>
+                      <div className="font-medium text-gray-900">
+                        {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                        {unavailable.end_date && (
+                          <span> - {new Date(unavailable.end_date).toLocaleDateString('he-IL')}</span>
+                        )}
+                      </div>
+                      {unavailable.reason && (
+                        <div className="text-sm text-gray-600 mt-1">{unavailable.reason}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex justify-between items-center rounded-b-xl border-t">

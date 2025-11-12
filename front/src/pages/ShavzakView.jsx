@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, Users, Clock, Edit, Trash2, Plus, Copy, List, LayoutGrid } from 'lucide-react';
+import { Calendar, Users, Clock, Edit, Trash2, Plus, Copy, List, LayoutGrid, ChevronDown, UserPlus } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const ShavzakView = () => {
@@ -12,10 +12,23 @@ const ShavzakView = () => {
   const [mahalkot, setMahalkot] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'timeline'
+  const [openDropdown, setOpenDropdown] = useState(null); // למעקב אחר תפריט dropdown פתוח
 
   useEffect(() => {
     loadData();
   }, [id]);
+
+  // סגור dropdown כשלוחצים מחוץ לו
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (openDropdown && !event.target.closest('.relative')) {
+        setOpenDropdown(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openDropdown]);
 
   const loadData = async () => {
     try {
@@ -55,12 +68,13 @@ const ShavzakView = () => {
     }
   };
 
-  const handleDuplicateAssignment = async (assignmentId) => {
+  const handleDuplicateAssignment = async (assignmentId, withSoldiers = false) => {
     try {
+      setOpenDropdown(null); // סגור את ה-dropdown
       const response = await api.post(`/assignments/${assignmentId}/duplicate`, {
-        duplicate_soldiers: false
+        duplicate_soldiers: withSoldiers
       });
-      toast.success('המשימה שוכפלה בהצלחה');
+      toast.success(withSoldiers ? 'המשימה שוכפלה עם החיילים בהצלחה' : 'המשימה שוכפלה בהצלחה');
       loadData();
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה בשכפול משימה');
@@ -233,13 +247,35 @@ const ShavzakView = () => {
                             </div>
                             {(user.role === 'מפ' || user.role === 'ממ') && (
                               <div className="flex gap-2">
-                                <button
-                                  onClick={() => handleDuplicateAssignment(assignment.id)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                  title="שכפל משימה"
-                                >
-                                  <Copy size={18} />
-                                </button>
+                                {/* תפריט שכפול */}
+                                <div className="relative">
+                                  <button
+                                    onClick={() => setOpenDropdown(openDropdown === assignment.id ? null : assignment.id)}
+                                    className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                                    title="שכפל משימה"
+                                  >
+                                    <Copy size={18} />
+                                    <ChevronDown size={14} />
+                                  </button>
+                                  {openDropdown === assignment.id && (
+                                    <div className="absolute left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-10 w-48">
+                                      <button
+                                        onClick={() => handleDuplicateAssignment(assignment.id, false)}
+                                        className="w-full px-4 py-2 text-right hover:bg-blue-50 flex items-center gap-2 text-gray-700 rounded-t-lg"
+                                      >
+                                        <Copy size={16} />
+                                        <span>שכפל משימה בלבד</span>
+                                      </button>
+                                      <button
+                                        onClick={() => handleDuplicateAssignment(assignment.id, true)}
+                                        className="w-full px-4 py-2 text-right hover:bg-blue-50 flex items-center gap-2 text-gray-700 border-t rounded-b-lg"
+                                      >
+                                        <UserPlus size={16} />
+                                        <span>שכפל עם חיילים</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                                 <button
                                   onClick={() => handleDeleteAssignment(assignment.id)}
                                   className="text-red-600 hover:text-red-800"

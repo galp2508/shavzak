@@ -40,6 +40,19 @@ const Templates = () => {
     }
   };
 
+    const handleDuplicateAssignment = async (assignmentId, withSoldiers = false) => {
+    try {
+      setOpenDropdown(null); // סגור את ה-dropdown
+      const response = await api.post(`/assignments/${assignmentId}/duplicate`, {
+        duplicate_soldiers: withSoldiers
+      });
+      toast.success(withSoldiers ? 'המשימה שוכפלה עם החיילים בהצלחה' : 'המשימה שוכפלה בהצלחה');
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה בשכפול משימה');
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="spinner"></div></div>;
   }
@@ -89,6 +102,13 @@ const Templates = () => {
                     title="ערוך"
                   >
                     <Edit size={18} />
+                  </button>
+                  <button
+                    onClick={() => handleDuplicateAssignment(template.id)}
+                    className="text-red-600 hover:text-red-800"
+                    title="מחק"
+                  >
+                    <Trash2 size={18} />
                   </button>
                   <button
                     onClick={() => handleDelete(template.id)}

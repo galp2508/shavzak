@@ -65,11 +65,11 @@ def migrate_database(db_path='shavzak.db'):
             WHERE unavailability_type IS NULL
         """)
 
-        # עדכון 'חק"ש' ל'חק"צ' ברשומות קיימות
+        # עדכון 'חק"ש' ל'בקשת יציאה' ברשומות קיימות
         print("מעדכן חק\"ש לחק\"צ...")
         cursor.execute("""
             UPDATE unavailable_dates
-            SET unavailability_type = 'חק"צ'
+            SET unavailability_type = 'בקשת יציאה'
             WHERE unavailability_type = 'חק"ש'
         """)
 

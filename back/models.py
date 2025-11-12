@@ -124,7 +124,7 @@ class UnavailableDate(Base):
     end_date = Column(Date, nullable=True)  # תאריך סיום (יחושב אוטומטית לגימלים וחק"שים)
     reason = Column(String(200))
     status = Column(String(20), default='approved')
-    unavailability_type = Column(String(20), default='חופשה')  # 'חופשה', 'גימל', 'חק"צ'
+    unavailability_type = Column(String(20), default='חופשה')  # 'חופשה', 'גימל', 'בקשת יציאה'
     quantity = Column(Integer, nullable=True)  # כמות גימלים/חק"שים
 
     soldier = relationship("Soldier", back_populates="unavailable_dates")

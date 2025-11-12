@@ -277,8 +277,8 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
       return;
     }
 
-    // בדיקת שדות חובה לגימלים/חק"צים
-    if (['גימל', 'חק"צ'].includes(newUnavailableDate.unavailability_type)) {
+    // בדיקת שדות חובה לגימלים/בקשת יציאהים
+    if (['גימל', 'בקשת יציאה'].includes(newUnavailableDate.unavailability_type)) {
       if (!newUnavailableDate.quantity || newUnavailableDate.quantity < 1) {
         toast.error('יש להזין כמות');
         return;
@@ -607,7 +607,7 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`badge ${
                           unavailable.unavailability_type === 'גימל' ? 'badge-yellow' :
-                          unavailable.unavailability_type === 'חק"צ' ? 'badge-blue' :
+                          unavailable.unavailability_type === 'בקשת יציאה' ? 'badge-blue' :
                           'badge-red'
                         }`}>
                           {unavailable.unavailability_type || 'חופשה'}
@@ -649,11 +649,11 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
                   >
                     <option value="חופשה">חופשה רגילה</option>
                     <option value="גימל">גימל</option>
-                    <option value="חק"צ">חק״צ</option>
+                    <option value="בקשת יציאה">בקשת יציאה</option>
                   </select>
                 </div>
-
-                {['גימל', 'חק"צ'].includes(newUnavailableDate.unavailability_type) && (
+              
+                {['גימל', 'בקשת יציאה'].includes(newUnavailableDate.unavailability_type) && (
                   <div>
                     <label className="label">כמות *</label>
                     <input
@@ -668,14 +668,14 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
                 )}
 
                 <div>
-                  <label className="label">תאריך {['גימל', 'חק"צ'].includes(newUnavailableDate.unavailability_type) ? 'התחלה' : ''} *</label>
+                  <label className="label">תאריך {['גימל', 'בקשת יציאה'].includes(newUnavailableDate.unavailability_type) ? 'התחלה' : ''} *</label>
                   <input
                     type="date"
                     value={newUnavailableDate.date}
                     onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, date: e.target.value })}
                     className="input-field"
                   />
-                  {['גימל', 'חק"צ'].includes(newUnavailableDate.unavailability_type) && newUnavailableDate.date && newUnavailableDate.quantity && (
+                  {['גימל', 'בקשת יציאה'].includes(newUnavailableDate.unavailability_type) && newUnavailableDate.date && newUnavailableDate.quantity && (
                     <p className="text-xs text-gray-600 mt-1">
                       סיום: {new Date(new Date(newUnavailableDate.date).getTime() + (newUnavailableDate.quantity * 2 - 1) * 24 * 60 * 60 * 1000).toLocaleDateString('he-IL')}
                     </p>
@@ -959,7 +959,7 @@ const SoldierDetailsModal = ({ soldier, onClose }) => {
                     <div className="flex items-center gap-2 mb-2">
                       <span className={`badge ${
                         unavailable.unavailability_type === 'גימל' ? 'badge-yellow' :
-                        unavailable.unavailability_type === 'חק"צ' ? 'badge-blue' :
+                        unavailable.unavailability_type === 'בקשת יציאה' ? 'badge-blue' :
                         'badge-red'
                       }`}>
                         {unavailable.unavailability_type || 'חופשה'}

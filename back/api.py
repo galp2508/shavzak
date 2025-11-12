@@ -19,11 +19,14 @@ from auth import (
     can_edit_soldier, can_create_shavzak, can_view_shavzak
 )
 from assignment_logic import AssignmentLogic
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-engine = init_db()
+# ודא שה-DB נמצא תמיד באותו מיקום (תיקיית back)
+DB_PATH = os.path.join(os.path.dirname(__file__), 'shavzak.db')
+engine = init_db(DB_PATH)
 
 def get_db():
     """מקבל session של DB"""

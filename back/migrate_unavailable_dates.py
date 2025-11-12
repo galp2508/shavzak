@@ -86,8 +86,8 @@ def migrate_database(db_path='shavzak.db'):
         conn.close()
 
 if __name__ == '__main__':
-    # אפשרות לציין נתיב למסד הנתונים
-    db_path = sys.argv[1] if len(sys.argv) > 1 else 'shavzak.db'
+    # שימוש באותו נתיב DB כמו בapi.py
+    db_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), 'shavzak.db')
 
     print(f"מריץ migration על: {db_path}")
     print("-" * 50)

@@ -913,10 +913,10 @@ def add_unavailable_date(soldier_id, current_user):
         unavailability_type = data.get('unavailability_type', 'חופשה')
         quantity = data.get('quantity')
 
-        # חישוב תאריך סיום אוטומטי לגימלים וחק"שים
+        # חישוב תאריך סיום אוטומטי לגימלים וחק"צים
         end_date = None
-        if unavailability_type in ['גימל', 'חק"ש'] and quantity:
-            # כל גימל/חק"ש = 2 ימים
+        if unavailability_type in ['גימל', 'חק"צ'] and quantity:
+            # כל גימל/חק"צ = 2 ימים
             # אם הזין את תאריך ההתחלה, נחשב את תאריך הסיום
             from datetime import timedelta
             end_date = start_date + timedelta(days=(quantity * 2) - 1)

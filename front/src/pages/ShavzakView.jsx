@@ -19,15 +19,18 @@ const ShavzakView = () => {
 
   const loadData = async () => {
     try {
+      setLoading(true);
       const [shavzakRes, mahalkotRes] = await Promise.all([
         api.get(`/shavzakim/${id}`),
         api.get(`/plugot/${user.pluga_id}/mahalkot`)
       ]);
 
-      setShavzak(shavzakRes.data || {});
+      console.log('Shavzak data received:', shavzakRes.data);
+      setShavzak(shavzakRes.data);
       setMahalkot(mahalkotRes.data.mahalkot || []);
     } catch (error) {
-      toast.error('שגיאה בטעינת נתונים');
+      console.error('Error loading data:', error);
+      toast.error('שגיאה בטעינת נתונים: ' + (error.response?.data?.error || error.message));
     } finally {
       setLoading(false);
     }
@@ -68,8 +71,10 @@ const ShavzakView = () => {
     return <div className="flex items-center justify-center h-64"><div className="spinner"></div></div>;
   }
 
-  const shavzakData = shavzak?.shavzak || shavzak;
+  const shavzakData = shavzak?.shavzak || shavzak || {};
   const assignments = shavzak?.assignments || [];
+
+  console.log('Rendering with:', { shavzak, shavzakData, assignmentsCount: assignments.length });
 
   // קיבוץ משימות לפי ימים
   const groupedByDay = {};
@@ -138,19 +143,27 @@ const ShavzakView = () => {
             <button
               onClick={async () => {
                 if (window.confirm('האם לייצר את השיבוץ אוטומטית כעת?')) {
+                  setLoading(true);
                   try {
-                    await api.post(`/shavzakim/${id}/generate`);
+                    const response = await api.post(`/shavzakim/${id}/generate`);
+                    console.log('Generate response:', response.data);
                     toast.success('השיבוץ בוצע בהצלחה!');
-                    loadData();
+                    // המתן רגע לפני טעינה מחדש כדי לתת ל-DB להתעדכן
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await loadData();
                   } catch (error) {
-                    toast.error(error.response?.data?.error || 'שגיאה ביצירת שיבוץ');
+                    console.error('Generate error:', error);
+                    toast.error(error.response?.data?.error || 'שגיאה ביצירת שיבוץ: ' + error.message);
+                  } finally {
+                    setLoading(false);
                   }
                 }
               }}
               className="btn-primary mx-auto"
+              disabled={loading}
             >
               <Plus size={20} className="inline ml-2" />
-              צור שיבוץ אוטומטי
+              {loading ? 'מייצר שיבוץ...' : 'צור שיבוץ אוטומטי'}
             </button>
           )}
         </div>

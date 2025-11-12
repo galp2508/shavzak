@@ -743,7 +743,7 @@ def get_soldier(soldier_id, current_user):
         unavailable_list = [{
             'id': u.id,
             'date': u.date.isoformat(),
-            'end_date': u.end_date.isoformat() if u.end_date else None,
+            'end_date': u.end_date.isoformat() if hasattr(u, 'end_date') and u.end_date else None,
             'reason': u.reason,
             'status': u.status,
             'unavailability_type': u.unavailability_type if hasattr(u, 'unavailability_type') else 'חופשה',

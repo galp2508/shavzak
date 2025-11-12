@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { 
-  UserPlus, Search, Edit, Trash2, X, 
-  Award, Phone, MapPin, Shield, Calendar 
+import {
+  UserPlus, Search, Edit, Trash2, X, Plus,
+  Award, Phone, MapPin, Shield, Calendar
 } from 'lucide-react';
 import ROLES from '../constants/roles';
 import { toast } from 'react-toastify';
@@ -263,6 +263,48 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
     has_hatashab: soldier?.has_hatashab || false,
   });
   const [loading, setLoading] = useState(false);
+  const [unavailableDates, setUnavailableDates] = useState(soldier?.unavailable_dates || []);
+  const [newUnavailableDate, setNewUnavailableDate] = useState({ date: '', reason: '' });
+
+  const handleAddUnavailableDate = async () => {
+    if (!newUnavailableDate.date) {
+      toast.error('יש להזין תאריך');
+      return;
+    }
+
+    if (!soldier?.id) {
+      // אם זה חייל חדש, נוסיף לרשימה המקומית
+      setUnavailableDates([...unavailableDates, { ...newUnavailableDate, id: Date.now() }]);
+      setNewUnavailableDate({ date: '', reason: '' });
+      toast.success('תאריך נוסף');
+      return;
+    }
+
+    try {
+      const response = await api.post(`/soldiers/${soldier.id}/unavailable`, newUnavailableDate);
+      setUnavailableDates([...unavailableDates, response.data.unavailable_date]);
+      setNewUnavailableDate({ date: '', reason: '' });
+      toast.success('תאריך נוסף בהצלחה');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה בהוספת תאריך');
+    }
+  };
+
+  const handleDeleteUnavailableDate = async (unavailableId) => {
+    if (!soldier?.id) {
+      // אם זה חייל חדש, נמחק מהרשימה המקומית
+      setUnavailableDates(unavailableDates.filter(u => u.id !== unavailableId));
+      return;
+    }
+
+    try {
+      await api.delete(`/unavailable/${unavailableId}`);
+      setUnavailableDates(unavailableDates.filter(u => u.id !== unavailableId));
+      toast.success('תאריך נמחק בהצלחה');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה במחיקת תאריך');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -520,6 +562,78 @@ const SoldierModal = ({ soldier, mahalkot, onClose, onSave }) => {
                 />
                 <span className="text-gray-700">יש התש 2</span>
               </label>
+            </div>
+          </div>
+
+          {/* תאריכי אי זמינות */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b flex items-center gap-2">
+              <Calendar size={20} className="text-military-600" />
+              תאריכי אי זמינות / חופשה
+            </h3>
+
+            {/* תאריכים קיימים */}
+            {unavailableDates.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {unavailableDates.map((unavailable) => (
+                  <div
+                    key={unavailable.id}
+                    className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg p-3"
+                  >
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {new Date(unavailable.date).toLocaleDateString('he-IL')}
+                      </div>
+                      {unavailable.reason && (
+                        <div className="text-sm text-gray-600">{unavailable.reason}</div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteUnavailableDate(unavailable.id)}
+                      className="text-red-600 hover:text-red-800"
+                      title="מחק"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* הוספת תאריך חדש */}
+            <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="label">תאריך</label>
+                  <input
+                    type="date"
+                    value={newUnavailableDate.date}
+                    onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, date: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">סיבה (אופציונלי)</label>
+                  <input
+                    type="text"
+                    value={newUnavailableDate.reason}
+                    onChange={(e) => setNewUnavailableDate({ ...newUnavailableDate, reason: e.target.value })}
+                    className="input-field"
+                    placeholder="חופשה, פטור, מחלה..."
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddUnavailableDate}
+                className="btn-secondary flex items-center gap-2 w-full justify-center"
+              >
+                <Plus size={18} />
+                <span>הוסף תאריך</span>
+              </button>
             </div>
           </div>
 

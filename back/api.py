@@ -901,10 +901,10 @@ def add_unavailable_date(soldier_id, current_user):
     """הוספת תאריך לא זמין"""
     try:
         session = get_db()
-        
+
         if not can_edit_soldier(current_user, soldier_id, session):
             return jsonify({'error': 'אין לך הרשאה'}), 403
-        
+
         data = request.json
         unavailable = UnavailableDate(
             soldier_id=soldier_id,
@@ -912,11 +912,44 @@ def add_unavailable_date(soldier_id, current_user):
             reason=data.get('reason', ''),
             status=data.get('status', 'approved')
         )
-        
+
         session.add(unavailable)
         session.commit()
-        
-        return jsonify({'message': 'תאריך נוסף בהצלחה'}), 201
+
+        return jsonify({
+            'message': 'תאריך נוסף בהצלחה',
+            'unavailable_date': {
+                'id': unavailable.id,
+                'date': unavailable.date.isoformat(),
+                'reason': unavailable.reason,
+                'status': unavailable.status
+            }
+        }), 201
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/unavailable/<int:unavailable_id>', methods=['DELETE'])
+@token_required
+def delete_unavailable_date(unavailable_id, current_user):
+    """מחיקת תאריך אי זמינות"""
+    try:
+        session = get_db()
+
+        unavailable = session.query(UnavailableDate).filter_by(id=unavailable_id).first()
+        if not unavailable:
+            return jsonify({'error': 'תאריך לא נמצא'}), 404
+
+        if not can_edit_soldier(current_user, unavailable.soldier_id, session):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        session.delete(unavailable)
+        session.commit()
+
+        return jsonify({'message': 'תאריך נמחק בהצלחה'}), 200
     except Exception as e:
         session.rollback()
         return jsonify({'error': str(e)}), 500

@@ -226,6 +226,23 @@ rm shavzak.db
 python setup.py
 ```
 
+### שגיאת "no such column" בטבלת unavailable_dates:
+אם אתה מקבל שגיאה כמו:
+```
+sqlite3.OperationalError: no such column: unavailable_dates.end_date
+```
+
+**הפתרון:**
+```bash
+# הרצת migration ידנית
+python run_migration.py
+
+# או פשוט הפעל את השרת - Migration ירוץ אוטומטית
+python api.py
+```
+
+**המערכת תזהה אוטומטית** שדות חסרים ותריץ migration בעת אתחול השרת.
+
 ---
 
 ## 🔄 דוגמה מלאה (Python)

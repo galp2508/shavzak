@@ -20,6 +20,7 @@ from auth import (
 )
 from assignment_logic import AssignmentLogic
 import os
+import sqlite3
 
 app = Flask(__name__)
 CORS(app)
@@ -27,6 +28,45 @@ CORS(app)
 # ודא שה-DB נמצא תמיד באותו מיקום (תיקיית back)
 DB_PATH = os.path.join(os.path.dirname(__file__), 'shavzak.db')
 engine = init_db(DB_PATH)
+
+def check_and_run_migrations():
+    """בדיקה והרצת migrations אוטומטית בעת אתחול"""
+    try:
+        if not os.path.exists(DB_PATH):
+            print("⚠️  מסד הנתונים לא קיים - יש להריץ setup.py")
+            return False
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(unavailable_dates)")
+        columns = [column[1] for column in cursor.fetchall()]
+        conn.close()
+
+        # בדיקה אם השדות החדשים קיימים
+        missing_columns = []
+        required_columns = ['end_date', 'unavailability_type', 'quantity']
+        for col in required_columns:
+            if col not in columns:
+                missing_columns.append(col)
+
+        if missing_columns:
+            print(f"⚠️  מזהה שדות חסרים בטבלת unavailable_dates: {', '.join(missing_columns)}")
+            print("🔧 מריץ migration אוטומטי...")
+            from migrate_unavailable_dates import migrate_database
+            if migrate_database(DB_PATH):
+                print("✅ Migration הושלם בהצלחה")
+                return True
+            else:
+                print("❌ Migration נכשל")
+                return False
+
+        return True
+    except Exception as e:
+        print(f"⚠️  שגיאה בבדיקת schema: {e}")
+        return False
+
+# הרצת migrations בעת אתחול
+check_and_run_migrations()
 
 def get_db():
     """מקבל session של DB"""
@@ -703,7 +743,7 @@ def get_soldier(soldier_id, current_user):
         unavailable_list = [{
             'id': u.id,
             'date': u.date.isoformat(),
-            'end_date': u.end_date.isoformat() if u.end_date else None,
+            'end_date': u.end_date.isoformat() if hasattr(u, 'end_date') and u.end_date else None,
             'reason': u.reason,
             'status': u.status,
             'unavailability_type': u.unavailability_type if hasattr(u, 'unavailability_type') else 'חופשה',

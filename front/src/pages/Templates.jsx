@@ -108,13 +108,6 @@ const Templates = () => {
                     <Edit size={18} />
                   </button>
                   <button
-                    onClick={() => handleDuplicateAssignment(template.id)}
-                    className="text-red-600 hover:text-red-800"
-                    title="מחק"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                  <button
                     onClick={() => handleDelete(template.id)}
                     className="text-red-600 hover:text-red-800"
                     title="מחק"

@@ -2290,7 +2290,7 @@ def get_live_schedule(pluga_id, current_user):
             master_shavzak = Shavzak(
                 name='שיבוץ אוטומטי',
                 pluga_id=pluga_id,
-                created_by_user_id=current_user['id'],
+                created_by=current_user['id'],
                 start_date=today,
                 days_count=days_ahead,
                 min_rest_hours=8,
@@ -2317,171 +2317,19 @@ def get_live_schedule(pluga_id, current_user):
             Assignment.day == day_diff
         ).all()
 
-        # אם אין משימות, צור אותן
-        if not existing_assignments:
-            # טען תבניות
-            templates = session.query(AssignmentTemplate).filter(
-                AssignmentTemplate.pluga_id == pluga_id
-            ).all()
-
-            if templates:
-                # טען חיילים
-                mahalkot = session.query(Mahlaka).filter(
-                    Mahlaka.pluga_id == pluga_id
-                ).all()
-
-                all_soldiers = []
-                for mahlaka in mahalkot:
-                    soldiers = session.query(Soldier).filter(
-                        Soldier.mahlaka_id == mahlaka.id
-                    ).all()
-                    all_soldiers.extend(soldiers)
-
-                # חלק לקטגוריות
-                commanders = []
-                drivers = []
-                regular_soldiers = []
-
-                for soldier in all_soldiers:
-                    soldier_data = {
-                        'id': soldier.id,
-                        'name': soldier.name,
-                        'role': soldier.role,
-                        'mahlaka_id': soldier.mahlaka_id,
-                        'has_hatashab': soldier.has_hatashab or False,
-                        'certifications': []
-                    }
-
-                    # טען אי-זמינויות
-                    unavailable_dates = session.query(UnavailableDate).filter(
-                        UnavailableDate.soldier_id == soldier.id
-                    ).all()
-
-                    soldier_data['unavailable'] = []
-                    for ud in unavailable_dates:
-                        # בדוק אם החייל לא זמין בתאריך המבוקש
-                        if ud.end_date:
-                            if ud.date <= requested_date <= ud.end_date:
-                                soldier_data['unavailable'].append(requested_date.isoformat())
-                        else:
-                            if ud.date == requested_date:
-                                soldier_data['unavailable'].append(requested_date.isoformat())
-
-                    # סווג לפי תפקיד
-                    if soldier.role in ['ממ', 'מכ', 'סמל']:
-                        commanders.append(soldier_data)
-                    elif soldier.role == 'נהג':
-                        drivers.append(soldier_data)
-                    else:
-                        regular_soldiers.append(soldier_data)
-
-                # טען אילוצים
-                constraints = session.query(SchedulingConstraint).filter(
-                    SchedulingConstraint.pluga_id == pluga_id,
-                    SchedulingConstraint.is_active == True
-                ).all()
-
-                # המרת אילוצים למבנה נוח
-                constraints_dict = []
-                for c in constraints:
-                    c_dict = {
-                        'mahlaka_id': c.mahlaka_id,
-                        'constraint_type': c.constraint_type,
-                        'assignment_type': c.assignment_type,
-                        'constraint_value': c.constraint_value,
-                        'days_of_week': c.days_of_week,
-                        'start_date': c.start_date,
-                        'end_date': c.end_date
-                    }
-                    constraints_dict.append(c_dict)
-
-                # יצירת logic instance
-                logic = AssignmentLogic(8, False)  # 8 שעות מנוחה, לא מצב חירום
-
-                # צור משימות לפי תבניות
-                for template in templates:
-                    # בדוק אם התבנית מתאימה ליום זה
-                    if template.days and day_diff not in template.days:
-                        continue
-
-                    # בדוק אילוצים לפני יצירת משימה
-                    skip_assignment = False
-                    for constraint in constraints_dict:
-                        # בדוק אם האילוץ רלוונטי
-                        if constraint['mahlaka_id'] and constraint['mahlaka_id'] != template.assigned_mahlaka_id:
-                            continue
-                        if constraint['assignment_type'] and constraint['assignment_type'] != template.type:
-                            continue
-
-                        # אילוץ תאריכים
-                        if constraint['start_date'] or constraint['end_date']:
-                            if constraint['start_date'] and requested_date < constraint['start_date']:
-                                continue
-                            if constraint['end_date'] and requested_date > constraint['end_date']:
-                                continue
-
-                        # אם האילוץ הוא "לא יכול להשתבץ"
-                        if constraint['constraint_type'] == 'cannot_assign':
-                            skip_assignment = True
-                            break
-
-                    if skip_assignment:
-                        continue  # דלג על המשימה הזו
-
-                    # קרא למתודה המתאימה ב-logic
-                    result = None
-                    if template.type == 'סיור':
-                        result = logic.assign_patrol(
-                            day_diff,
-                            template.start_hour,
-                            template.length_in_hours,
-                            commanders,
-                            drivers,
-                            regular_soldiers,
-                            template.assigned_mahlaka_id
-                        )
-                    elif template.type == 'שמירה':
-                        result = logic.assign_guard(
-                            day_diff,
-                            template.start_hour,
-                            template.length_in_hours,
-                            regular_soldiers
-                        )
-                    # ... אפשר להוסיף עוד סוגי משימות
-
-                    if result and 'error' not in result:
-                        # צור Assignment
-                        assignment = Assignment(
-                            shavzak_id=master_shavzak.id,
-                            name=template.name,
-                            type=template.type,
-                            day=day_diff,
-                            start_hour=template.start_hour,
-                            length_in_hours=template.length_in_hours,
-                            assigned_mahlaka_id=template.assigned_mahlaka_id
-                        )
-                        session.add(assignment)
-                        session.flush()
-
-                        # הוסף חיילים למשימה
-                        for role_key in ['commanders', 'drivers', 'soldiers']:
-                            if role_key in result:
-                                role_name = role_key[:-1]
-                                for soldier_id in result[role_key]:
-                                    assign_soldier = AssignmentSoldier(
-                                        assignment_id=assignment.id,
-                                        soldier_id=soldier_id,
-                                        role_in_assignment=role_name
-                                    )
-                                    session.add(assign_soldier)
-
-                session.commit()
-
-                # טען מחדש את המשימות
-                existing_assignments = session.query(Assignment).filter(
-                    Assignment.shavzak_id == master_shavzak.id,
-                    Assignment.day == day_diff
-                ).all()
+        # אם יש משימות, החזר אותן
+        if existing_assignments:
+            pass  # נמשיך לבניית התגובה
+        else:
+            # אין משימות - החזר הודעה שאין שיבוץ ליום הזה
+            return jsonify({
+                'date': requested_date.isoformat(),
+                'date_display': requested_date.strftime('%d/%m/%Y'),
+                'day_index': day_diff,
+                'assignments': [],
+                'shavzak_id': master_shavzak.id,
+                'info': 'לא קיים שיבוץ ליום זה. יש ליצור שיבוץ באמצעות אלגוריתם השיבוץ הראשי.'
+            }), 200
 
         # בנה תגובה
         assignments_data = []
@@ -2525,7 +2373,27 @@ def get_live_schedule(pluga_id, current_user):
         session.rollback()
         print(f"Error in live schedule: {str(e)}")
         traceback.print_exc()
-        return jsonify({'error': f'שגיאה בטעינת שיבוץ: {str(e)}'}), 500
+
+        # נסה לנתח את השגיאה
+        error_msg = str(e)
+        error_response = {
+            'error': 'שגיאה בטעינת שיבוץ',
+            'error_type': 'unknown_error',
+            'details': error_msg
+        }
+
+        # נתח שגיאות נפוצות
+        if 'created_by_user_id' in error_msg:
+            error_response['error'] = 'שגיאה ביצירת שיבוץ - בעיית הרשאות'
+            error_response['error_type'] = 'permission_error'
+        elif 'no such column' in error_msg.lower():
+            error_response['error'] = 'שגיאת מסד נתונים - חסרים שדות'
+            error_response['error_type'] = 'database_schema_error'
+        elif 'foreign key' in error_msg.lower():
+            error_response['error'] = 'שגיאת קשרים - נתון לא תקין'
+            error_response['error_type'] = 'foreign_key_error'
+
+        return jsonify(error_response), 500
     finally:
         session.close()
 

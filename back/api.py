@@ -298,8 +298,8 @@ def create_user(current_user):
         data = request.json
         session = get_db()
         
-        if current_user.role == 'ממ':
-            if data['role'] != 'מכ' or data.get('mahlaka_id') != current_user.mahlaka_id:
+        if current_user['role'] == 'ממ':
+            if data['role'] != 'מכ' or data.get('mahlaka_id') != current_user['mahlaka_id']:
                 return jsonify({'error': 'מ"מ יכול ליצור רק מ"כ במחלקה שלו'}), 403
         
         user = User(
@@ -343,7 +343,7 @@ def create_pluga(current_user):
         data = request.json
         session = get_db()
         
-        user = session.query(User).filter_by(id=current_user.id).first()
+        user = session.query(User).filter_by(id=current_user['user_id']).first()
         if user.pluga_id:
             return jsonify({'error': 'אתה כבר משויך לפלוגה'}), 400
         
@@ -438,9 +438,9 @@ def create_mahlaka(current_user):
     try:
         data = request.json
         session = get_db()
-        
-        pluga_id = data.get('pluga_id', current_user.pluga_id)
-        
+
+        pluga_id = data.get('pluga_id', current_user['pluga_id'])
+
         if not can_edit_pluga(current_user, pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
         
@@ -477,11 +477,11 @@ def create_mahalkot_bulk(current_user):
         data = request.json
         session = get_db()
         
-        pluga_id = data.get('pluga_id', current_user.pluga_id)
-        
+        pluga_id = data.get('pluga_id', current_user['pluga_id'])
+
         if not can_edit_pluga(current_user, pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
-        
+
         mahalkot_list = data.get('mahalkot', [])
         if not mahalkot_list:
             return jsonify({'error': 'רשימת מחלקות ריקה'}), 400
@@ -587,8 +587,8 @@ def create_soldier(current_user):
         if not can_edit_mahlaka(current_user, mahlaka_id, session):
             return jsonify({'error': 'אין לך הרשאה'}), 403
         
-        if current_user.role == 'מכ':
-            if data.get('kita') != current_user.kita:
+        if current_user['role'] == 'מכ':
+            if data.get('kita') != current_user['kita']:
                 return jsonify({'error': 'אתה יכול להוסיף חיילים רק לכיתה שלך'}), 403
         
         soldier = Soldier(
@@ -676,8 +676,8 @@ def create_soldiers_bulk(current_user):
                     continue
                 
                 # Role-based restrictions
-                if current_user.role == 'מכ':
-                    if soldier_data.get('kita') != current_user.kita:
+                if current_user['role'] == 'מכ':
+                    if soldier_data.get('kita') != current_user['kita']:
                         errors.append(f"שורה {idx + 1}: אתה יכול להוסיף חיילים רק לכיתה שלך")
                         continue
                 
@@ -933,8 +933,8 @@ def list_soldiers_by_mahlaka(mahlaka_id, current_user):
         
         soldiers = session.query(Soldier).filter_by(mahlaka_id=mahlaka_id).all()
 
-        if current_user.role == 'מכ':
-            soldiers = [s for s in soldiers if s.kita == current_user.kita]
+        if current_user['role'] == 'מכ':
+            soldiers = [s for s in soldiers if s.kita == current_user['kita']]
         
         result = []
         for soldier in soldiers:
@@ -1414,17 +1414,17 @@ def create_shavzak(current_user):
         data = request.json
         session = get_db()
         
-        pluga_id = data.get('pluga_id', current_user.pluga_id)
-        
+        pluga_id = data.get('pluga_id', current_user['pluga_id'])
+
         if not can_view_pluga(current_user, pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
-        
+
         shavzak = Shavzak(
             pluga_id=pluga_id,
             name=data['name'],
             start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date(),
             days_count=data['days_count'],
-            created_by=current_user.id,
+            created_by=current_user['user_id'],
             min_rest_hours=data.get('min_rest_hours', 8),
             emergency_mode=data.get('emergency_mode', False)
         )
@@ -2134,7 +2134,7 @@ def get_join_requests(current_user):
         session = get_db()
 
         # רק מפ ראשי יכול לראות בקשות
-        if current_user.role != 'מפ' or current_user.pluga_id is not None:
+        if current_user['role'] != 'מפ' or current_user['pluga_id'] is not None:
             return jsonify({'error': 'אין הרשאה'}), 403
 
         requests = session.query(JoinRequest).filter_by(status='pending').order_by(
@@ -2166,7 +2166,7 @@ def approve_join_request(current_user, request_id):
         session = get_db()
 
         # רק מפ ראשי יכול לאשר בקשות
-        if current_user.role != 'מפ' or current_user.pluga_id is not None:
+        if current_user['role'] != 'מפ' or current_user['pluga_id'] is not None:
             return jsonify({'error': 'אין הרשאה'}), 403
 
         join_request = session.query(JoinRequest).filter_by(id=request_id).first()
@@ -2197,7 +2197,7 @@ def approve_join_request(current_user, request_id):
         # עדכון הבקשה
         join_request.status = 'approved'
         join_request.processed_at = datetime.utcnow()
-        join_request.processed_by = current_user.id
+        join_request.processed_by = current_user['user_id']
 
         session.commit()
 
@@ -2231,7 +2231,7 @@ def reject_join_request(current_user, request_id):
         session = get_db()
 
         # רק מפ ראשי יכול לדחות בקשות
-        if current_user.role != 'מפ' or current_user.pluga_id is not None:
+        if current_user['role'] != 'מפ' or current_user['pluga_id'] is not None:
             return jsonify({'error': 'אין הרשאה'}), 403
 
         join_request = session.query(JoinRequest).filter_by(id=request_id).first()
@@ -2243,7 +2243,7 @@ def reject_join_request(current_user, request_id):
 
         join_request.status = 'rejected'
         join_request.processed_at = datetime.utcnow()
-        join_request.processed_by = current_user.id
+        join_request.processed_by = current_user['user_id']
 
         session.commit()
 
@@ -2262,7 +2262,7 @@ def delete_join_request(current_user, request_id):
         session = get_db()
 
         # רק מפ ראשי יכול למחוק בקשות
-        if current_user.role != 'מפ' or current_user.pluga_id is not None:
+        if current_user['role'] != 'מפ' or current_user['pluga_id'] is not None:
             return jsonify({'error': 'אין הרשאה'}), 403
 
         join_request = session.query(JoinRequest).filter_by(id=request_id).first()
@@ -2318,7 +2318,7 @@ def get_live_schedule(pluga_id, current_user):
             master_shavzak = Shavzak(
                 name='שיבוץ אוטומטי',
                 pluga_id=pluga_id,
-                created_by=current_user.id,
+                created_by=current_user['user_id'],
                 start_date=today,
                 days_count=days_ahead,
                 min_rest_hours=8,
@@ -2572,7 +2572,7 @@ def create_constraint(pluga_id, current_user):
             end_date=end_date,
             reason=data.get('reason'),
             is_active=True,
-            created_by=current_user.id
+            created_by=current_user['user_id']
         )
 
         session.add(constraint)
@@ -2704,7 +2704,7 @@ def update_soldier_status(soldier_id, current_user):
         status.status_type = status_type
         status.return_date = return_date_obj
         status.notes = notes
-        status.updated_by = current_user.id
+        status.updated_by = current_user['user_id']
         status.updated_at = datetime.now()
 
         session.flush()

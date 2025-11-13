@@ -58,11 +58,11 @@ const Dashboard = () => {
 
       const totalSoldiers = allSoldiers.length;
 
-      // ספירת מפקדים: ממ, סמל, ומפקדי כיתה
+      // ספירת מפקדים: ממ, מכ, וסמל
       const commanderCount = allSoldiers.filter(soldier =>
         soldier.role === 'ממ' ||
-        soldier.role === 'סמל' ||
-        soldier.is_platoon_commander === true
+        soldier.role === 'מכ' ||
+        soldier.role === 'סמל'
       ).length;
 
       setStats({

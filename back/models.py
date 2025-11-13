@@ -92,13 +92,15 @@ class Soldier(Base):
     home_round_date = Column(Date, nullable=True)
 
     has_hatashab = Column(Boolean, default=False)
-    
+    hatash_2_days = Column(String(50), nullable=True)  # ימי התש"ב 2 קבועים (למשל: "1,2" עבור שני ושלישי, 0=ראשון)
+
     mahlaka_id = Column(Integer, ForeignKey('mahalkot.id'), nullable=False)
     
     mahlaka = relationship("Mahlaka", back_populates="soldiers")
     certifications = relationship("Certification", back_populates="soldier", cascade="all, delete-orphan")
     unavailable_dates = relationship("UnavailableDate", back_populates="soldier", cascade="all, delete-orphan")
     assignments = relationship("AssignmentSoldier", back_populates="soldier", cascade="all, delete-orphan")
+    current_status = relationship("SoldierStatus", back_populates="soldier", uselist=False, cascade="all, delete-orphan")
 
 
 class Certification(Base):
@@ -127,6 +129,29 @@ class UnavailableDate(Base):
     quantity = Column(Integer, nullable=True)  # כמות גימלים/חק"שים
 
     soldier = relationship("Soldier", back_populates="unavailable_dates")
+
+
+class SoldierStatus(Base):
+    """סטטוס נוכחי של חייל"""
+    __tablename__ = 'soldier_status'
+
+    id = Column(Integer, primary_key=True)
+    soldier_id = Column(Integer, ForeignKey('soldiers.id'), nullable=False, unique=True)
+
+    # סטטוס: בבסיס, בקשת יציאה, גימלים, ריתוק, בסבב קו
+    status_type = Column(String(50), default='בבסיס', nullable=False)
+
+    # תאריך חזרה לבסיס (רק אם לא בבסיס)
+    return_date = Column(Date, nullable=True)
+
+    # הערות
+    notes = Column(Text, nullable=True)
+
+    # מתי עודכן לאחרונה
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+
+    soldier = relationship("Soldier", back_populates="current_status", uselist=False)
 
 
 class AssignmentTemplate(Base):
@@ -224,6 +249,34 @@ class JoinRequest(Base):
     def set_password(self, password):
         """הצפנת סיסמה"""
         self.password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
+class SchedulingConstraint(Base):
+    """אילוצי שיבוץ"""
+    __tablename__ = 'scheduling_constraints'
+
+    id = Column(Integer, primary_key=True)
+    pluga_id = Column(Integer, ForeignKey('plugot.id'), nullable=False)
+    mahlaka_id = Column(Integer, ForeignKey('mahalkot.id'), nullable=True)  # אם None, חל על כל הפלוגה
+
+    constraint_type = Column(String(50), nullable=False)  # 'cannot_assign', 'max_assignments_per_day', 'restricted_hours'
+    assignment_type = Column(String(50), nullable=True)  # אם None, חל על כל סוגי המשימות
+
+    # ערכים נוספים (JSON או ערך בודד)
+    constraint_value = Column(String(255), nullable=True)  # למשל: "3" עבור max_assignments, או "22-06" עבור restricted_hours
+
+    days_of_week = Column(String(50), nullable=True)  # למשל: "0,1,2" (ראשון, שני, שלישי)
+    start_date = Column(Date, nullable=True)  # תאריך התחלה (אופציונלי)
+    end_date = Column(Date, nullable=True)  # תאריך סיום (אופציונלי)
+
+    reason = Column(Text, nullable=True)  # סיבה/הערה
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+
+    pluga = relationship("Pluga", foreign_keys=[pluga_id])
+    mahlaka = relationship("Mahlaka", foreign_keys=[mahlaka_id])
 
 
 def init_db(db_path='shavzak.db'):

@@ -6,9 +6,11 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Plugot from './pages/Plugot';
 import Mahalkot from './pages/Mahalkot';
+import Soldiers from './pages/Soldiers';
 import Templates from './pages/Templates';
 import Shavzakim from './pages/Shavzakim';
 import ShavzakView from './pages/ShavzakView';
+import LiveSchedule from './pages/LiveSchedule';
 import Profile from './pages/Profile';
 import JoinRequests from './pages/JoinRequests';
 import Loading from './components/Loading';
@@ -85,7 +87,9 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="plugot" element={<Plugot />} />
           <Route path="mahalkot" element={<Mahalkot />} />
+          <Route path="soldiers" element={<Soldiers />} />
           <Route path="templates" element={<Templates />} />
+          <Route path="live-schedule" element={<LiveSchedule />} />
           <Route path="shavzakim" element={<Shavzakim />} />
           <Route path="shavzakim/:id" element={<ShavzakView />} />
           <Route path="join-requests" element={<JoinRequests />} />

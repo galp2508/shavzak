@@ -18,34 +18,22 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     if (token) {
-      // טען את מידע המשתמש מתוך ה-JWT במקום לקרוא /me שמה-backend אין
-      const payload = decodeJwt(token);
-      if (payload) {
-        // המפתח names תואם ל-payload שנוצר ב-backend
-        setUser({
-          id: payload.user_id,
-          username: payload.username,
-          full_name: payload.full_name || payload.username,
-          role: payload.role,
-          pluga_id: payload.pluga_id,
-          mahlaka_id: payload.mahlaka_id,
-          kita: payload.kita,
-        });
-        setLoading(false);
-      } else {
-        logout();
-      }
+      // טען את מידע המשתמש המלא מה-API
+      loadUserData();
     } else {
       setLoading(false);
     }
   }, [token]);
 
   const loadUserData = async () => {
-    // פונקציה נשארת כדי לשמור על תאימות אבל אינה מצויה בשימוש כרגע
     try {
+      const response = await api.get('/me');
+      setUser(response.data.user);
       setLoading(false);
     } catch (error) {
-      setLoading(false);
+      console.error('Failed to load user data:', error);
+      // אם הטעינה נכשלה (token לא תקף), התנתק
+      logout();
     }
   };
 

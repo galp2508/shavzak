@@ -12,7 +12,7 @@ from models import (
     init_db, get_session, User, Pluga, Mahlaka, Soldier,
     Certification, UnavailableDate, AssignmentTemplate,
     Shavzak, Assignment, AssignmentSoldier, JoinRequest,
-    SchedulingConstraint
+    SchedulingConstraint, SoldierStatus
 )
 from auth import (
     create_token, token_required, role_required,
@@ -99,16 +99,66 @@ def check_and_run_migrations():
         else:
             print("✅ hatash_2_days כבר קיים")
 
+        # בדיקה 4: הוספת start_hour לטבלת assignment_templates
+        cursor.execute("PRAGMA table_info(assignment_templates)")
+        template_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'start_hour' not in template_columns:
+            print("⚠️  מזהה עמודה חסרה: start_hour")
+            print("🔧 מריץ migration אוטומטי להוספת start_hour...")
+            conn.close()
+            from migrate_add_start_hour import migrate_database as migrate_add_start_hour
+            if migrate_add_start_hour(DB_PATH):
+                print("✅ Migration להוספת start_hour הושלם בהצלחה")
+            else:
+                print("❌ Migration להוספת start_hour נכשל")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        else:
+            print("✅ start_hour כבר קיים")
+
         conn.close()
         return True
     except Exception as e:
         print(f"⚠️  שגיאה בבדיקת schema: {e}")
+        traceback.print_exc()
         if 'conn' in locals():
             conn.close()
         return False
 
 # הרצת migrations בעת אתחול
 check_and_run_migrations()
+
+# Error handlers להצגת שגיאות מפורטות בקונסול
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """טיפול גלובלי בשגיאות - הצגת traceback מלא בקונסול"""
+    print("=" * 80)
+    print("🔴 שגיאה לא צפויה:")
+    print("=" * 80)
+    traceback.print_exc()
+    print("=" * 80)
+
+    # החזר תשובה ידידותית ללקוח
+    return jsonify({
+        'error': 'שגיאת שרת פנימית',
+        'message': str(e),
+        'type': type(e).__name__
+    }), 500
+
+@app.errorhandler(404)
+def not_found(e):
+    """טיפול ב-404"""
+    print(f"⚠️  404 Not Found: {request.url}")
+    return jsonify({'error': 'הנתיב לא נמצא'}), 404
+
+@app.errorhandler(400)
+def bad_request(e):
+    """טיפול ב-400"""
+    print(f"⚠️  400 Bad Request: {str(e)}")
+    traceback.print_exc()
+    return jsonify({'error': 'בקשה לא תקינה', 'message': str(e)}), 400
 
 def get_db():
     """מקבל session של DB"""
@@ -236,6 +286,8 @@ def register():
                 }), 201
 
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -267,6 +319,8 @@ def delete_mahlaka(mahlaka_id, current_user):
 
         return jsonify({'message': 'המחלקה נמחקה בהצלחה'}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -296,6 +350,8 @@ def login():
             'user': build_user_response(user)
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -316,6 +372,8 @@ def get_current_user(current_user):
             'user': build_user_response(user)
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -352,6 +410,8 @@ def create_user(current_user):
             'user': build_user_response(user)
         }), 201
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -396,6 +456,8 @@ def create_pluga(current_user):
             }
         }), 201
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -417,6 +479,8 @@ def list_all_plugot():
 
         return jsonify({'plugot': result}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -448,6 +512,8 @@ def get_pluga(pluga_id, current_user):
             }
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -489,6 +555,8 @@ def create_mahlaka(current_user):
             }
         }), 201
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -549,7 +617,10 @@ def create_mahalkot_bulk(current_user):
                     'color': mahlaka.color
                 })
             except Exception as e:
-                errors.append(f"שורה {idx + 1}: {str(e)}")
+                error_msg = f"שורה {idx + 1}: {str(e)}"
+                errors.append(error_msg)
+                print(f"🔴 שגיאה בייבוא: {error_msg}")
+                traceback.print_exc()
         
         session.commit()
         
@@ -562,6 +633,8 @@ def create_mahalkot_bulk(current_user):
             'error_count': len(errors)
         }), 201 if created else 400
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -592,6 +665,8 @@ def list_mahalkot(pluga_id, current_user):
         
         return jsonify({'mahalkot': result}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -661,6 +736,8 @@ def create_soldier(current_user):
             }
         }), 201
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -770,7 +847,10 @@ def create_soldiers_bulk(current_user):
                     'kita': soldier.kita
                 })
             except Exception as e:
-                errors.append(f"שורה {idx + 1}: {str(e)}")
+                error_msg = f"שורה {idx + 1}: {str(e)}"
+                errors.append(error_msg)
+                print(f"🔴 שגיאה בייבוא: {error_msg}")
+                traceback.print_exc()
         
         session.commit()
         
@@ -783,6 +863,8 @@ def create_soldiers_bulk(current_user):
             'error_count': len(errors)
         }), 201 if created else 400
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -842,6 +924,8 @@ def get_soldier(soldier_id, current_user):
             }
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -917,6 +1001,8 @@ def update_soldier(soldier_id, current_user):
             }
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -942,6 +1028,8 @@ def delete_soldier(soldier_id, current_user):
 
         return jsonify({'message': 'חייל נמחק בהצלחה'}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1033,6 +1121,8 @@ def add_certification(soldier_id, current_user):
         
         return jsonify({'message': 'הסמכה נוספה בהצלחה'}), 201
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1131,6 +1221,8 @@ def add_unavailable_date(soldier_id, current_user):
             }
         }), 201
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1202,6 +1294,8 @@ def delete_unavailable_date(unavailable_id, current_user):
 
         return jsonify({'message': 'תאריך נמחק בהצלחה'}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1230,6 +1324,7 @@ def create_assignment_template(pluga_id, current_user):
             assignment_type=data['assignment_type'],
             length_in_hours=data['length_in_hours'],
             times_per_day=data['times_per_day'],
+            start_hour=data.get('start_hour'),
             commanders_needed=data.get('commanders_needed', 0),
             drivers_needed=data.get('drivers_needed', 0),
             soldiers_needed=data.get('soldiers_needed', 0),
@@ -1250,6 +1345,8 @@ def create_assignment_template(pluga_id, current_user):
             }
         }), 201
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1274,6 +1371,7 @@ def list_assignment_templates(pluga_id, current_user):
             'assignment_type': t.assignment_type,
             'length_in_hours': t.length_in_hours,
             'times_per_day': t.times_per_day,
+            'start_hour': t.start_hour,
             'commanders_needed': t.commanders_needed,
             'drivers_needed': t.drivers_needed,
             'soldiers_needed': t.soldiers_needed,
@@ -1284,6 +1382,8 @@ def list_assignment_templates(pluga_id, current_user):
 
         return jsonify({'templates': result}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -1314,6 +1414,8 @@ def update_assignment_template(template_id, current_user):
             template.length_in_hours = data['length_in_hours']
         if 'times_per_day' in data:
             template.times_per_day = data['times_per_day']
+        if 'start_hour' in data:
+            template.start_hour = data['start_hour']
         if 'commanders_needed' in data:
             template.commanders_needed = data['commanders_needed']
         if 'drivers_needed' in data:
@@ -1338,6 +1440,8 @@ def update_assignment_template(template_id, current_user):
             }
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1364,6 +1468,8 @@ def delete_assignment_template(template_id, current_user):
 
         return jsonify({'message': 'תבנית נמחקה בהצלחה'}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1472,6 +1578,8 @@ def create_shavzak(current_user):
             }
         }), 201
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1720,7 +1828,10 @@ def generate_shavzak(shavzak_id, current_user):
                                 ))
                     
             except Exception as e:
-                failed_assignments.append((assign_data, str(e)))
+                error_msg = str(e)
+                failed_assignments.append((assign_data, error_msg))
+                print(f"🔴 שגיאה ביצירת שיבוץ: {error_msg}")
+                traceback.print_exc()
         
         # מצב חירום
         if failed_assignments:
@@ -1888,6 +1999,8 @@ def get_shavzak(shavzak_id, current_user):
             'assignments': assignments_data
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -1917,6 +2030,8 @@ def list_shavzakim(pluga_id, current_user):
 
         return jsonify({'shavzakim': result}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -1961,6 +2076,8 @@ def update_shavzak(shavzak_id, current_user):
             }
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -1987,6 +2104,8 @@ def delete_shavzak(shavzak_id, current_user):
 
         return jsonify({'message': 'שיבוץ נמחק בהצלחה'}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -2034,6 +2153,8 @@ def update_assignment(assignment_id, current_user):
             }
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -2061,6 +2182,8 @@ def delete_assignment(assignment_id, current_user):
 
         return jsonify({'message': 'משימה נמחקה בהצלחה'}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -2183,6 +2306,8 @@ def get_join_requests(current_user):
 
         return jsonify({'requests': result}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -2241,6 +2366,8 @@ def approve_join_request(current_user, request_id):
             }
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -2273,6 +2400,8 @@ def reject_join_request(current_user, request_id):
 
         return jsonify({'message': 'הבקשה נדחתה'}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -2298,6 +2427,8 @@ def delete_join_request(current_user, request_id):
 
         return jsonify({'message': 'הבקשה נמחקה'}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -2518,7 +2649,8 @@ def _delete_affected_assignments_by_constraint(session, pluga_id, constraint):
             session.delete(assignment)
 
     except Exception as e:
-        print(f"Error deleting affected assignments: {str(e)}")
+        print(f"🔴 Error deleting affected assignments: {str(e)}")
+        traceback.print_exc()
         # לא נעצור את התהליך - רק נדווח
 
 
@@ -2560,6 +2692,8 @@ def get_constraints(pluga_id, current_user):
 
         return jsonify({'constraints': constraints_data}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -2615,6 +2749,8 @@ def create_constraint(pluga_id, current_user):
             }
         }), 201
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -2649,6 +2785,8 @@ def delete_constraint(constraint_id, current_user):
 
         return jsonify({'message': 'אילוץ נמחק בהצלחה'}), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
@@ -2695,6 +2833,8 @@ def get_soldier_status(soldier_id, current_user):
             'in_round': in_round
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
@@ -2778,6 +2918,8 @@ def update_soldier_status(soldier_id, current_user):
             }
         }), 200
     except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:

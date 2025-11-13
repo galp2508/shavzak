@@ -121,8 +121,13 @@ const Templates = () => {
             <div className="space-y-2 text-sm text-gray-600">
               <div className="flex items-center gap-2">
                 <Clock size={16} />
-                <span>{template.length_in_hours} שעות × {template.times_per_day} פעמים ביום</span>
+                <span>{template.length_in_hours} שעות × {Math.floor(24 / template.length_in_hours)} פעמים ביום</span>
               </div>
+              {template.start_hour !== null && template.start_hour !== undefined && (
+                <div className="text-xs text-gray-500">
+                  התחלה: {String(template.start_hour).padStart(2, '0')}:00
+                </div>
+              )}
               <div className="flex gap-2 flex-wrap mt-3">
                 {template.commanders_needed > 0 && (
                   <span className="badge badge-purple">{template.commanders_needed} מפקדים</span>
@@ -172,7 +177,7 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
     name: template?.name || '',
     assignment_type: template?.assignment_type || 'שמירה',
     length_in_hours: template?.length_in_hours || 8,
-    times_per_day: template?.times_per_day || 1,
+    start_hour: template?.start_hour || '',
     commanders_needed: template?.commanders_needed || 0,
     drivers_needed: template?.drivers_needed || 0,
     soldiers_needed: template?.soldiers_needed || 1,
@@ -182,6 +187,9 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
   });
   const [loading, setLoading] = useState(false);
 
+  // חישוב אוטומטי של פעמים ביום
+  const timesPerDay = formData.length_in_hours > 0 ? Math.floor(24 / formData.length_in_hours) : 1;
+
   const assignmentTypes = ['שמירה', 'סיור', 'כוננות א', 'כוננות ב', 'חמל', 'תורן מטבח', 'חפק גשש', 'שלז', 'קצין תורן'];
 
   const handleSubmit = async (e) => {
@@ -189,11 +197,18 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
     setLoading(true);
 
     try {
+      // הוסף חישוב אוטומטי של times_per_day
+      const dataToSend = {
+        ...formData,
+        times_per_day: timesPerDay,
+        start_hour: formData.start_hour ? parseInt(formData.start_hour) : null
+      };
+
       if (template) {
-        await api.put(`/assignment-templates/${template.id}`, formData);
+        await api.put(`/assignment-templates/${template.id}`, dataToSend);
         toast.success('התבנית עודכנה בהצלחה');
       } else {
-        await api.post(`/plugot/${plugaId}/assignment-templates`, formData);
+        await api.post(`/plugot/${plugaId}/assignment-templates`, dataToSend);
         toast.success('התבנית נוספה בהצלחה');
       }
       onSave();
@@ -254,19 +269,25 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
                 className="input-field"
                 required
               />
+              <p className="text-sm text-gray-500 mt-1">
+                תקרה {timesPerDay} {timesPerDay === 1 ? 'פעם' : 'פעמים'} ביום (24 / {formData.length_in_hours})
+              </p>
             </div>
 
             <div>
-              <label className="label">פעמים ביום *</label>
+              <label className="label">שעת התחלה (אופציונלי)</label>
               <input
                 type="number"
-                min="1"
-                max="10"
-                value={formData.times_per_day}
-                onChange={(e) => setFormData({ ...formData, times_per_day: parseInt(e.target.value) })}
+                min="0"
+                max="23"
+                value={formData.start_hour}
+                onChange={(e) => setFormData({ ...formData, start_hour: e.target.value })}
                 className="input-field"
-                required
+                placeholder="לדוגמה: 8"
               />
+              <p className="text-sm text-gray-500 mt-1">
+                שעת התחלה של המשמרת הראשונה (0-23)
+              </p>
             </div>
 
             <div>

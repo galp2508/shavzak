@@ -2300,6 +2300,26 @@ def get_live_schedule(pluga_id, current_user):
                     else:
                         regular_soldiers.append(soldier_data)
 
+                # טען אילוצים
+                constraints = session.query(SchedulingConstraint).filter(
+                    SchedulingConstraint.pluga_id == pluga_id,
+                    SchedulingConstraint.is_active == True
+                ).all()
+
+                # המרת אילוצים למבנה נוח
+                constraints_dict = []
+                for c in constraints:
+                    c_dict = {
+                        'mahlaka_id': c.mahlaka_id,
+                        'constraint_type': c.constraint_type,
+                        'assignment_type': c.assignment_type,
+                        'constraint_value': c.constraint_value,
+                        'days_of_week': c.days_of_week,
+                        'start_date': c.start_date,
+                        'end_date': c.end_date
+                    }
+                    constraints_dict.append(c_dict)
+
                 # יצירת logic instance
                 logic = AssignmentLogic(8, False)  # 8 שעות מנוחה, לא מצב חירום
 
@@ -2308,6 +2328,30 @@ def get_live_schedule(pluga_id, current_user):
                     # בדוק אם התבנית מתאימה ליום זה
                     if template.days and day_diff not in template.days:
                         continue
+
+                    # בדוק אילוצים לפני יצירת משימה
+                    skip_assignment = False
+                    for constraint in constraints_dict:
+                        # בדוק אם האילוץ רלוונטי
+                        if constraint['mahlaka_id'] and constraint['mahlaka_id'] != template.assigned_mahlaka_id:
+                            continue
+                        if constraint['assignment_type'] and constraint['assignment_type'] != template.type:
+                            continue
+
+                        # אילוץ תאריכים
+                        if constraint['start_date'] or constraint['end_date']:
+                            if constraint['start_date'] and requested_date < constraint['start_date']:
+                                continue
+                            if constraint['end_date'] and requested_date > constraint['end_date']:
+                                continue
+
+                        # אם האילוץ הוא "לא יכול להשתבץ"
+                        if constraint['constraint_type'] == 'cannot_assign':
+                            skip_assignment = True
+                            break
+
+                    if skip_assignment:
+                        continue  # דלג על המשימה הזו
 
                     # קרא למתודה המתאימה ב-logic
                     result = None
@@ -2415,6 +2459,56 @@ def get_live_schedule(pluga_id, current_user):
 # SCHEDULING CONSTRAINTS
 # ============================================================================
 
+def _delete_affected_assignments_by_constraint(session, pluga_id, constraint):
+    """מחק משימות שמושפעות מאילוץ מסוים"""
+    try:
+        # מצא את השיבוץ האוטומטי
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if not master_shavzak:
+            return
+
+        # בנה query בסיסי
+        query = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id
+        )
+
+        # אם האילוץ ספציפי למחלקה, סנן לפי מחלקה
+        if constraint.mahlaka_id:
+            query = query.filter(Assignment.assigned_mahlaka_id == constraint.mahlaka_id)
+
+        # אם האילוץ ספציפי לסוג משימה, סנן לפי סוג
+        if constraint.assignment_type:
+            query = query.filter(Assignment.type == constraint.assignment_type)
+
+        # אם יש טווח תאריכים, סנן לפי תאריכים
+        if constraint.start_date or constraint.end_date:
+            shavzak_start = master_shavzak.start_date
+            if constraint.start_date:
+                start_day = (constraint.start_date - shavzak_start).days
+                query = query.filter(Assignment.day >= start_day)
+            if constraint.end_date:
+                end_day = (constraint.end_date - shavzak_start).days
+                query = query.filter(Assignment.day <= end_day)
+
+        # מחק את המשימות המושפעות
+        affected_assignments = query.all()
+        for assignment in affected_assignments:
+            # מחק את כל השיוכים של המשימה
+            session.query(AssignmentSoldier).filter(
+                AssignmentSoldier.assignment_id == assignment.id
+            ).delete()
+            # מחק את המשימה עצמה
+            session.delete(assignment)
+
+    except Exception as e:
+        print(f"Error deleting affected assignments: {str(e)}")
+        # לא נעצור את התהליך - רק נדווח
+
+
 @app.route('/api/plugot/<int:pluga_id>/constraints', methods=['GET'])
 @token_required
 def get_constraints(pluga_id, current_user):
@@ -2493,6 +2587,11 @@ def create_constraint(pluga_id, current_user):
         )
 
         session.add(constraint)
+        session.flush()
+
+        # מחק שיבוצים מושפעים מהאילוץ החדש
+        _delete_affected_assignments_by_constraint(session, pluga_id, constraint)
+
         session.commit()
 
         return jsonify({
@@ -2523,8 +2622,16 @@ def delete_constraint(constraint_id, current_user):
         if not can_edit_pluga(current_user, constraint.pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
 
+        pluga_id = constraint.pluga_id
+
         # במקום למחוק, נסמן כלא פעיל
         constraint.is_active = False
+        session.flush()
+
+        # מחק שיבוצים שהיו מושפעים מהאילוץ הזה
+        # (כדי שיבנו מחדש בלי האילוץ)
+        _delete_affected_assignments_by_constraint(session, pluga_id, constraint)
+
         session.commit()
 
         return jsonify({'message': 'אילוץ נמחק בהצלחה'}), 200

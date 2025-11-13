@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield } from 'lucide-react';
 import { toast } from 'react-toastify';
+import Constraints from './Constraints';
 
 const LiveSchedule = () => {
   const { user } = useAuth();
@@ -10,6 +11,7 @@ const LiveSchedule = () => {
   const [scheduleData, setScheduleData] = useState(null);
   const [mahalkot, setMahalkot] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showConstraints, setShowConstraints] = useState(false);
 
   useEffect(() => {
     // התחל עם מחר
@@ -127,14 +129,25 @@ const LiveSchedule = () => {
             </button>
           </div>
 
-          <button
-            onClick={() => loadSchedule(currentDate)}
-            className="mr-4 p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
-            title="רענן"
-            disabled={loading}
-          >
-            <RefreshCw size={24} className={loading ? 'animate-spin' : ''} />
-          </button>
+          <div className="flex items-center gap-2 mr-4">
+            {(user.role === 'מפ' || user.role === 'ממ') && (
+              <button
+                onClick={() => setShowConstraints(true)}
+                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                title="אילוצי שיבוץ"
+              >
+                <Shield size={24} />
+              </button>
+            )}
+            <button
+              onClick={() => loadSchedule(currentDate)}
+              className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+              title="רענן"
+              disabled={loading}
+            >
+              <RefreshCw size={24} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -244,6 +257,19 @@ const LiveSchedule = () => {
               })}
           </div>
         </div>
+      )}
+
+      {/* Constraints Modal */}
+      {showConstraints && (
+        <Constraints
+          onClose={() => setShowConstraints(false)}
+          onUpdate={() => {
+            // רענן את השיבוץ החי כאשר האילוצים משתנים
+            if (currentDate) {
+              loadSchedule(currentDate);
+            }
+          }}
+        />
       )}
     </div>
   );

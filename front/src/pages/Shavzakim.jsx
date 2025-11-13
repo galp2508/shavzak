@@ -160,7 +160,16 @@ const ShavzakModal = ({ plugaId, userId, onClose, onSave }) => {
             toast.warning(`${generateResponse.data.warnings.length} אזהרות בשיבוץ`);
           }
         } catch (genError) {
-          toast.error(genError.response?.data?.error || 'שגיאה ביצירת שיבוץ');
+          const errorData = genError.response?.data;
+          let errorMessage = errorData?.error || 'שגיאה ביצירת שיבוץ';
+
+          // הצג פרטים טכניים בקונסול
+          if (errorData?.technical_details) {
+            console.error('Technical details:', errorData.technical_details);
+          }
+
+          toast.error(errorMessage, { autoClose: 8000 });
+          console.error('Generate error:', genError);
         } finally {
           setGenerating(false);
         }

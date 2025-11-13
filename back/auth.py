@@ -76,68 +76,68 @@ def role_required(allowed_roles):
 
 def can_edit_pluga(current_user, pluga_id):
     """בדיקה האם יכול לערוך פלוגה"""
-    return current_user['role'] == 'מפ' and current_user['pluga_id'] == pluga_id
+    return current_user.get('role') == 'מפ' and current_user.get('pluga_id') == pluga_id
 
 
 def can_view_pluga(current_user, pluga_id):
     """בדיקה האם יכול לצפות בפלוגה"""
-    return current_user['pluga_id'] == pluga_id
+    return current_user.get('pluga_id') == pluga_id
 
 
 def can_edit_mahlaka(current_user, mahlaka_id, session):
     """בדיקה האם יכול לערוך מחלקה"""
     from models import Mahlaka
-    
-    if current_user['role'] == 'מפ':
+
+    if current_user.get('role') == 'מפ':
         mahlaka = session.query(Mahlaka).filter_by(id=mahlaka_id).first()
-        if mahlaka and mahlaka.pluga_id == current_user['pluga_id']:
+        if mahlaka and mahlaka.pluga_id == current_user.get('pluga_id'):
             return True
-    
-    if current_user['role'] == 'ממ' and current_user['mahlaka_id'] == mahlaka_id:
+
+    if current_user.get('role') == 'ממ' and current_user.get('mahlaka_id') == mahlaka_id:
         return True
-    
+
     return False
 
 
 def can_view_mahlaka(current_user, mahlaka_id, session):
     """בדיקה האם יכול לצפות במחלקה"""
     from models import Mahlaka
-    
+
     mahlaka = session.query(Mahlaka).filter_by(id=mahlaka_id).first()
     if not mahlaka:
         return False
-    
-    return mahlaka.pluga_id == current_user['pluga_id']
+
+    return mahlaka.pluga_id == current_user.get('pluga_id')
 
 
 def can_edit_soldier(current_user, soldier_id, session):
     """בדיקה האם יכול לערוך חייל"""
     from models import Soldier, Mahlaka
-    
+
     soldier = session.query(Soldier).filter_by(id=soldier_id).first()
     if not soldier:
         return False
-    
-    if current_user['role'] == 'מפ':
+
+    if current_user.get('role') == 'מפ':
         mahlaka = session.query(Mahlaka).filter_by(id=soldier.mahlaka_id).first()
-        if mahlaka and mahlaka.pluga_id == current_user['pluga_id']:
+        if mahlaka and mahlaka.pluga_id == current_user.get('pluga_id'):
             return True
-    
-    if current_user['role'] == 'ממ' and soldier.mahlaka_id == current_user['mahlaka_id']:
+
+    if current_user.get('role') == 'ממ' and soldier.mahlaka_id == current_user.get('mahlaka_id'):
         return True
-    
-    if current_user['role'] == 'מכ' and soldier.kita == current_user['kita'] and \
-       soldier.mahlaka_id == current_user['mahlaka_id']:
+
+    if current_user.get('role') == 'מכ' and soldier.kita == current_user.get('kita') and \
+       soldier.mahlaka_id == current_user.get('mahlaka_id'):
         return True
-    
+
     return False
 
 
 def can_create_shavzak(current_user):
     """בדיקה האם יכול ליצור שיבוץ"""
-    return current_user['role'] in ['מפ', 'ממ']
+    return current_user.get('role') in ['מפ', 'ממ']
 
 
 def can_view_shavzak(current_user, shavzak_pluga_id):
     """בדיקה האם יכול לצפות בשיבוץ"""
-    return current_user['pluga_id'] == shavzak_pluga_id
+    return current_user.get('pluga_id') == shavzak_pluga_id

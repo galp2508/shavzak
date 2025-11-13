@@ -2262,7 +2262,7 @@ def get_live_schedule(pluga_id, current_user):
     קבלת שיבוץ "חי" לתאריך מסוים
     המערכת מבטיחה שיבוץ לפחות 7 ימים קדימה
     """
-    session = get_session()
+    session = get_db()
 
     try:
         # בדיקת הרשאות
@@ -2588,7 +2588,7 @@ def _delete_affected_assignments_by_constraint(session, pluga_id, constraint):
 @token_required
 def get_constraints(pluga_id, current_user):
     """קבלת כל האילוצים של פלוגה"""
-    session = get_session()
+    session = get_db()
     try:
         if not can_view_pluga(current_user, pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
@@ -2632,7 +2632,7 @@ def get_constraints(pluga_id, current_user):
 @role_required(['מפ', 'ממ'])
 def create_constraint(pluga_id, current_user):
     """יצירת אילוץ חדש"""
-    session = get_session()
+    session = get_db()
     try:
         if not can_edit_pluga(current_user, pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
@@ -2688,7 +2688,7 @@ def create_constraint(pluga_id, current_user):
 @role_required(['מפ', 'ממ'])
 def delete_constraint(constraint_id, current_user):
     """מחיקת אילוץ"""
-    session = get_session()
+    session = get_db()
     try:
         constraint = session.query(SchedulingConstraint).get(constraint_id)
         if not constraint:
@@ -2725,7 +2725,7 @@ def delete_constraint(constraint_id, current_user):
 @token_required
 def get_soldier_status(soldier_id, current_user):
     """קבלת סטטוס נוכחי של חייל"""
-    session = get_session()
+    session = get_db()
     try:
         soldier = session.query(Soldier).get(soldier_id)
         if not soldier:
@@ -2766,7 +2766,7 @@ def get_soldier_status(soldier_id, current_user):
 @token_required
 def update_soldier_status(soldier_id, current_user):
     """עדכון סטטוס של חייל"""
-    session = get_session()
+    session = get_db()
     try:
         if not can_edit_soldier(current_user, soldier_id, session):
             return jsonify({'error': 'אין לך הרשאה'}), 403

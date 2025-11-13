@@ -2,7 +2,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Home, Users, Shield, FileText,
-  Calendar, LogOut, User, Menu, X, UserCheck
+  Calendar, LogOut, User, Menu, X, UserCheck, CalendarDays
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -15,7 +15,9 @@ const Layout = () => {
     { name: 'דשבורד', href: '/', icon: Home, roles: ['מפ', 'ממ', 'מכ'] },
     { name: 'פלוגות', href: '/plugot', icon: Shield, roles: ['מפ'] },
     { name: 'מחלקות', href: '/mahalkot', icon: Users, roles: ['מפ', 'ממ'] },
+    { name: 'חיילים', href: '/soldiers', icon: Users, roles: ['מפ', 'ממ', 'מכ'] },
     { name: 'תבניות משימות', href: '/templates', icon: FileText, roles: ['מפ'] },
+    { name: 'שיבוץ חי', href: '/live-schedule', icon: CalendarDays, roles: ['מפ', 'ממ', 'מכ'] },
     { name: 'שיבוצים', href: '/shavzakim', icon: Calendar, roles: ['מפ', 'ממ', 'מכ'] },
   ];
 

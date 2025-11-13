@@ -244,11 +244,24 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
         const role = roleMatch[1].trim();
         const name = roleMatch[2].trim();
         const date = roleMatch[3]?.trim() || currentKitaDate || '';
-        
+
         // Normalize role (remove typographic quotes) and check known prefixes
         const normRole = role.replace(/[\"״]/g, '').trim();
-        if (normRole.includes('ממ') || normRole.includes('מכ') || normRole === 'סמל' || normRole.includes('נהג')) {
-          soldiers.push({ name, role: normRole, kita: currentKita, unavailable_date: date });
+
+        // Extract only the base role, ignoring class identifiers (e.g., "מכ 1א" -> "מכ")
+        let finalRole = 'לוחם'; // default
+        if (normRole.includes('ממ')) {
+          finalRole = 'ממ';
+        } else if (normRole.includes('מכ')) {
+          finalRole = 'מכ';
+        } else if (normRole === 'סמל' || normRole.includes('סמל')) {
+          finalRole = 'סמל';
+        } else if (normRole.includes('נהג')) {
+          finalRole = 'נהג';
+        }
+
+        if (finalRole !== 'לוחם') {
+          soldiers.push({ name, role: finalRole, kita: currentKita, unavailable_date: date });
           return;
         }
       }

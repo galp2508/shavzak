@@ -11,7 +11,8 @@ import traceback
 from models import (
     init_db, get_session, User, Pluga, Mahlaka, Soldier,
     Certification, UnavailableDate, AssignmentTemplate,
-    Shavzak, Assignment, AssignmentSoldier, JoinRequest
+    Shavzak, Assignment, AssignmentSoldier, JoinRequest,
+    SchedulingConstraint
 )
 from auth import (
     create_token, token_required, role_required,
@@ -978,8 +979,8 @@ def add_unavailable_date(soldier_id, current_user):
 
         # חישוב תאריך סיום אוטומטי לגימלים וחק"צים
         end_date = None
-        if unavailability_type in ['גימל', 'חק"צ'] and quantity:
-            # כל גימל/חק"צ = 2 ימים
+        if unavailability_type in ['גימל', 'חק"צ', 'בקשת יציאה'] and quantity:
+            # כל גימל/חק"צ/בקשת יציאה = 2 ימים
             # אם הזין את תאריך ההתחלה, נחשב את תאריך הסיום
             from datetime import timedelta
             end_date = start_date + timedelta(days=(quantity * 2) - 1)
@@ -995,6 +996,49 @@ def add_unavailable_date(soldier_id, current_user):
         )
 
         session.add(unavailable)
+        session.flush()
+
+        # מחק שיבוצים עתידיים שמושפעים מהחייל הזה
+        soldier = session.query(Soldier).get(soldier_id)
+        if soldier and soldier.mahlaka_id:
+            mahlaka = session.query(Mahlaka).get(soldier.mahlaka_id)
+            if mahlaka and mahlaka.pluga_id:
+                # מצא את השיבוץ האוטומטי
+                master_shavzak = session.query(Shavzak).filter(
+                    Shavzak.pluga_id == mahlaka.pluga_id,
+                    Shavzak.name == 'שיבוץ אוטומטי'
+                ).first()
+
+                if master_shavzak:
+                    # חשב את הטווח של ימים שצריך למחוק
+                    shavzak_start = master_shavzak.start_date
+                    affected_start_day = (start_date - shavzak_start).days
+                    affected_end_day = affected_start_day
+                    if end_date:
+                        affected_end_day = (end_date - shavzak_start).days
+
+                    # מחק רק משימות שהחייל משובץ בהן בתאריכים המושפעים
+                    for day in range(affected_start_day, affected_end_day + 1):
+                        if day < 0:
+                            continue
+                        # מצא משימות שהחייל משובץ בהן ביום זה
+                        soldier_assignments = session.query(AssignmentSoldier).join(Assignment).filter(
+                            AssignmentSoldier.soldier_id == soldier_id,
+                            Assignment.shavzak_id == master_shavzak.id,
+                            Assignment.day == day
+                        ).all()
+
+                        # מחק את המשימות האלה (כל המשימה, לא רק השיוך של החייל)
+                        for sa in soldier_assignments:
+                            assignment = session.query(Assignment).get(sa.assignment_id)
+                            if assignment:
+                                # מחק את כל השיוכים של המשימה
+                                session.query(AssignmentSoldier).filter(
+                                    AssignmentSoldier.assignment_id == assignment.id
+                                ).delete()
+                                # מחק את המשימה עצמה
+                                session.delete(assignment)
+
         session.commit()
 
         return jsonify({
@@ -1030,7 +1074,53 @@ def delete_unavailable_date(unavailable_id, current_user):
         if not can_edit_soldier(current_user, unavailable.soldier_id, session):
             return jsonify({'error': 'אין לך הרשאה'}), 403
 
+        # שמור את הפרטים לפני המחיקה
+        soldier_id = unavailable.soldier_id
+        start_date = unavailable.date
+        end_date = unavailable.end_date
+
         session.delete(unavailable)
+        session.flush()
+
+        # מחק שיבוצים עתידיים שמושפעים מהחייל הזה
+        soldier = session.query(Soldier).get(soldier_id)
+        if soldier and soldier.mahlaka_id:
+            mahlaka = session.query(Mahlaka).get(soldier.mahlaka_id)
+            if mahlaka and mahlaka.pluga_id:
+                # מצא את השיבוץ האוטומטי
+                master_shavzak = session.query(Shavzak).filter(
+                    Shavzak.pluga_id == mahlaka.pluga_id,
+                    Shavzak.name == 'שיבוץ אוטומטי'
+                ).first()
+
+                if master_shavzak:
+                    # חשב את הטווח של ימים שצריך למחוק
+                    shavzak_start = master_shavzak.start_date
+                    affected_start_day = (start_date - shavzak_start).days
+                    affected_end_day = affected_start_day
+                    if end_date:
+                        affected_end_day = (end_date - shavzak_start).days
+
+                    # מחק משימות שהחייל משובץ בהן בתאריכים המושפעים
+                    for day in range(affected_start_day, affected_end_day + 1):
+                        if day < 0:
+                            continue
+                        # מצא משימות שהחייל משובץ בהן ביום זה
+                        soldier_assignments = session.query(AssignmentSoldier).join(Assignment).filter(
+                            AssignmentSoldier.soldier_id == soldier_id,
+                            Assignment.shavzak_id == master_shavzak.id,
+                            Assignment.day == day
+                        ).all()
+
+                        # מחק את המשימות האלה
+                        for sa in soldier_assignments:
+                            assignment = session.query(Assignment).get(sa.assignment_id)
+                            if assignment:
+                                session.query(AssignmentSoldier).filter(
+                                    AssignmentSoldier.assignment_id == assignment.id
+                                ).delete()
+                                session.delete(assignment)
+
         session.commit()
 
         return jsonify({'message': 'תאריך נמחק בהצלחה'}), 200
@@ -2081,6 +2171,365 @@ def delete_join_request(current_user, request_id):
 
         return jsonify({'message': 'הבקשה נמחקה'}), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# LIVE/CONTINUOUS SCHEDULING
+# ============================================================================
+
+@app.route('/api/plugot/<int:pluga_id>/live-schedule', methods=['GET'])
+@token_required
+def get_live_schedule(pluga_id, current_user):
+    """
+    קבלת שיבוץ "חי" לתאריך מסוים
+    המערכת מבטיחה שיבוץ לפחות 7 ימים קדימה
+    """
+    session = get_session()
+
+    try:
+        # בדיקת הרשאות
+        if not can_view_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לצפות בפלוגה זו'}), 403
+
+        # קבלת התאריך המבוקש (ברירת מחדל: מחר)
+        requested_date_str = request.args.get('date')
+        if requested_date_str:
+            requested_date = datetime.strptime(requested_date_str, '%Y-%m-%d').date()
+        else:
+            requested_date = (datetime.now() + timedelta(days=1)).date()
+
+        today = datetime.now().date()
+        days_ahead = 7  # מספר ימים קדימה לבנות
+
+        # חפש או צור Shavzak "מאסטר" לפלוגה
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if not master_shavzak:
+            # צור Shavzak מאסטר
+            master_shavzak = Shavzak(
+                name='שיבוץ אוטומטי',
+                pluga_id=pluga_id,
+                created_by_user_id=current_user['id'],
+                start_date=today,
+                days_count=days_ahead,
+                min_rest_hours=8,
+                emergency_mode=False,
+                created_at=datetime.now()
+            )
+            session.add(master_shavzak)
+            session.commit()
+
+        # בדוק אם יש משימות לתאריך המבוקש
+        # חשב את day_index יחסית ל-start_date של השיבוץ
+        day_diff = (requested_date - master_shavzak.start_date).days
+
+        # אם התאריך מחוץ לטווח הנוכחי, הרחב את השיבוץ
+        max_day_needed = max((today - master_shavzak.start_date).days + days_ahead, day_diff + 1)
+
+        if max_day_needed > master_shavzak.days_count:
+            master_shavzak.days_count = max_day_needed
+            session.commit()
+
+        # בדוק אם יש משימות קיימות ליום המבוקש
+        existing_assignments = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day == day_diff
+        ).all()
+
+        # אם אין משימות, צור אותן
+        if not existing_assignments:
+            # טען תבניות
+            templates = session.query(AssignmentTemplate).filter(
+                AssignmentTemplate.pluga_id == pluga_id
+            ).all()
+
+            if templates:
+                # טען חיילים
+                mahalkot = session.query(Mahlaka).filter(
+                    Mahlaka.pluga_id == pluga_id
+                ).all()
+
+                all_soldiers = []
+                for mahlaka in mahalkot:
+                    soldiers = session.query(Soldier).filter(
+                        Soldier.mahlaka_id == mahlaka.id
+                    ).all()
+                    all_soldiers.extend(soldiers)
+
+                # חלק לקטגוריות
+                commanders = []
+                drivers = []
+                regular_soldiers = []
+
+                for soldier in all_soldiers:
+                    soldier_data = {
+                        'id': soldier.id,
+                        'name': soldier.name,
+                        'role': soldier.role,
+                        'mahlaka_id': soldier.mahlaka_id,
+                        'has_hatashab': soldier.has_hatashab or False,
+                        'certifications': []
+                    }
+
+                    # טען אי-זמינויות
+                    unavailable_dates = session.query(UnavailableDate).filter(
+                        UnavailableDate.soldier_id == soldier.id
+                    ).all()
+
+                    soldier_data['unavailable'] = []
+                    for ud in unavailable_dates:
+                        # בדוק אם החייל לא זמין בתאריך המבוקש
+                        if ud.end_date:
+                            if ud.date <= requested_date <= ud.end_date:
+                                soldier_data['unavailable'].append(requested_date.isoformat())
+                        else:
+                            if ud.date == requested_date:
+                                soldier_data['unavailable'].append(requested_date.isoformat())
+
+                    # סווג לפי תפקיד
+                    if soldier.role in ['ממ', 'מכ', 'סמל']:
+                        commanders.append(soldier_data)
+                    elif soldier.role == 'נהג':
+                        drivers.append(soldier_data)
+                    else:
+                        regular_soldiers.append(soldier_data)
+
+                # יצירת logic instance
+                logic = AssignmentLogic(8, False)  # 8 שעות מנוחה, לא מצב חירום
+
+                # צור משימות לפי תבניות
+                for template in templates:
+                    # בדוק אם התבנית מתאימה ליום זה
+                    if template.days and day_diff not in template.days:
+                        continue
+
+                    # קרא למתודה המתאימה ב-logic
+                    result = None
+                    if template.type == 'סיור':
+                        result = logic.assign_patrol(
+                            day_diff,
+                            template.start_hour,
+                            template.length_in_hours,
+                            commanders,
+                            drivers,
+                            regular_soldiers,
+                            template.assigned_mahlaka_id
+                        )
+                    elif template.type == 'שמירה':
+                        result = logic.assign_guard(
+                            day_diff,
+                            template.start_hour,
+                            template.length_in_hours,
+                            regular_soldiers
+                        )
+                    # ... אפשר להוסיף עוד סוגי משימות
+
+                    if result and 'error' not in result:
+                        # צור Assignment
+                        assignment = Assignment(
+                            shavzak_id=master_shavzak.id,
+                            name=template.name,
+                            type=template.type,
+                            day=day_diff,
+                            start_hour=template.start_hour,
+                            length_in_hours=template.length_in_hours,
+                            assigned_mahlaka_id=template.assigned_mahlaka_id
+                        )
+                        session.add(assignment)
+                        session.flush()
+
+                        # הוסף חיילים למשימה
+                        for role_key in ['commanders', 'drivers', 'soldiers']:
+                            if role_key in result:
+                                role_name = role_key[:-1]
+                                for soldier_id in result[role_key]:
+                                    assign_soldier = AssignmentSoldier(
+                                        assignment_id=assignment.id,
+                                        soldier_id=soldier_id,
+                                        role_in_assignment=role_name
+                                    )
+                                    session.add(assign_soldier)
+
+                session.commit()
+
+                # טען מחדש את המשימות
+                existing_assignments = session.query(Assignment).filter(
+                    Assignment.shavzak_id == master_shavzak.id,
+                    Assignment.day == day_diff
+                ).all()
+
+        # בנה תגובה
+        assignments_data = []
+        for assignment in existing_assignments:
+            # טען חיילים
+            soldiers_in_assignment = session.query(AssignmentSoldier).filter(
+                AssignmentSoldier.assignment_id == assignment.id
+            ).all()
+
+            soldiers_list = []
+            for as_soldier in soldiers_in_assignment:
+                soldier = session.query(Soldier).get(as_soldier.soldier_id)
+                if soldier:
+                    soldiers_list.append({
+                        'id': soldier.id,
+                        'name': soldier.name,
+                        'role': soldier.role,
+                        'role_in_assignment': as_soldier.role_in_assignment
+                    })
+
+            assignments_data.append({
+                'id': assignment.id,
+                'name': assignment.name,
+                'type': assignment.type,
+                'day': assignment.day,
+                'start_hour': assignment.start_hour,
+                'length_in_hours': assignment.length_in_hours,
+                'assigned_mahlaka_id': assignment.assigned_mahlaka_id,
+                'soldiers': soldiers_list
+            })
+
+        return jsonify({
+            'date': requested_date.isoformat(),
+            'date_display': requested_date.strftime('%d/%m/%Y'),
+            'day_index': day_diff,
+            'assignments': assignments_data,
+            'shavzak_id': master_shavzak.id
+        }), 200
+
+    except Exception as e:
+        session.rollback()
+        print(f"Error in live schedule: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': f'שגיאה בטעינת שיבוץ: {str(e)}'}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# SCHEDULING CONSTRAINTS
+# ============================================================================
+
+@app.route('/api/plugot/<int:pluga_id>/constraints', methods=['GET'])
+@token_required
+def get_constraints(pluga_id, current_user):
+    """קבלת כל האילוצים של פלוגה"""
+    session = get_session()
+    try:
+        if not can_view_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        constraints = session.query(SchedulingConstraint).filter(
+            SchedulingConstraint.pluga_id == pluga_id,
+            SchedulingConstraint.is_active == True
+        ).all()
+
+        constraints_data = []
+        for c in constraints:
+            mahlaka_name = None
+            if c.mahlaka_id:
+                mahlaka = session.query(Mahlaka).get(c.mahlaka_id)
+                if mahlaka:
+                    mahlaka_name = f"מחלקה {mahlaka.number}"
+
+            constraints_data.append({
+                'id': c.id,
+                'mahlaka_id': c.mahlaka_id,
+                'mahlaka_name': mahlaka_name,
+                'constraint_type': c.constraint_type,
+                'assignment_type': c.assignment_type,
+                'constraint_value': c.constraint_value,
+                'days_of_week': c.days_of_week,
+                'start_date': c.start_date.isoformat() if c.start_date else None,
+                'end_date': c.end_date.isoformat() if c.end_date else None,
+                'reason': c.reason,
+                'created_at': c.created_at.isoformat()
+            })
+
+        return jsonify({'constraints': constraints_data}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/plugot/<int:pluga_id>/constraints', methods=['POST'])
+@token_required
+@role_required(['מפ', 'ממ'])
+def create_constraint(pluga_id, current_user):
+    """יצירת אילוץ חדש"""
+    session = get_session()
+    try:
+        if not can_edit_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+
+        # המרת תאריכים
+        start_date = None
+        end_date = None
+        if data.get('start_date'):
+            start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        if data.get('end_date'):
+            end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+
+        constraint = SchedulingConstraint(
+            pluga_id=pluga_id,
+            mahlaka_id=data.get('mahlaka_id'),
+            constraint_type=data['constraint_type'],
+            assignment_type=data.get('assignment_type'),
+            constraint_value=data.get('constraint_value'),
+            days_of_week=data.get('days_of_week'),
+            start_date=start_date,
+            end_date=end_date,
+            reason=data.get('reason'),
+            is_active=True,
+            created_by=current_user['id']
+        )
+
+        session.add(constraint)
+        session.commit()
+
+        return jsonify({
+            'message': 'אילוץ נוצר בהצלחה',
+            'constraint': {
+                'id': constraint.id,
+                'constraint_type': constraint.constraint_type
+            }
+        }), 201
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/constraints/<int:constraint_id>', methods=['DELETE'])
+@token_required
+@role_required(['מפ', 'ממ'])
+def delete_constraint(constraint_id, current_user):
+    """מחיקת אילוץ"""
+    session = get_session()
+    try:
+        constraint = session.query(SchedulingConstraint).get(constraint_id)
+        if not constraint:
+            return jsonify({'error': 'אילוץ לא נמצא'}), 404
+
+        if not can_edit_pluga(current_user, constraint.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        # במקום למחוק, נסמן כלא פעיל
+        constraint.is_active = False
+        session.commit()
+
+        return jsonify({'message': 'אילוץ נמחק בהצלחה'}), 200
+    except Exception as e:
+        session.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()

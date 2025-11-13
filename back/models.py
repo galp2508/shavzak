@@ -226,6 +226,34 @@ class JoinRequest(Base):
         self.password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
+class SchedulingConstraint(Base):
+    """אילוצי שיבוץ"""
+    __tablename__ = 'scheduling_constraints'
+
+    id = Column(Integer, primary_key=True)
+    pluga_id = Column(Integer, ForeignKey('plugot.id'), nullable=False)
+    mahlaka_id = Column(Integer, ForeignKey('mahalkot.id'), nullable=True)  # אם None, חל על כל הפלוגה
+
+    constraint_type = Column(String(50), nullable=False)  # 'cannot_assign', 'max_assignments_per_day', 'restricted_hours'
+    assignment_type = Column(String(50), nullable=True)  # אם None, חל על כל סוגי המשימות
+
+    # ערכים נוספים (JSON או ערך בודד)
+    constraint_value = Column(String(255), nullable=True)  # למשל: "3" עבור max_assignments, או "22-06" עבור restricted_hours
+
+    days_of_week = Column(String(50), nullable=True)  # למשל: "0,1,2" (ראשון, שני, שלישי)
+    start_date = Column(Date, nullable=True)  # תאריך התחלה (אופציונלי)
+    end_date = Column(Date, nullable=True)  # תאריך סיום (אופציונלי)
+
+    reason = Column(Text, nullable=True)  # סיבה/הערה
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+
+    pluga = relationship("Pluga", foreign_keys=[pluga_id])
+    mahlaka = relationship("Mahlaka", foreign_keys=[mahlaka_id])
+
+
 def init_db(db_path='shavzak.db'):
     """אתחול מסד הנתונים"""
     engine = create_engine(f'sqlite:///{db_path}', echo=False)

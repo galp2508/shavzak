@@ -7,6 +7,13 @@ const api = axios.create({
   },
 });
 
+// פונקציה גלובלית שתוגדר על ידי App.jsx
+let serverDownCallback = null;
+
+export const setServerDownCallback = (callback) => {
+  serverDownCallback = callback;
+};
+
 // Add token to requests
 api.interceptors.request.use(
   (config) => {
@@ -23,6 +30,15 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // בדוק אם יש שגיאת רשת (השרת לא זמין)
+    if (!error.response && error.code === 'ERR_NETWORK') {
+      console.error('🔴 השרת לא זמין - שגיאת רשת');
+      if (serverDownCallback) {
+        serverDownCallback();
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401) {
       // Unauthorized - redirect to login
       localStorage.removeItem('token');

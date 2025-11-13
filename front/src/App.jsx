@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
+import { useServerStatus } from './context/ServerStatusContext';
+import { setServerDownCallback } from './services/api';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -14,6 +17,7 @@ import LiveSchedule from './pages/LiveSchedule';
 import Profile from './pages/Profile';
 import JoinRequests from './pages/JoinRequests';
 import Loading from './components/Loading';
+import MaintenanceScreen from './components/MaintenanceScreen';
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -54,6 +58,18 @@ const PublicRoute = ({ children }) => {
 };
 
 function App() {
+  const { isServerDown, markServerDown } = useServerStatus();
+
+  // הגדר את ה-callback לזיהוי שרת לא זמין
+  useEffect(() => {
+    setServerDownCallback(markServerDown);
+  }, [markServerDown]);
+
+  // אם השרת לא זמין, הצג מסך תחזוקה
+  if (isServerDown) {
+    return <MaintenanceScreen />;
+  }
+
   return (
     <BrowserRouter>
       <Routes>

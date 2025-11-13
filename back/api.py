@@ -789,6 +789,7 @@ def get_soldier(soldier_id, current_user):
                 'birth_date': soldier.birth_date.isoformat() if soldier.birth_date else None,
                 'home_round_date': soldier.home_round_date.isoformat() if soldier.home_round_date else None,
                 'has_hatashab': soldier.has_hatashab,
+                'hatash_2_days': soldier.hatash_2_days,
                 'mahlaka_id': soldier.mahlaka_id,
                 'certifications': cert_list,
                 'unavailable_dates': unavailable_list
@@ -847,6 +848,8 @@ def update_soldier(soldier_id, current_user):
             soldier.has_hatashab = data['has_hatash_2']
         if 'has_hatashab' in data:
             soldier.has_hatashab = data['has_hatashab']
+        if 'hatash_2_days' in data:
+            soldier.hatash_2_days = data['hatash_2_days'] if data['hatash_2_days'] else None
 
         # עדכון תאריכים
         if 'recruit_date' in data and data['recruit_date']:
@@ -937,6 +940,7 @@ def list_soldiers_by_mahlaka(mahlaka_id, current_user):
                 'kita': soldier.kita,
                 'certifications': cert_list,
                 'has_hatashab': soldier.has_hatashab,
+                'hatash_2_days': soldier.hatash_2_days,
                 'in_round': in_round
             }
 
@@ -1469,9 +1473,12 @@ def generate_shavzak(shavzak_id, current_user):
                 ).all()
                 
                 unavailable_dates = [u.date for u in unavailable]
-                
+
                 certifications = session.query(Certification).filter_by(soldier_id=soldier.id).all()
                 cert_list = [c.certification_name for c in certifications]
+
+                # קבל סטטוס נוכחי
+                status = session.query(SoldierStatus).filter_by(soldier_id=soldier.id).first()
 
                 soldier_data = {
                     'id': soldier.id,
@@ -1479,7 +1486,9 @@ def generate_shavzak(shavzak_id, current_user):
                     'role': soldier.role,
                     'kita': soldier.kita,
                     'certifications': cert_list,
-                    'unavailable_dates': unavailable_dates
+                    'unavailable_dates': unavailable_dates,
+                    'hatash_2_days': soldier.hatash_2_days,
+                    'status_type': status.status_type if status else 'בבסיס'
                 }
 
                 if soldier.role in ['ממ', 'מכ', 'סמל']:
@@ -1497,6 +1506,29 @@ def generate_shavzak(shavzak_id, current_user):
                 'soldiers': regular_soldiers
             })
         
+        # פונקציה לבדיקת זמינות חייל ביום מסוים
+        def is_soldier_available(soldier_data, check_date):
+            """בודק אם חייל זמין ביום מסוים, תוך התחשבות בהתש"ב 2 וריתוק"""
+            # אם החייל בריתוק, הוא לא זמין (ריתוק מבטל הכל)
+            if soldier_data.get('status_type') == 'ריתוק':
+                return False
+
+            # בדוק אם התאריך באי זמינות רגילה
+            if check_date in soldier_data.get('unavailable_dates', []):
+                return False
+
+            # בדוק התש"ב 2 - ימים קבועים שהחייל לא זמין
+            hatash_2_days = soldier_data.get('hatash_2_days')
+            if hatash_2_days:
+                day_of_week = check_date.weekday()  # 0=Monday, 6=Sunday
+                # התאם ל-0=Sunday כמו שמצפים בממשק
+                day_of_week = (day_of_week + 1) % 7
+                hatash_days_list = hatash_2_days.split(',')
+                if str(day_of_week) in hatash_days_list:
+                    return False
+
+            return True
+
         # אתחול אלגוריתם
         logic = AssignmentLogic(min_rest_hours=shavzak.min_rest_hours)
         
@@ -1544,22 +1576,22 @@ def generate_shavzak(shavzak_id, current_user):
                 # בדיקת זמינות לפי תאריך
                 current_date = assign_data['date']
                 
-                # סינון חיילים לא זמינים
+                # סינון חיילים לא זמינים (כולל התש"ב 2 וריתוק)
                 available_mahalkot = []
                 for mahlaka_info in mahalkot_data:
                     available_commanders = [
                         c for c in mahlaka_info['commanders']
-                        if current_date not in c['unavailable_dates']
+                        if is_soldier_available(c, current_date)
                     ]
                     available_drivers = [
                         d for d in mahlaka_info['drivers']
-                        if current_date not in d['unavailable_dates']
+                        if is_soldier_available(d, current_date)
                     ]
                     available_soldiers = [
                         s for s in mahlaka_info['soldiers']
-                        if current_date not in s['unavailable_dates']
+                        if is_soldier_available(s, current_date)
                     ]
-                    
+
                     available_mahalkot.append({
                         'id': mahlaka_info['id'],
                         'number': mahlaka_info['number'],
@@ -1567,10 +1599,10 @@ def generate_shavzak(shavzak_id, current_user):
                         'drivers': available_drivers,
                         'soldiers': available_soldiers
                     })
-                
-                available_commanders = [c for c in all_commanders if current_date not in c['unavailable_dates']]
-                available_drivers = [d for d in all_drivers if current_date not in d['unavailable_dates']]
-                available_soldiers = [s for s in all_soldiers if current_date not in s['unavailable_dates']]
+
+                available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
+                available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
+                available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
                 
                 # בחירת פונקציית שיבוץ
                 result = None
@@ -1650,17 +1682,17 @@ def generate_shavzak(shavzak_id, current_user):
                         available_mahalkot.append({
                             'id': mahlaka_info['id'],
                             'number': mahlaka_info['number'],
-                            'commanders': [c for c in mahlaka_info['commanders'] 
-                                         if current_date not in c['unavailable_dates']],
-                            'drivers': [d for d in mahlaka_info['drivers'] 
-                                       if current_date not in d['unavailable_dates']],
-                            'soldiers': [s for s in mahlaka_info['soldiers'] 
-                                        if current_date not in s['unavailable_dates']]
+                            'commanders': [c for c in mahlaka_info['commanders']
+                                         if is_soldier_available(c, current_date)],
+                            'drivers': [d for d in mahlaka_info['drivers']
+                                       if is_soldier_available(d, current_date)],
+                            'soldiers': [s for s in mahlaka_info['soldiers']
+                                        if is_soldier_available(s, current_date)]
                         })
-                    
-                    available_commanders = [c for c in all_commanders if current_date not in c['unavailable_dates']]
-                    available_drivers = [d for d in all_drivers if current_date not in d['unavailable_dates']]
-                    available_soldiers = [s for s in all_soldiers if current_date not in s['unavailable_dates']]
+
+                    available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
+                    available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
+                    available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
                     
                     result = None
                     if assign_data['type'] == 'סיור':

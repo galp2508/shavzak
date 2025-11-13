@@ -494,7 +494,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
             {/* Block 1: ממ"ו */}
             <div className="border-l-4 border-military-600 pl-4">
               <h3 className="font-bold text-lg mb-3">מ"מ (מפקד מחלקה)</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                 <input
                   type="text"
                   placeholder="שם ממ״ו"
@@ -502,19 +502,21 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                   onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mm: { ...soldiersFormData.mm, name: e.target.value } })}
                   className="input-field"
                 />
-                <input
-                  type="date"
-                  value={soldiersFormData.mm.date}
-                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mm: { ...soldiersFormData.mm, date: e.target.value } })}
-                  className="input-field"
-                />
+                {!useSharedDate && (
+                  <input
+                    type="date"
+                    value={soldiersFormData.mm.date}
+                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mm: { ...soldiersFormData.mm, date: e.target.value } })}
+                    className="input-field"
+                  />
+                )}
               </div>
             </div>
 
             {/* Block 2: סמל */}
             <div className="border-l-4 border-blue-600 pl-4">
               <h3 className="font-bold text-lg mb-3">סמל</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                 <input
                   type="text"
                   placeholder="שם סמל"
@@ -522,12 +524,14 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                   onChange={(e) => setSoldiersFormData({ ...soldiersFormData, samal: { ...soldiersFormData.samal, name: e.target.value } })}
                   className="input-field"
                 />
-                <input
-                  type="date"
-                  value={soldiersFormData.samal.date}
-                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, samal: { ...soldiersFormData.samal, date: e.target.value } })}
-                  className="input-field"
-                />
+                {!useSharedDate && (
+                  <input
+                    type="date"
+                    value={soldiersFormData.samal.date}
+                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, samal: { ...soldiersFormData.samal, date: e.target.value } })}
+                    className="input-field"
+                  />
+                )}
               </div>
             </div>
 
@@ -535,7 +539,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
             <div className="border-l-4 border-green-600 pl-4">
               <h3 className="font-bold text-lg mb-3">מ"כ (מפקדי כיתה)</h3>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                   <input
                     type="text"
                     placeholder={`שם מ"כ כיתה ${formData.number}א`}
@@ -543,14 +547,16 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                     onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXa: { ...soldiersFormData.mkXa, name: e.target.value } })}
                     className="input-field"
                   />
-                  <input
-                    type="date"
-                    value={soldiersFormData.mkXa.date}
-                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXa: { ...soldiersFormData.mkXa, date: e.target.value } })}
-                    className="input-field"
-                  />
+                  {!useSharedDate && (
+                    <input
+                      type="date"
+                      value={soldiersFormData.mkXa.date}
+                      onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXa: { ...soldiersFormData.mkXa, date: e.target.value } })}
+                      className="input-field"
+                    />
+                  )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                   <input
                     type="text"
                     placeholder={`שם מ"כ כיתה ${formData.number}ב`}
@@ -558,14 +564,16 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                     onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXb: { ...soldiersFormData.mkXb, name: e.target.value } })}
                     className="input-field"
                   />
-                  <input
-                    type="date"
-                    value={soldiersFormData.mkXb.date}
-                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXb: { ...soldiersFormData.mkXb, date: e.target.value } })}
-                    className="input-field"
-                  />
+                  {!useSharedDate && (
+                    <input
+                      type="date"
+                      value={soldiersFormData.mkXb.date}
+                      onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXb: { ...soldiersFormData.mkXb, date: e.target.value } })}
+                      className="input-field"
+                    />
+                  )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                   <input
                     type="text"
                     placeholder={`שם מ"כ כיתה ${formData.number}ג`}
@@ -573,12 +581,14 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                     onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXg: { ...soldiersFormData.mkXg, name: e.target.value } })}
                     className="input-field"
                   />
-                  <input
-                    type="date"
-                    value={soldiersFormData.mkXg.date}
-                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXg: { ...soldiersFormData.mkXg, date: e.target.value } })}
-                    className="input-field"
-                  />
+                  {!useSharedDate && (
+                    <input
+                      type="date"
+                      value={soldiersFormData.mkXg.date}
+                      onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXg: { ...soldiersFormData.mkXg, date: e.target.value } })}
+                      className="input-field"
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -586,15 +596,17 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
             {/* Block 4: חיילים כיתה א */}
             <div className="border-l-4 border-orange-600 pl-4">
               <h3 className="font-bold text-lg mb-3">חיילים כיתה {formData.number}א</h3>
-              <div className="mb-3">
-                <input
-                  type="date"
-                  value={soldiersFormData.kitaA.date}
-                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, date: e.target.value } })}
-                  className="input-field w-full"
-                  placeholder="תאריך יציאה"
-                />
-              </div>
+              {!useSharedDate && (
+                <div className="mb-3">
+                  <input
+                    type="date"
+                    value={soldiersFormData.kitaA.date}
+                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, date: e.target.value } })}
+                    className="input-field w-full"
+                    placeholder="תאריך יציאה"
+                  />
+                </div>
+              )}
 
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {soldiersFormData.kitaA.soldiers.map((soldier, idx) => (
@@ -634,15 +646,17 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
             {/* Block 5: חיילים כיתה ב */}
             <div className="border-l-4 border-purple-600 pl-4">
               <h3 className="font-bold text-lg mb-3">חיילים כיתה {formData.number}ב</h3>
-              <div className="mb-3">
-                <input
-                  type="date"
-                  value={soldiersFormData.kitaB.date}
-                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, date: e.target.value } })}
-                  className="input-field w-full"
-                  placeholder="תאריך יציאה"
-                />
-              </div>
+              {!useSharedDate && (
+                <div className="mb-3">
+                  <input
+                    type="date"
+                    value={soldiersFormData.kitaB.date}
+                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, date: e.target.value } })}
+                    className="input-field w-full"
+                    placeholder="תאריך יציאה"
+                  />
+                </div>
+              )}
 
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {soldiersFormData.kitaB.soldiers.map((soldier, idx) => (
@@ -682,15 +696,17 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
             {/* Block 6: חיילים כיתה ג */}
             <div className="border-l-4 border-pink-600 pl-4">
               <h3 className="font-bold text-lg mb-3">חיילים כיתה {formData.number}ג</h3>
-              <div className="mb-3">
-                <input
-                  type="date"
-                  value={soldiersFormData.kitaG.date}
-                  onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, date: e.target.value } })}
-                  className="input-field w-full"
-                  placeholder="תאריך יציאה"
-                />
-              </div>
+              {!useSharedDate && (
+                <div className="mb-3">
+                  <input
+                    type="date"
+                    value={soldiersFormData.kitaG.date}
+                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, date: e.target.value } })}
+                    className="input-field w-full"
+                    placeholder="תאריך יציאה"
+                  />
+                </div>
+              )}
 
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {soldiersFormData.kitaG.soldiers.map((soldier, idx) => (
@@ -1011,8 +1027,10 @@ const SoldierEditModal = ({ soldier, mahlakaId, onClose, onSave }) => {
     birth_date: soldier?.birth_date || '',
     home_round_date: soldier?.home_round_date || '',
     has_hatashab: soldier?.has_hatashab || false,
+    hatash_2_days: soldier?.hatash_2_days || '',
   });
   const [loading, setLoading] = useState(false);
+  const [hatash2Enabled, setHatash2Enabled] = useState(!!soldier?.hatash_2_days);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1236,7 +1254,7 @@ const SoldierEditModal = ({ soldier, mahlakaId, onClose, onSave }) => {
           {/* סטטוסים */}
           <div>
             <h3 className="font-bold text-gray-900 mb-3 pb-2 border-b">סטטוסים</h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1246,6 +1264,67 @@ const SoldierEditModal = ({ soldier, mahlakaId, onClose, onSave }) => {
                 />
                 <span className="text-gray-700">יש התש״ב</span>
               </label>
+
+              {/* התש"ב 2 - ימים קבועים */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <label className="flex items-center gap-2 cursor-pointer mb-3">
+                  <input
+                    type="checkbox"
+                    checked={hatash2Enabled}
+                    onChange={(e) => {
+                      setHatash2Enabled(e.target.checked);
+                      if (!e.target.checked) {
+                        setFormData({ ...formData, hatash_2_days: '' });
+                      }
+                    }}
+                    className="w-4 h-4 text-military-600"
+                  />
+                  <span className="text-gray-700 font-medium">התש״ב 2 - ימים קבועים שהחייל לא זמין</span>
+                </label>
+
+                {hatash2Enabled && (
+                  <div className="mr-6">
+                    <p className="text-xs text-gray-600 mb-2">בחר ימים בשבוע שהחייל לא זמין באופן קבוע:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'ראשון', value: '0' },
+                        { label: 'שני', value: '1' },
+                        { label: 'שלישי', value: '2' },
+                        { label: 'רביעי', value: '3' },
+                        { label: 'חמישי', value: '4' },
+                        { label: 'שישי', value: '5' },
+                        { label: 'שבת', value: '6' }
+                      ].map((day) => {
+                        const daysArray = formData.hatash_2_days ? formData.hatash_2_days.split(',') : [];
+                        const isChecked = daysArray.includes(day.value);
+
+                        return (
+                          <label key={day.value} className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                let newDays = [...daysArray];
+                                if (e.target.checked) {
+                                  newDays.push(day.value);
+                                } else {
+                                  newDays = newDays.filter(d => d !== day.value);
+                                }
+                                setFormData({ ...formData, hatash_2_days: newDays.sort().join(',') });
+                              }}
+                              className="w-4 h-4 text-military-600"
+                            />
+                            <span className="text-sm text-gray-700">{day.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      * ריתוק מבטל התש״ב 2 - אם החייל בריתוק, הוא נשאר בבסיס גם בימים אלה
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

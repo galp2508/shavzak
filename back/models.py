@@ -92,7 +92,8 @@ class Soldier(Base):
     home_round_date = Column(Date, nullable=True)
 
     has_hatashab = Column(Boolean, default=False)
-    
+    hatash_2_days = Column(String(50), nullable=True)  # ימי התש"ב 2 קבועים (למשל: "1,2" עבור שני ושלישי, 0=ראשון)
+
     mahlaka_id = Column(Integer, ForeignKey('mahalkot.id'), nullable=False)
     
     mahlaka = relationship("Mahlaka", back_populates="soldiers")

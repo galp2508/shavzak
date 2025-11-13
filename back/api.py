@@ -80,6 +80,25 @@ def check_and_run_migrations():
         else:
             print("✅ is_platoon_commander כבר הוסר")
 
+        # בדיקה 3: הוספת hatash_2_days לטבלת soldiers
+        cursor.execute("PRAGMA table_info(soldiers)")
+        soldier_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'hatash_2_days' not in soldier_columns:
+            print("⚠️  מזהה עמודה חסרה: hatash_2_days")
+            print("🔧 מריץ migration אוטומטי להוספת hatash_2_days...")
+            conn.close()
+            from migrate_add_hatash_2_days import migrate_database as migrate_add_hatash_2
+            if migrate_add_hatash_2(DB_PATH):
+                print("✅ Migration להוספת hatash_2_days הושלם בהצלחה")
+            else:
+                print("❌ Migration להוספת hatash_2_days נכשל")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        else:
+            print("✅ hatash_2_days כבר קיים")
+
         conn.close()
         return True
     except Exception as e:

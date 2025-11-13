@@ -12,7 +12,7 @@ from models import (
     init_db, get_session, User, Pluga, Mahlaka, Soldier,
     Certification, UnavailableDate, AssignmentTemplate,
     Shavzak, Assignment, AssignmentSoldier, JoinRequest,
-    SchedulingConstraint
+    SchedulingConstraint, SoldierStatus
 )
 from auth import (
     create_token, token_required, role_required,

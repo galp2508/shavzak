@@ -57,8 +57,21 @@ const LiveSchedule = () => {
       const response = await api.get(`/plugot/${user.pluga_id}/live-schedule?date=${dateStr}`);
       setScheduleData(response.data);
     } catch (error) {
-      toast.error('שגיאה בטעינת שיבוץ: ' + (error.response?.data?.error || error.message));
-      console.error(error);
+      const errorData = error.response?.data;
+      let errorMessage = errorData?.error || error.message;
+
+      // הוסף המלצות אם קיימות
+      if (errorData?.suggestions && errorData.suggestions.length > 0) {
+        errorMessage += '\n\nהמלצות:\n' + errorData.suggestions.map(s => `• ${s}`).join('\n');
+      }
+
+      // הצג גם פרטים טכניים אם קיימים
+      if (errorData?.technical_details) {
+        console.error('Technical details:', errorData.technical_details);
+      }
+
+      toast.error(errorMessage, { autoClose: 8000 });
+      console.error('Load schedule error:', error);
     } finally {
       setLoading(false);
     }

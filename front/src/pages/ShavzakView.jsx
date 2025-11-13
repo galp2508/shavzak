@@ -185,7 +185,15 @@ const ShavzakView = () => {
                     await loadData();
                   } catch (error) {
                     console.error('Generate error:', error);
-                    toast.error(error.response?.data?.error || 'שגיאה ביצירת שיבוץ: ' + error.message);
+                    const errorData = error.response?.data;
+                    let errorMessage = errorData?.error || 'שגיאה ביצירת שיבוץ: ' + error.message;
+
+                    // הצג פרטים טכניים בקונסול
+                    if (errorData?.technical_details) {
+                      console.error('Technical details:', errorData.technical_details);
+                    }
+
+                    toast.error(errorMessage, { autoClose: 8000 });
                   } finally {
                     setLoading(false);
                   }

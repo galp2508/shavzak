@@ -1661,7 +1661,11 @@ def generate_shavzak(shavzak_id, current_user):
                     )
                     session.add(assignment)
                     session.flush()
-                    
+
+                    # וידוא שה-assignment נוצר כראוי
+                    if not assignment.id:
+                        raise ValueError(f"שגיאה ביצירת משימה '{assign_data['name']}' ליום {assign_data['day']} - לא ניתן היה לשמור את המשימה במסד הנתונים")
+
                     # הוספת חיילים
                     for role_key in ['commanders', 'drivers', 'soldiers']:
                         if role_key in result:
@@ -1732,7 +1736,11 @@ def generate_shavzak(shavzak_id, current_user):
                         )
                         session.add(assignment)
                         session.flush()
-                        
+
+                        # וידוא שה-assignment נוצר כראוי (במצב חירום)
+                        if not assignment.id:
+                            continue  # דלג על משימה זו במצב חירום
+
                         for role_key in ['commanders', 'drivers', 'soldiers']:
                             if role_key in result:
                                 role_name = role_key[:-1]
@@ -1773,7 +1781,27 @@ def generate_shavzak(shavzak_id, current_user):
     except Exception as e:
         session.rollback()
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+
+        # הפקת הודעת שגיאה ברורה
+        error_msg = str(e)
+        detailed_error = 'שגיאה לא ידועה בשיבוץ'
+
+        # זיהוי סוגי שגיאות נפוצות
+        if 'NoneType' in error_msg and 'id' in error_msg:
+            detailed_error = 'שגיאה ביצירת משימה - המערכת לא הצליחה לשמור משימה במסד הנתונים. ייתכן שיש בעיה בהגדרות הפלוגה או במסד הנתונים.'
+        elif 'no such column' in error_msg.lower():
+            detailed_error = 'שגיאת מסד נתונים - חסר שדה במסד הנתונים. יש לפנות למנהל המערכת.'
+        elif 'foreign key' in error_msg.lower():
+            detailed_error = 'שגיאה בקשרים - אחד הנתונים (פלוגה, מחלקה או חייל) אינו תקין במערכת.'
+        elif 'לא קיימות תבניות משימות' in error_msg:
+            detailed_error = 'אין תבניות משימות מוגדרות במערכת. יש להגדיר תבניות משימות לפני יצירת שיבוץ אוטומטי.'
+        elif 'לא ניתן היה לשמור את המשימה' in error_msg:
+            detailed_error = error_msg  # השגיאה כבר ברורה
+
+        return jsonify({
+            'error': detailed_error,
+            'technical_details': error_msg
+        }), 500
     finally:
         session.close()
 
@@ -2376,22 +2404,40 @@ def get_live_schedule(pluga_id, current_user):
 
         # נסה לנתח את השגיאה
         error_msg = str(e)
+        detailed_error = 'שגיאה בטעינת שיבוץ חי'
+        error_type = 'unknown_error'
+        suggestions = []
+
+        # נתח שגיאות נפוצות והוסף המלצות
+        if 'created_by' in error_msg or 'user_id' in error_msg:
+            detailed_error = 'שגיאה ביצירת שיבוץ אוטומטי - בעיית הרשאות משתמש'
+            error_type = 'permission_error'
+            suggestions.append('ודא שהמשתמש שלך קיים במערכת')
+        elif 'no such column' in error_msg.lower():
+            detailed_error = 'שגיאת מסד נתונים - חסרים שדות במסד הנתונים'
+            error_type = 'database_schema_error'
+            suggestions.append('יש לפנות למנהל המערכת לעדכון מסד הנתונים')
+        elif 'foreign key' in error_msg.lower():
+            detailed_error = 'שגיאת קשרים - אחד הנתונים (פלוגה או מחלקה) אינו תקין'
+            error_type = 'foreign_key_error'
+            suggestions.append('ודא שהפלוגה והמחלקות מוגדרות כראוי במערכת')
+        elif 'pluga_id' in error_msg:
+            detailed_error = 'שגיאה בזיהוי הפלוגה'
+            error_type = 'pluga_error'
+            suggestions.append('ודא שאתה משויך לפלוגה תקינה')
+        elif 'NoneType' in error_msg:
+            detailed_error = 'שגיאה בטעינת נתונים - אחד הנתונים הנדרשים חסר'
+            error_type = 'missing_data_error'
+            suggestions.append('ודא שכל הנתונים הבסיסיים (פלוגה, מחלקות, חיילים) מוגדרים במערכת')
+
         error_response = {
-            'error': 'שגיאה בטעינת שיבוץ',
-            'error_type': 'unknown_error',
-            'details': error_msg
+            'error': detailed_error,
+            'error_type': error_type,
+            'technical_details': error_msg
         }
 
-        # נתח שגיאות נפוצות
-        if 'created_by_user_id' in error_msg:
-            error_response['error'] = 'שגיאה ביצירת שיבוץ - בעיית הרשאות'
-            error_response['error_type'] = 'permission_error'
-        elif 'no such column' in error_msg.lower():
-            error_response['error'] = 'שגיאת מסד נתונים - חסרים שדות'
-            error_response['error_type'] = 'database_schema_error'
-        elif 'foreign key' in error_msg.lower():
-            error_response['error'] = 'שגיאת קשרים - נתון לא תקין'
-            error_response['error_type'] = 'foreign_key_error'
+        if suggestions:
+            error_response['suggestions'] = suggestions
 
         return jsonify(error_response), 500
     finally:

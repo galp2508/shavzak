@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useServerStatus } from './context/ServerStatusContext';
-import { setServerDownCallback } from './services/api';
+import { setServerDownCallback, setServerUpCallback } from './services/api';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -57,12 +57,13 @@ const PublicRoute = ({ children }) => {
 };
 
 function App() {
-  const { isServerDown, markServerDown } = useServerStatus();
+  const { isServerDown, markServerDown, markServerUp } = useServerStatus();
 
-  // הגדר את ה-callback לזיהוי שרת לא זמין
+  // הגדר את ה-callbacks לזיהוי מצב השרת
   useEffect(() => {
     setServerDownCallback(markServerDown);
-  }, [markServerDown]);
+    setServerUpCallback(markServerUp);
+  }, [markServerDown, markServerUp]);
 
   // אם השרת לא זמין, הצג מסך תחזוקה
   if (isServerDown) {

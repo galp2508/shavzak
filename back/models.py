@@ -157,22 +157,23 @@ class SoldierStatus(Base):
 class AssignmentTemplate(Base):
     """תבנית משימה"""
     __tablename__ = 'assignment_templates'
-    
+
     id = Column(Integer, primary_key=True)
     pluga_id = Column(Integer, ForeignKey('plugot.id'), nullable=False)
-    
+
     name = Column(String(100), nullable=False)
     assignment_type = Column(String(50), nullable=False)
     length_in_hours = Column(Integer, nullable=False)
     times_per_day = Column(Integer, nullable=False)
-    
+    start_hour = Column(Integer, nullable=True)  # שעת התחלה אופציונלית (0-23)
+
     commanders_needed = Column(Integer, default=0)
     drivers_needed = Column(Integer, default=0)
     soldiers_needed = Column(Integer, default=0)
     same_mahlaka_required = Column(Boolean, default=False)
     requires_certification = Column(String(100), nullable=True)
     requires_senior_commander = Column(Boolean, default=False)
-    
+
     pluga = relationship("Pluga", back_populates="assignment_templates")
 
 

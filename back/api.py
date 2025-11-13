@@ -99,6 +99,25 @@ def check_and_run_migrations():
         else:
             print("✅ hatash_2_days כבר קיים")
 
+        # בדיקה 4: הוספת start_hour לטבלת assignment_templates
+        cursor.execute("PRAGMA table_info(assignment_templates)")
+        template_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'start_hour' not in template_columns:
+            print("⚠️  מזהה עמודה חסרה: start_hour")
+            print("🔧 מריץ migration אוטומטי להוספת start_hour...")
+            conn.close()
+            from migrate_add_start_hour import migrate_database as migrate_add_start_hour
+            if migrate_add_start_hour(DB_PATH):
+                print("✅ Migration להוספת start_hour הושלם בהצלחה")
+            else:
+                print("❌ Migration להוספת start_hour נכשל")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        else:
+            print("✅ start_hour כבר קיים")
+
         conn.close()
         return True
     except Exception as e:
@@ -1305,6 +1324,7 @@ def create_assignment_template(pluga_id, current_user):
             assignment_type=data['assignment_type'],
             length_in_hours=data['length_in_hours'],
             times_per_day=data['times_per_day'],
+            start_hour=data.get('start_hour'),
             commanders_needed=data.get('commanders_needed', 0),
             drivers_needed=data.get('drivers_needed', 0),
             soldiers_needed=data.get('soldiers_needed', 0),
@@ -1351,6 +1371,7 @@ def list_assignment_templates(pluga_id, current_user):
             'assignment_type': t.assignment_type,
             'length_in_hours': t.length_in_hours,
             'times_per_day': t.times_per_day,
+            'start_hour': t.start_hour,
             'commanders_needed': t.commanders_needed,
             'drivers_needed': t.drivers_needed,
             'soldiers_needed': t.soldiers_needed,
@@ -1393,6 +1414,8 @@ def update_assignment_template(template_id, current_user):
             template.length_in_hours = data['length_in_hours']
         if 'times_per_day' in data:
             template.times_per_day = data['times_per_day']
+        if 'start_hour' in data:
+            template.start_hour = data['start_hour']
         if 'commanders_needed' in data:
             template.commanders_needed = data['commanders_needed']
         if 'drivers_needed' in data:

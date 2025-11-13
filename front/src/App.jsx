@@ -1,8 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useServerStatus } from './context/ServerStatusContext';
-import { setServerDownCallback } from './services/api';
+import { setServerDownCallback, resetErrorCount } from './services/api';
+import api from './services/api';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -57,16 +58,51 @@ const PublicRoute = ({ children }) => {
 };
 
 function App() {
-  const { isServerDown, markServerDown } = useServerStatus();
+  const { isServerDown, markServerDown, markServerUp } = useServerStatus();
+  const checkIntervalRef = useRef(null);
+
+  // פונקציה לבדיקת זמינות השרת
+  const checkServerStatus = useCallback(async () => {
+    try {
+      // נסה לבצע בקשה פשוטה לשרת
+      await api.get('/me');
+      console.log('✅ השרת חזר לפעילות!');
+      resetErrorCount();
+      markServerUp();
+    } catch (error) {
+      console.log('⏳ השרת עדיין לא זמין...');
+    }
+  }, [markServerUp]);
+
+  // פונקציית retry מהכפתור
+  const handleRetry = useCallback(async () => {
+    console.log('🔄 מנסה להתחבר לשרת...');
+    await checkServerStatus();
+  }, [checkServerStatus]);
 
   // הגדר את ה-callback לזיהוי שרת לא זמין
   useEffect(() => {
     setServerDownCallback(markServerDown);
   }, [markServerDown]);
 
+  // בדיקה תקופתית אם השרת חזר (כל 5 שניות)
+  useEffect(() => {
+    if (isServerDown) {
+      checkIntervalRef.current = setInterval(() => {
+        checkServerStatus();
+      }, 5000);
+
+      return () => {
+        if (checkIntervalRef.current) {
+          clearInterval(checkIntervalRef.current);
+        }
+      };
+    }
+  }, [isServerDown, checkServerStatus]);
+
   // אם השרת לא זמין, הצג מסך תחזוקה
   if (isServerDown) {
-    return <MaintenanceScreen />;
+    return <MaintenanceScreen onRetry={handleRetry} />;
   }
 
   return (

@@ -1,6 +1,6 @@
 import React from 'react';
 
-const MaintenanceScreen = () => {
+const MaintenanceScreen = ({ onRetry }) => {
   return (
     <div style={{
       minHeight: '100vh',
@@ -40,17 +40,45 @@ const MaintenanceScreen = () => {
           marginBottom: '30px',
           opacity: 0.9
         }}>
-          המערכת כרגע בתחזוקה
+          השרת לא זמין כרגע
           <br />
-          נשוב בהקדם האפשרי
+          אנא נסה שוב בעוד מספר שניות
         </p>
+
+        {/* כפתור נסה שוב */}
+        <button
+          onClick={onRetry}
+          style={{
+            background: 'white',
+            color: '#667eea',
+            border: 'none',
+            borderRadius: '10px',
+            padding: '15px 40px',
+            fontSize: '1.1rem',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+            marginBottom: '20px'
+          }}
+          onMouseOver={(e) => {
+            e.target.style.transform = 'scale(1.05)';
+            e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)';
+          }}
+          onMouseOut={(e) => {
+            e.target.style.transform = 'scale(1)';
+            e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+          }}
+        >
+          🔄 נסה שוב
+        </button>
 
         {/* אנימציית נקודות */}
         <div style={{
           display: 'flex',
           justifyContent: 'center',
           gap: '10px',
-          marginTop: '30px'
+          marginTop: '10px'
         }}>
           <div className="dot" style={{
             width: '15px',

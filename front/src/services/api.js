@@ -9,9 +9,15 @@ const api = axios.create({
 
 // פונקציה גלובלית שתוגדר על ידי App.jsx
 let serverDownCallback = null;
+let consecutiveErrors = 0;
+const MAX_ERRORS_BEFORE_MAINTENANCE = 3;
 
 export const setServerDownCallback = (callback) => {
   serverDownCallback = callback;
+};
+
+export const resetErrorCount = () => {
+  consecutiveErrors = 0;
 };
 
 // Add token to requests
@@ -28,12 +34,20 @@ api.interceptors.request.use(
 
 // Handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // אם הבקשה הצליחה, אפס את מונה השגיאות
+    consecutiveErrors = 0;
+    return response;
+  },
   (error) => {
     // בדוק אם יש שגיאת רשת (השרת לא זמין)
     if (!error.response && error.code === 'ERR_NETWORK') {
-      console.error('🔴 השרת לא זמין - שגיאת רשת');
-      if (serverDownCallback) {
+      consecutiveErrors++;
+      console.error(`🔴 שגיאת רשת (${consecutiveErrors}/${MAX_ERRORS_BEFORE_MAINTENANCE})`);
+
+      // הצג מסך תחזוקה רק אחרי 3 שגיאות רצופות
+      if (consecutiveErrors >= MAX_ERRORS_BEFORE_MAINTENANCE && serverDownCallback) {
+        console.error('🔴 השרת לא זמין - מציג מסך תחזוקה');
         serverDownCallback();
       }
       return Promise.reject(error);

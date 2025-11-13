@@ -2318,7 +2318,7 @@ def get_live_schedule(pluga_id, current_user):
             master_shavzak = Shavzak(
                 name='שיבוץ אוטומטי',
                 pluga_id=pluga_id,
-                created_by=current_user['id'],
+                created_by=current_user.id,
                 start_date=today,
                 days_count=days_ahead,
                 min_rest_hours=8,
@@ -2572,7 +2572,7 @@ def create_constraint(pluga_id, current_user):
             end_date=end_date,
             reason=data.get('reason'),
             is_active=True,
-            created_by=current_user['id']
+            created_by=current_user.id
         )
 
         session.add(constraint)
@@ -2704,7 +2704,7 @@ def update_soldier_status(soldier_id, current_user):
         status.status_type = status_type
         status.return_date = return_date_obj
         status.notes = notes
-        status.updated_by = current_user['id']
+        status.updated_by = current_user.id
         status.updated_at = datetime.now()
 
         session.flush()

@@ -623,6 +623,13 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                         }
                         setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, soldiers: newSoldiers } });
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && soldier.name === '' && soldiersFormData.kitaA.soldiers.length > 1) {
+                          e.preventDefault();
+                          const newSoldiers = soldiersFormData.kitaA.soldiers.filter((_, i) => i !== idx);
+                          setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, soldiers: newSoldiers } });
+                        }
+                      }}
                       className="input-field col-span-2"
                     />
                     <select
@@ -673,6 +680,13 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                         }
                         setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, soldiers: newSoldiers } });
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && soldier.name === '' && soldiersFormData.kitaB.soldiers.length > 1) {
+                          e.preventDefault();
+                          const newSoldiers = soldiersFormData.kitaB.soldiers.filter((_, i) => i !== idx);
+                          setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, soldiers: newSoldiers } });
+                        }
+                      }}
                       className="input-field col-span-2"
                     />
                     <select
@@ -722,6 +736,13 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                           newSoldiers.push({ name: '', role: 'לוחם' });
                         }
                         setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, soldiers: newSoldiers } });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && soldier.name === '' && soldiersFormData.kitaG.soldiers.length > 1) {
+                          e.preventDefault();
+                          const newSoldiers = soldiersFormData.kitaG.soldiers.filter((_, i) => i !== idx);
+                          setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, soldiers: newSoldiers } });
+                        }
                       }}
                       className="input-field col-span-2"
                     />

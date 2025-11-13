@@ -918,16 +918,40 @@ def list_soldiers_by_mahlaka(mahlaka_id, current_user):
         for soldier in soldiers:
             certifications = session.query(Certification).filter_by(soldier_id=soldier.id).all()
             cert_list = [cert.certification_name for cert in certifications]
-            
-            result.append({
+
+            # קבל סטטוס נוכחי
+            status = session.query(SoldierStatus).filter_by(soldier_id=soldier.id).first()
+
+            # בדוק אם בסבב קו
+            in_round = False
+            if soldier.home_round_date:
+                today = datetime.now().date()
+                days_diff = (today - soldier.home_round_date).days
+                cycle_position = days_diff % 21
+                in_round = cycle_position < 4
+
+            soldier_dict = {
                 'id': soldier.id,
                 'name': soldier.name,
                 'role': soldier.role,
                 'kita': soldier.kita,
                 'certifications': cert_list,
-                'has_hatashab': soldier.has_hatashab
-            })
-        
+                'has_hatashab': soldier.has_hatashab,
+                'in_round': in_round
+            }
+
+            # הוסף סטטוס אם קיים
+            if status:
+                soldier_dict['status'] = {
+                    'status_type': status.status_type,
+                    'return_date': status.return_date.isoformat() if status.return_date else None,
+                    'notes': status.notes
+                }
+            else:
+                soldier_dict['status'] = None
+
+            result.append(soldier_dict)
+
         return jsonify({'soldiers': result}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2635,6 +2659,135 @@ def delete_constraint(constraint_id, current_user):
         session.commit()
 
         return jsonify({'message': 'אילוץ נמחק בהצלחה'}), 200
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# SOLDIER STATUS
+# ============================================================================
+
+@app.route('/api/soldiers/<int:soldier_id>/status', methods=['GET'])
+@token_required
+def get_soldier_status(soldier_id, current_user):
+    """קבלת סטטוס נוכחי של חייל"""
+    session = get_session()
+    try:
+        soldier = session.query(Soldier).get(soldier_id)
+        if not soldier:
+            return jsonify({'error': 'חייל לא נמצא'}), 404
+
+        # בדוק אם החייל בסבב קו
+        in_round = False
+        if soldier.home_round_date:
+            today = datetime.now().date()
+            days_diff = (today - soldier.home_round_date).days
+            cycle_position = days_diff % 21
+            in_round = cycle_position < 4  # ימים 0-3 = בסבב
+
+        # קבל את הסטטוס הנוכחי או צור חדש
+        status = session.query(SoldierStatus).filter_by(soldier_id=soldier_id).first()
+        if not status:
+            status = SoldierStatus(soldier_id=soldier_id, status_type='בבסיס')
+            session.add(status)
+            session.commit()
+
+        return jsonify({
+            'status': {
+                'id': status.id,
+                'status_type': status.status_type,
+                'return_date': status.return_date.isoformat() if status.return_date else None,
+                'notes': status.notes,
+                'updated_at': status.updated_at.isoformat() if status.updated_at else None
+            },
+            'in_round': in_round
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/soldiers/<int:soldier_id>/status', methods=['PUT'])
+@token_required
+def update_soldier_status(soldier_id, current_user):
+    """עדכון סטטוס של חייל"""
+    session = get_session()
+    try:
+        if not can_edit_soldier(current_user, soldier_id, session):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+        status_type = data.get('status_type', 'בבסיס')
+        return_date = data.get('return_date')
+        notes = data.get('notes', '')
+
+        # המרת תאריך
+        return_date_obj = None
+        if return_date:
+            return_date_obj = datetime.strptime(return_date, '%Y-%m-%d').date()
+
+        # קבל או צור סטטוס
+        status = session.query(SoldierStatus).filter_by(soldier_id=soldier_id).first()
+        if not status:
+            status = SoldierStatus(soldier_id=soldier_id)
+            session.add(status)
+
+        status.status_type = status_type
+        status.return_date = return_date_obj
+        status.notes = notes
+        status.updated_by = current_user['id']
+        status.updated_at = datetime.now()
+
+        session.flush()
+
+        # מחק שיבוצים מושפעים אם החייל לא בבסיס
+        if status_type != 'בבסיס':
+            soldier = session.query(Soldier).get(soldier_id)
+            if soldier and soldier.mahlaka_id:
+                mahlaka = session.query(Mahlaka).get(soldier.mahlaka_id)
+                if mahlaka and mahlaka.pluga_id:
+                    master_shavzak = session.query(Shavzak).filter(
+                        Shavzak.pluga_id == mahlaka.pluga_id,
+                        Shavzak.name == 'שיבוץ אוטומטי'
+                    ).first()
+
+                    if master_shavzak:
+                        today = datetime.now().date()
+                        shavzak_start = master_shavzak.start_date
+                        start_day = (today - shavzak_start).days
+                        end_day = start_day + 30  # מחק 30 ימים קדימה
+
+                        if return_date_obj:
+                            end_day = min(end_day, (return_date_obj - shavzak_start).days)
+
+                        for day in range(max(0, start_day), end_day + 1):
+                            soldier_assignments = session.query(AssignmentSoldier).join(Assignment).filter(
+                                AssignmentSoldier.soldier_id == soldier_id,
+                                Assignment.shavzak_id == master_shavzak.id,
+                                Assignment.day == day
+                            ).all()
+
+                            for sa in soldier_assignments:
+                                assignment = session.query(Assignment).get(sa.assignment_id)
+                                if assignment:
+                                    session.query(AssignmentSoldier).filter(
+                                        AssignmentSoldier.assignment_id == assignment.id
+                                    ).delete()
+                                    session.delete(assignment)
+
+        session.commit()
+
+        return jsonify({
+            'message': 'סטטוס עודכן בהצלחה',
+            'status': {
+                'status_type': status.status_type,
+                'return_date': status.return_date.isoformat() if status.return_date else None
+            }
+        }), 200
     except Exception as e:
         session.rollback()
         return jsonify({'error': str(e)}), 500

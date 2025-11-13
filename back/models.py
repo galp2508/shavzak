@@ -99,6 +99,7 @@ class Soldier(Base):
     certifications = relationship("Certification", back_populates="soldier", cascade="all, delete-orphan")
     unavailable_dates = relationship("UnavailableDate", back_populates="soldier", cascade="all, delete-orphan")
     assignments = relationship("AssignmentSoldier", back_populates="soldier", cascade="all, delete-orphan")
+    current_status = relationship("SoldierStatus", back_populates="soldier", uselist=False, cascade="all, delete-orphan")
 
 
 class Certification(Base):
@@ -127,6 +128,29 @@ class UnavailableDate(Base):
     quantity = Column(Integer, nullable=True)  # כמות גימלים/חק"שים
 
     soldier = relationship("Soldier", back_populates="unavailable_dates")
+
+
+class SoldierStatus(Base):
+    """סטטוס נוכחי של חייל"""
+    __tablename__ = 'soldier_status'
+
+    id = Column(Integer, primary_key=True)
+    soldier_id = Column(Integer, ForeignKey('soldiers.id'), nullable=False, unique=True)
+
+    # סטטוס: בבסיס, בקשת יציאה, גימלים, ריתוק, בסבב קו
+    status_type = Column(String(50), default='בבסיס', nullable=False)
+
+    # תאריך חזרה לבסיס (רק אם לא בבסיס)
+    return_date = Column(Date, nullable=True)
+
+    # הערות
+    notes = Column(Text, nullable=True)
+
+    # מתי עודכן לאחרונה
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+
+    soldier = relationship("Soldier", back_populates="current_status", uselist=False)
 
 
 class AssignmentTemplate(Base):

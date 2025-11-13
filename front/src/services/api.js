@@ -7,11 +7,16 @@ const api = axios.create({
   },
 });
 
-// פונקציה גלובלית שתוגדר על ידי App.jsx
+// פונקציות גלובליות שיוגדרו על ידי App.jsx
 let serverDownCallback = null;
+let serverUpCallback = null;
 
 export const setServerDownCallback = (callback) => {
   serverDownCallback = callback;
+};
+
+export const setServerUpCallback = (callback) => {
+  serverUpCallback = callback;
 };
 
 // Add token to requests
@@ -28,7 +33,13 @@ api.interceptors.request.use(
 
 // Handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // אם התקבלה תשובה תקינה מהשרת, סמן שהשרת זמין
+    if (serverUpCallback) {
+      serverUpCallback();
+    }
+    return response;
+  },
   (error) => {
     // בדוק אם יש שגיאת רשת (השרת לא זמין)
     if (!error.response && error.code === 'ERR_NETWORK') {

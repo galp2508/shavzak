@@ -115,6 +115,38 @@ def get_db():
     return get_session(engine)
 
 
+def build_user_response(user):
+    """Build user response with full pluga and mahlaka objects"""
+    user_data = {
+        'id': user.id,
+        'username': user.username,
+        'full_name': user.full_name,
+        'role': user.role,
+        'pluga_id': user.pluga_id,
+        'mahlaka_id': user.mahlaka_id,
+        'kita': user.kita
+    }
+
+    # Add full pluga object if user has a pluga
+    if user.pluga:
+        user_data['pluga'] = {
+            'id': user.pluga.id,
+            'name': user.pluga.name,
+            'color': user.pluga.color,
+            'gdud': user.pluga.gdud
+        }
+
+    # Add full mahlaka object if user has a mahlaka
+    if user.mahlaka:
+        user_data['mahlaka'] = {
+            'id': user.mahlaka.id,
+            'number': user.mahlaka.number,
+            'color': user.mahlaka.color
+        }
+
+    return user_data
+
+
 # ============================================================================
 # AUTHENTICATION
 # ============================================================================
@@ -158,13 +190,7 @@ def register():
             return jsonify({
                 'message': 'משתמש נוצר בהצלחה',
                 'token': token,
-                'user': {
-                    'id': user.id,
-                    'username': user.username,
-                    'full_name': user.full_name,
-                    'role': user.role,
-                    'pluga_id': user.pluga_id
-                }
+                'user': build_user_response(user)
             }), 201
         else:
             # משתמשים נוספים (מפ חדש) - יוצרים בקשת הצטרפות
@@ -206,13 +232,7 @@ def register():
                 return jsonify({
                     'message': 'משתמש נוצר בהצלחה',
                     'token': token,
-                    'user': {
-                        'id': user.id,
-                        'username': user.username,
-                        'full_name': user.full_name,
-                        'role': user.role,
-                        'pluga_id': user.pluga_id
-                    }
+                    'user': build_user_response(user)
                 }), 201
 
     except Exception as e:
@@ -269,19 +289,31 @@ def login():
         session.commit()
         
         token = create_token(user)
-        
+
         return jsonify({
             'message': 'התחברת בהצלחה',
             'token': token,
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'full_name': user.full_name,
-                'role': user.role,
-                'pluga_id': user.pluga_id,
-                'mahlaka_id': user.mahlaka_id,
-                'kita': user.kita
-            }
+            'user': build_user_response(user)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/me', methods=['GET'])
+@token_required
+def get_current_user(current_user):
+    """קבלת פרטי המשתמש הנוכחי"""
+    try:
+        session = get_db()
+        user = session.query(User).filter_by(id=current_user['user_id']).first()
+
+        if not user:
+            return jsonify({'error': 'משתמש לא נמצא'}), 404
+
+        return jsonify({
+            'user': build_user_response(user)
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -314,15 +346,10 @@ def create_user(current_user):
         
         session.add(user)
         session.commit()
-        
+
         return jsonify({
             'message': 'משתמש נוצר בהצלחה',
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'full_name': user.full_name,
-                'role': user.role
-            }
+            'user': build_user_response(user)
         }), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2203,13 +2230,7 @@ def approve_join_request(current_user, request_id):
 
         return jsonify({
             'message': 'הבקשה אושרה בהצלחה',
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'full_name': user.full_name,
-                'role': user.role,
-                'pluga_id': user.pluga_id
-            },
+            'user': build_user_response(user),
             'pluga': {
                 'id': pluga.id,
                 'name': pluga.name,

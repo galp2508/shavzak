@@ -4,6 +4,7 @@ import api from '../services/api';
 import { Shield, Plus, Users, Trash2, Edit, X } from 'lucide-react';
 import ROLES from '../constants/roles';
 import { toast } from 'react-toastify';
+import { SoldierStatusBadge, StatusChangeModal } from '../components/SoldierStatusBadge';
 
 const Mahalkot = () => {
   const { user } = useAuth();
@@ -793,6 +794,8 @@ const SoldiersModal = ({ mahlaka, soldiers, onClose, onDelete, onRefresh }) => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [viewingSoldier, setViewingSoldier] = useState(null);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedSoldier, setSelectedSoldier] = useState(null);
 
   const getRoleBadge = (role) => {
     const badges = {
@@ -869,8 +872,18 @@ const SoldiersModal = ({ mahlaka, soldiers, onClose, onDelete, onRefresh }) => {
                             <div className="bg-military-100 p-2 rounded-full">
                               <Shield size={16} className="text-military-600" />
                             </div>
-                            <div className="font-medium text-gray-900 hover:text-military-600 transition-colors">
-                              {soldier.name}
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium text-gray-900 hover:text-military-600 transition-colors">
+                                {soldier.name}
+                              </div>
+                              <SoldierStatusBadge
+                                soldier={soldier}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedSoldier(soldier);
+                                  setShowStatusModal(true);
+                                }}
+                              />
                             </div>
                           </div>
                         </td>
@@ -958,6 +971,20 @@ const SoldiersModal = ({ mahlaka, soldiers, onClose, onDelete, onRefresh }) => {
             setEditingSoldier(viewingSoldier);
             setShowDetailsModal(false);
             setShowEditModal(true);
+          }}
+        />
+      )}
+
+      {/* Status Change Modal */}
+      {showStatusModal && selectedSoldier && (
+        <StatusChangeModal
+          soldier={selectedSoldier}
+          onClose={() => {
+            setShowStatusModal(false);
+            setSelectedSoldier(null);
+          }}
+          onUpdate={() => {
+            onRefresh();
           }}
         />
       )}

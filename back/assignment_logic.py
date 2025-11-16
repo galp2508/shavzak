@@ -5,42 +5,79 @@ from typing import List, Dict, Tuple
 
 class AssignmentLogic:
     """לוגיקת שיבוץ למשימות שונות - עם מצב חירום"""
-    
-    def __init__(self, min_rest_hours: int = 8):
+
+    def __init__(self, min_rest_hours: int = 8, reuse_soldiers_for_standby: bool = False):
         self.min_rest_hours = min_rest_hours
         self.emergency_mode = False
         self.warnings = []
+        self.reuse_soldiers_for_standby = reuse_soldiers_for_standby  # האם לאפשר שימוש חוזר בחיילים לכוננות
     
     def enable_emergency_mode(self):
         """הפעלת מצב חירום"""
         self.emergency_mode = True
     
-    def can_assign_at(self, person_schedule: List[Tuple], day: int, start_hour: int, 
+    def can_assign_at(self, person_schedule: List[Tuple], day: int, start_hour: int,
                      length: int, min_rest: int) -> bool:
         """בודק אם אפשר לשבץ אדם"""
         end_hour = start_hour + length
-        
+
         # בדיקת חפיפה
         for assign_day, assign_start, assign_end, _, _ in person_schedule:
             if assign_day == day:
                 if not (end_hour <= assign_start or start_hour >= assign_end):
                     return False
-        
+
         # בדיקת מנוחה
         if person_schedule:
             last_assign = max(person_schedule, key=lambda x: (x[0], x[2]))
             last_day, _, last_end, _, _ = last_assign
-            
+
             if last_day == day and start_hour < last_end + min_rest:
                 return False
-            
+
             if last_day == day - 1:
                 hours_since = (24 - last_end) + start_hour
                 if hours_since < min_rest:
                     return False
-        
+
         return True
-    
+
+    def get_recently_finished_soldiers(self, all_people: List[Dict], schedules: Dict,
+                                       day: int, start_hour: int) -> List[Dict]:
+        """מוצא חיילים שסיימו משימה לפני שעת ההתחלה של הכוננות.
+        מיועד לכוננויות - חיילים שסיימו משימה יכולים להמשיך לכוננות."""
+        recently_finished = []
+
+        for person in all_people:
+            person_id = person['id']
+            if person_id not in schedules or not schedules[person_id]:
+                continue
+
+            # מצא את המשימה האחרונה של החייל ביום זה
+            assignments_today = [
+                (assign_start, assign_end, assign_name)
+                for assign_day, assign_start, assign_end, assign_name, _ in schedules[person_id]
+                if assign_day == day and assign_end <= start_hour
+            ]
+
+            if assignments_today:
+                # מצא את המשימה שהסתיימה הכי קרוב לשעת ההתחלה
+                last_assignment = max(assignments_today, key=lambda x: x[1])  # מקסימום לפי end_hour
+                assign_start, assign_end, assign_name = last_assignment
+
+                # אם החייל סיים משימה ממש לפני (עד 2 שעות לפני), הוא מועדף
+                hours_since_finished = start_hour - assign_end
+                if 0 <= hours_since_finished <= 2:
+                    recently_finished.append({
+                        **person,
+                        'hours_since_finished': hours_since_finished,
+                        'last_assignment': assign_name
+                    })
+
+        # מיין לפי מי שסיים הכי לאחרונה (פחות שעות מאז שסיים)
+        recently_finished.sort(key=lambda x: x['hours_since_finished'])
+        return recently_finished
+
     def assign_patrol(self, assign_data: Dict, mahalkot: List[Dict],
                      schedules: Dict, mahlaka_workload: Dict) -> Dict:
         """שיבוץ סיור - מפקד ולוחמים מאותה מחלקה, נהג יכול להיות מכל מחלקה"""
@@ -238,39 +275,87 @@ class AssignmentLogic:
         
         raise Exception("אין חייל זמין לשמירה")
     
-    def assign_standby_a(self, assign_data: Dict, all_commanders: List[Dict], 
-                        all_drivers: List[Dict], all_soldiers: List[Dict], 
+    def assign_standby_a(self, assign_data: Dict, all_commanders: List[Dict],
+                        all_drivers: List[Dict], all_soldiers: List[Dict],
                         schedules: Dict) -> Dict:
-        """שיבוץ כוננות א"""
+        """שיבוץ כוננות א - מעדיף חיילים שסיימו משימה אם האופציה מופעלת"""
+
+        # בדוק זמינות
         available_commanders = [
             c for c in all_commanders
-            if self.can_assign_at(schedules.get(c['id'], []), assign_data['day'], 
-                                assign_data['start_hour'], assign_data['length_in_hours'], 
+            if self.can_assign_at(schedules.get(c['id'], []), assign_data['day'],
+                                assign_data['start_hour'], assign_data['length_in_hours'],
                                 self.min_rest_hours)
         ]
         available_drivers = [
             d for d in all_drivers
-            if self.can_assign_at(schedules.get(d['id'], []), assign_data['day'], 
-                                assign_data['start_hour'], assign_data['length_in_hours'], 
+            if self.can_assign_at(schedules.get(d['id'], []), assign_data['day'],
+                                assign_data['start_hour'], assign_data['length_in_hours'],
                                 self.min_rest_hours)
         ]
         available_soldiers = [
             s for s in all_soldiers
-            if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'], 
-                                assign_data['start_hour'], assign_data['length_in_hours'], 
+            if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                                assign_data['start_hour'], assign_data['length_in_hours'],
                                 self.min_rest_hours)
         ]
-        
+
         if len(available_commanders) >= 1 and len(available_drivers) >= 1 and \
            len(available_soldiers) >= 7:
-            # מיון לפי שעות עבודה
-            available_soldiers.sort(key=lambda x: sum(
-                end - start for _, start, end, _, _ in schedules.get(x['id'], [])
-            ))
+
+            # אם האופציה של שימוש חוזר מופעלת - העדף חיילים שסיימו משימה
+            if self.reuse_soldiers_for_standby:
+                # מצא חיילים שסיימו משימה לאחרונה
+                recently_finished_commanders = self.get_recently_finished_soldiers(
+                    all_commanders, schedules, assign_data['day'], assign_data['start_hour']
+                )
+                recently_finished_drivers = self.get_recently_finished_soldiers(
+                    all_drivers, schedules, assign_data['day'], assign_data['start_hour']
+                )
+                recently_finished_soldiers = self.get_recently_finished_soldiers(
+                    all_soldiers, schedules, assign_data['day'], assign_data['start_hour']
+                )
+
+                # העדף מפקדים שסיימו משימה לאחרונה
+                available_commander_ids = {c['id'] for c in available_commanders}
+                preferred_commanders = [c for c in recently_finished_commanders if c['id'] in available_commander_ids]
+                if not preferred_commanders:
+                    preferred_commanders = available_commanders
+
+                # העדף נהגים שסיימו משימה לאחרונה
+                available_driver_ids = {d['id'] for d in available_drivers}
+                preferred_drivers = [d for d in recently_finished_drivers if d['id'] in available_driver_ids]
+                if not preferred_drivers:
+                    preferred_drivers = available_drivers
+
+                # העדף לוחמים שסיימו משימה לאחרונה
+                available_soldier_ids = {s['id'] for s in available_soldiers}
+                preferred_soldiers = [s for s in recently_finished_soldiers if s['id'] in available_soldier_ids]
+
+                # השלם עם לוחמים רגילים אם צריך
+                remaining_needed = 7 - len(preferred_soldiers)
+                if remaining_needed > 0:
+                    preferred_soldier_ids = {s['id'] for s in preferred_soldiers}
+                    other_soldiers = [s for s in available_soldiers if s['id'] not in preferred_soldier_ids]
+                    # מיון לפי שעות עבודה (מי שעבד פחות)
+                    other_soldiers.sort(key=lambda x: sum(
+                        end - start for _, start, end, _, _ in schedules.get(x['id'], [])
+                    ))
+                    preferred_soldiers.extend(other_soldiers[:remaining_needed])
+            else:
+                # אופציה לא מופעלת - שיבוץ רגיל לפי שעות עבודה
+                preferred_commanders = available_commanders
+                preferred_drivers = available_drivers
+                preferred_soldiers = available_soldiers[:7]
+                # מיון לפי שעות עבודה
+                preferred_soldiers.sort(key=lambda x: sum(
+                    end - start for _, start, end, _, _ in schedules.get(x['id'], [])
+                ))
+
             return {
-                'commanders': [available_commanders[0]['id']],
-                'drivers': [available_drivers[0]['id']],
-                'soldiers': [s['id'] for s in available_soldiers[:7]]
+                'commanders': [preferred_commanders[0]['id']],
+                'drivers': [preferred_drivers[0]['id']],
+                'soldiers': [s['id'] for s in preferred_soldiers[:7]]
             }
         
         if self.emergency_mode:
@@ -305,29 +390,67 @@ class AssignmentLogic:
         
         raise Exception("אין מספיק כוח אדם לכוננות א")
     
-    def assign_standby_b(self, assign_data: Dict, all_commanders: List[Dict], 
+    def assign_standby_b(self, assign_data: Dict, all_commanders: List[Dict],
                         all_soldiers: List[Dict], schedules: Dict) -> Dict:
-        """שיבוץ כוננות ב"""
+        """שיבוץ כוננות ב - מעדיף חיילים שסיימו משימה אם האופציה מופעלת"""
+
+        # בדוק זמינות
         available_commanders = [
             c for c in all_commanders
-            if self.can_assign_at(schedules.get(c['id'], []), assign_data['day'], 
-                                assign_data['start_hour'], assign_data['length_in_hours'], 
+            if self.can_assign_at(schedules.get(c['id'], []), assign_data['day'],
+                                assign_data['start_hour'], assign_data['length_in_hours'],
                                 self.min_rest_hours)
         ]
         available_soldiers = [
             s for s in all_soldiers
-            if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'], 
-                                assign_data['start_hour'], assign_data['length_in_hours'], 
+            if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                                assign_data['start_hour'], assign_data['length_in_hours'],
                                 self.min_rest_hours)
         ]
-        
+
         if len(available_commanders) >= 1 and len(available_soldiers) >= 3:
-            available_soldiers.sort(key=lambda x: sum(
-                end - start for _, start, end, _, _ in schedules.get(x['id'], [])
-            ))
+            # אם האופציה של שימוש חוזר מופעלת - העדף חיילים שסיימו משימה
+            if self.reuse_soldiers_for_standby:
+                # מצא חיילים שסיימו משימה לאחרונה
+                recently_finished_commanders = self.get_recently_finished_soldiers(
+                    all_commanders, schedules, assign_data['day'], assign_data['start_hour']
+                )
+                recently_finished_soldiers = self.get_recently_finished_soldiers(
+                    all_soldiers, schedules, assign_data['day'], assign_data['start_hour']
+                )
+
+                # העדף מפקדים שסיימו משימה לאחרונה
+                available_commander_ids = {c['id'] for c in available_commanders}
+                preferred_commanders = [c for c in recently_finished_commanders if c['id'] in available_commander_ids]
+                if not preferred_commanders:
+                    preferred_commanders = available_commanders
+
+                # העדף לוחמים שסיימו משימה לאחרונה
+                available_soldier_ids = {s['id'] for s in available_soldiers}
+                preferred_soldiers = [s for s in recently_finished_soldiers if s['id'] in available_soldier_ids]
+
+                # השלם עם לוחמים רגילים אם צריך
+                remaining_needed = 3 - len(preferred_soldiers)
+                if remaining_needed > 0:
+                    preferred_soldier_ids = {s['id'] for s in preferred_soldiers}
+                    other_soldiers = [s for s in available_soldiers if s['id'] not in preferred_soldier_ids]
+                    # מיון לפי שעות עבודה
+                    other_soldiers.sort(key=lambda x: sum(
+                        end - start for _, start, end, _, _ in schedules.get(x['id'], [])
+                    ))
+                    preferred_soldiers.extend(other_soldiers[:remaining_needed])
+            else:
+                # אופציה לא מופעלת - שיבוץ רגיל לפי שעות עבודה
+                preferred_commanders = available_commanders
+                preferred_soldiers = available_soldiers[:3]
+                # מיון לפי שעות עבודה
+                preferred_soldiers.sort(key=lambda x: sum(
+                    end - start for _, start, end, _, _ in schedules.get(x['id'], [])
+                ))
+
             return {
-                'commanders': [available_commanders[0]['id']],
-                'soldiers': [s['id'] for s in available_soldiers[:3]]
+                'commanders': [preferred_commanders[0]['id']],
+                'soldiers': [s['id'] for s in preferred_soldiers[:3]]
             }
         
         if self.emergency_mode:

@@ -118,6 +118,26 @@ def check_and_run_migrations():
         else:
             print("✅ start_hour כבר קיים")
 
+        # בדיקה 5: הוספת reuse_soldiers_for_standby לטבלת shavzakim
+        cursor.execute("PRAGMA table_info(shavzakim)")
+        shavzak_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'reuse_soldiers_for_standby' not in shavzak_columns:
+            print("⚠️  מזהה עמודה חסרה: reuse_soldiers_for_standby")
+            print("🔧 מריץ migration אוטומטי להוספת reuse_soldiers_for_standby...")
+            conn.close()
+            from migrate_add_reuse_soldiers import migrate
+            try:
+                migrate()
+                print("✅ Migration להוספת reuse_soldiers_for_standby הושלם בהצלחה")
+            except Exception as e:
+                print(f"❌ Migration להוספת reuse_soldiers_for_standby נכשל: {e}")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        else:
+            print("✅ reuse_soldiers_for_standby כבר קיים")
+
         conn.close()
         return True
     except Exception as e:
@@ -1687,7 +1707,10 @@ def generate_shavzak(shavzak_id, current_user):
             return True
 
         # אתחול אלגוריתם
-        logic = AssignmentLogic(min_rest_hours=shavzak.min_rest_hours)
+        logic = AssignmentLogic(
+            min_rest_hours=shavzak.min_rest_hours,
+            reuse_soldiers_for_standby=shavzak.reuse_soldiers_for_standby
+        )
         
         # יצירת משימות
         all_assignments = []
@@ -1715,8 +1738,14 @@ def generate_shavzak(shavzak_id, current_user):
                     
                     all_assignments.append(assign_data)
         
-        # מיון לפי יום ושעה
-        all_assignments.sort(key=lambda x: (x['day'], x['start_hour']))
+        # מיון לפי יום ושעה, עם כוננויות אחרונות (כדי שחיילים שסיימו משימה יוכלו להמשיך לכוננות)
+        def assignment_priority(assign):
+            # כוננויות אחרונות באותה שעה
+            is_standby = assign['type'] in ['כוננות א', 'כוננות ב']
+            priority = 1 if is_standby else 0
+            return (assign['day'], assign['start_hour'], priority)
+
+        all_assignments.sort(key=assignment_priority)
         
         # הרצת השיבוץ
         schedules = {}  # soldier_id -> [(day, start, end, name, type), ...]
@@ -2549,7 +2578,10 @@ def get_live_schedule(pluga_id, current_user):
                         })
 
                     # אתחול אלגוריתם
-                    logic = AssignmentLogic(min_rest_hours=master_shavzak.min_rest_hours)
+                    logic = AssignmentLogic(
+                        min_rest_hours=master_shavzak.min_rest_hours,
+                        reuse_soldiers_for_standby=master_shavzak.reuse_soldiers_for_standby
+                    )
 
                     # יצירת משימות פשוטה (רק ליום הראשון לדוגמה)
                     for day in range(min(master_shavzak.days_count, 7)):  # רק 7 ימים ראשונים
@@ -2635,23 +2667,63 @@ def get_live_schedule(pluga_id, current_user):
                         regular_soldiers += 1
 
             # בדוק אזהרות למשימה זו
-            if not soldiers_list:
-                warnings.append(f"⚠️ {assignment.name}: אין חיילים משובצים")
-            else:
-                # טען את התבנית המקורית אם קיימת
-                template = session.query(AssignmentTemplate).filter(
-                    AssignmentTemplate.pluga_id == pluga_id,
-                    AssignmentTemplate.assignment_type == assignment.assignment_type
-                ).first()
+            # טען את התבנית המקורית אם קיימת
+            template = session.query(AssignmentTemplate).filter(
+                AssignmentTemplate.pluga_id == pluga_id,
+                AssignmentTemplate.assignment_type == assignment.assignment_type
+            ).first()
 
-                if template:
-                    # בדוק התאמה לתבנית
-                    if template.commanders_needed > commanders:
-                        warnings.append(f"⚠️ {assignment.name}: חסרים {template.commanders_needed - commanders} מפקדים")
-                    if template.drivers_needed > drivers:
-                        warnings.append(f"⚠️ {assignment.name}: חסרים {template.drivers_needed - drivers} נהגים")
-                    if template.soldiers_needed > regular_soldiers:
-                        warnings.append(f"⚠️ {assignment.name}: חסרים {template.soldiers_needed - regular_soldiers} לוחמים")
+            if template:
+                # חשב סך הכל חיילים שחסרים
+                total_needed = template.commanders_needed + template.drivers_needed + template.soldiers_needed
+                total_assigned = commanders + drivers + regular_soldiers
+                missing_count = total_needed - total_assigned
+
+                # בנה רשימת חסרים
+                missing_parts = []
+                if template.commanders_needed > commanders:
+                    missing_parts.append(f"{template.commanders_needed - commanders} מפקדים")
+                if template.drivers_needed > drivers:
+                    missing_parts.append(f"{template.drivers_needed - drivers} נהגים")
+                if template.soldiers_needed > regular_soldiers:
+                    missing_parts.append(f"{template.soldiers_needed - regular_soldiers} לוחמים")
+
+                if missing_parts:
+                    message = f"⚠️ {assignment.name}: חסרים " + ", ".join(missing_parts)
+
+                    # אם המשימה ריקה לחלוטין או חסרים יותר מ-50% - הצע למחוק
+                    suggest_deletion = False
+                    severity = "warning"
+
+                    if total_assigned == 0:
+                        severity = "critical"
+                        suggest_deletion = True
+                        suggestion = "המשימה ריקה לחלוטין. מומלץ למחוק אותה כדי לפנות משאבים."
+                    elif missing_count >= total_needed * 0.5:
+                        severity = "high"
+                        suggest_deletion = True
+                        suggestion = f"חסרים {missing_count} מתוך {total_needed} חיילים ({int(missing_count/total_needed*100)}%). מומלץ למחוק משימה זו."
+                    else:
+                        suggestion = None
+
+                    warnings.append({
+                        'message': message,
+                        'assignment_id': assignment.id,
+                        'assignment_name': assignment.name,
+                        'severity': severity,
+                        'suggest_deletion': suggest_deletion,
+                        'suggestion': suggestion
+                    })
+            elif not soldiers_list:
+                # אין תבנית ואין חיילים - זה מצב לא רגיל
+                warnings.append({
+                    'message': f"⚠️ {assignment.name}: אין חיילים משובצים",
+                    'assignment_id': assignment.id,
+                    'assignment_name': assignment.name,
+                    'severity': 'warning',
+                    'suggest_deletion': False,
+                    'suggestion': None
+                })
 
             assignments_data.append({
                 'id': assignment.id,

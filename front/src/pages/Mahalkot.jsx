@@ -186,11 +186,11 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
   const [createdMahlakaId, setCreatedMahlakaId] = useState(null);
   const [showSoldiersImport, setShowSoldiersImport] = useState(false);
   const [soldiersFormData, setSoldiersFormData] = useState({
-    mm: { name: '', date: '', role: 'מ"מ' },
-    samal: { name: '', date: '', role: ',סמל' },
-    mkXa: { name: '', date: '', role: 'מ"כ' },
-    mkXb: { name: '', date: '', role: 'מ"כ' },
-    mkXg: { name: '', date: '', role: 'מ"כ'},
+    mm: { name: '', date: '', role: 'ממ' },
+    samal: { name: '', date: '', role: 'סמל' },
+    mkXa: { name: '', date: '', role: 'מכ' },
+    mkXb: { name: '', date: '', role: 'מכ' },
+    mkXg: { name: '', date: '', role: 'מכ' },
     kitaA: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
     kitaB: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
     kitaG: { soldiers: [{ name: '', role: 'לוחם' }], date: '' }
@@ -308,9 +308,9 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
 
     // Add ממ"ו
     if (soldiersFormData.mm.name) {
-      soldiers.push({ 
-        name: soldiersFormData.mm.name, 
-        role: 'מ"מ', 
+      soldiers.push({
+        name: soldiersFormData.mm.name,
+        role: 'ממ',
         unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.mm.date),
         mahlaka_id: createdMahlakaId
       });
@@ -328,28 +328,28 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
 
     // Add מ"כ לכל כיתה
     if (soldiersFormData.mkXa.name) {
-      soldiers.push({ 
-        name: soldiersFormData.mkXa.name, 
-        role: `מ"כ ${mahlakaNum}א`, 
-        kita: `${mahlakaNum}א`, 
+      soldiers.push({
+        name: soldiersFormData.mkXa.name,
+        role: 'מכ',
+        kita: `${mahlakaNum}א`,
         unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.mkXa.date),
         mahlaka_id: createdMahlakaId
       });
     }
     if (soldiersFormData.mkXb.name) {
-      soldiers.push({ 
-        name: soldiersFormData.mkXb.name, 
-        role: `מ"כ ${mahlakaNum}ב`, 
-        kita: `${mahlakaNum}ב`, 
+      soldiers.push({
+        name: soldiersFormData.mkXb.name,
+        role: 'מכ',
+        kita: `${mahlakaNum}ב`,
         unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.mkXb.date),
         mahlaka_id: createdMahlakaId
       });
     }
     if (soldiersFormData.mkXg.name) {
-      soldiers.push({ 
-        name: soldiersFormData.mkXg.name, 
-        role: `מ"כ ${mahlakaNum}ג`, 
-        kita: `${mahlakaNum}ג`, 
+      soldiers.push({
+        name: soldiersFormData.mkXg.name,
+        role: 'מכ',
+        kita: `${mahlakaNum}ג`,
         unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.mkXg.date),
         mahlaka_id: createdMahlakaId
       });

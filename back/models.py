@@ -173,6 +173,7 @@ class AssignmentTemplate(Base):
     same_mahlaka_required = Column(Boolean, default=False)
     requires_certification = Column(String(100), nullable=True)
     requires_senior_commander = Column(Boolean, default=False)
+    reuse_soldiers_for_standby = Column(Boolean, default=False)  # האם לקחת חיילים שסיימו משימה לכוננות
 
     pluga = relationship("Pluga", back_populates="assignment_templates")
 

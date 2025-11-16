@@ -188,6 +188,7 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
     same_mahlaka_required: template?.same_mahlaka_required || false,
     requires_certification: template?.requires_certification || '',
     requires_senior_commander: template?.requires_senior_commander || false,
+    reuse_soldiers_for_standby: template?.reuse_soldiers_for_standby || false,
   });
   const [loading, setLoading] = useState(false);
 
@@ -411,6 +412,19 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
               />
               <span className="text-gray-700">דורש מפקד בכיר</span>
             </label>
+
+            {(formData.assignment_type === 'כוננות א' || formData.assignment_type === 'כוננות ב') && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.reuse_soldiers_for_standby}
+                  onChange={(e) => setFormData({ ...formData, reuse_soldiers_for_standby: e.target.checked })}
+                  className="w-4 h-4 text-military-600"
+                />
+                <span className="text-gray-700">קח חיילים שסיימו משימה לכוננות</span>
+                <span className="text-xs text-gray-500">(המערכת תעדיף חיילים שסיימו משימה זמן קצר לפני הכוננות)</span>
+              </label>
+            )}
           </div>
 
           <div className="flex gap-3 pt-4">

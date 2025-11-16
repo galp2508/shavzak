@@ -123,20 +123,40 @@ def check_and_run_migrations():
         shavzak_columns = [column[1] for column in cursor.fetchall()]
 
         if 'reuse_soldiers_for_standby' not in shavzak_columns:
-            print("⚠️  מזהה עמודה חסרה: reuse_soldiers_for_standby")
+            print("⚠️  מזהה עמודה חסרה: reuse_soldiers_for_standby בטבלת shavzakim")
             print("🔧 מריץ migration אוטומטי להוספת reuse_soldiers_for_standby...")
             conn.close()
             from migrate_add_reuse_soldiers import migrate
             try:
                 migrate()
-                print("✅ Migration להוספת reuse_soldiers_for_standby הושלם בהצלחה")
+                print("✅ Migration להוספת reuse_soldiers_for_standby לשיבוצים הושלם בהצלחה")
             except Exception as e:
                 print(f"❌ Migration להוספת reuse_soldiers_for_standby נכשל: {e}")
                 return False
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
         else:
-            print("✅ reuse_soldiers_for_standby כבר קיים")
+            print("✅ reuse_soldiers_for_standby בטבלת shavzakim כבר קיים")
+
+        # בדיקה 6: הוספת reuse_soldiers_for_standby לטבלת assignment_templates
+        cursor.execute("PRAGMA table_info(assignment_templates)")
+        template_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'reuse_soldiers_for_standby' not in template_columns:
+            print("⚠️  מזהה עמודה חסרה: reuse_soldiers_for_standby בטבלת assignment_templates")
+            print("🔧 מריץ migration אוטומטי להוספת reuse_soldiers_for_standby לתבניות...")
+            conn.close()
+            from migrate_add_reuse_to_templates import migrate as migrate_templates
+            try:
+                migrate_templates()
+                print("✅ Migration להוספת reuse_soldiers_for_standby לתבניות הושלם בהצלחה")
+            except Exception as e:
+                print(f"❌ Migration להוספת reuse_soldiers_for_standby לתבניות נכשל: {e}")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        else:
+            print("✅ reuse_soldiers_for_standby בטבלת assignment_templates כבר קיים")
 
         conn.close()
         return True
@@ -1367,7 +1387,8 @@ def create_assignment_template(pluga_id, current_user):
             soldiers_needed=data.get('soldiers_needed', 0),
             same_mahlaka_required=data.get('same_mahlaka_required', False),
             requires_certification=data.get('requires_certification'),
-            requires_senior_commander=data.get('requires_senior_commander', False)
+            requires_senior_commander=data.get('requires_senior_commander', False),
+            reuse_soldiers_for_standby=data.get('reuse_soldiers_for_standby', False)
         )
         
         session.add(template)
@@ -1418,7 +1439,8 @@ def list_assignment_templates(pluga_id, current_user):
             'soldiers_needed': t.soldiers_needed,
             'same_mahlaka_required': t.same_mahlaka_required,
             'requires_certification': t.requires_certification,
-            'requires_senior_commander': t.requires_senior_commander
+            'requires_senior_commander': t.requires_senior_commander,
+            'reuse_soldiers_for_standby': t.reuse_soldiers_for_standby
         } for t in templates]
 
         return jsonify({'templates': result}), 200
@@ -1469,6 +1491,8 @@ def update_assignment_template(template_id, current_user):
             template.requires_certification = data['requires_certification']
         if 'requires_senior_commander' in data:
             template.requires_senior_commander = data['requires_senior_commander']
+        if 'reuse_soldiers_for_standby' in data:
+            template.reuse_soldiers_for_standby = data['reuse_soldiers_for_standby']
 
         session.commit()
 
@@ -1554,7 +1578,8 @@ def duplicate_assignment_template(template_id, current_user):
             soldiers_needed=original_template.soldiers_needed,
             same_mahlaka_required=original_template.same_mahlaka_required,
             requires_certification=original_template.requires_certification,
-            requires_senior_commander=original_template.requires_senior_commander
+            requires_senior_commander=original_template.requires_senior_commander,
+            reuse_soldiers_for_standby=original_template.reuse_soldiers_for_standby
         )
 
         session.add(new_template)
@@ -1771,6 +1796,7 @@ def generate_shavzak(shavzak_id, current_user):
                         'same_mahlaka_required': template.same_mahlaka_required,
                         'requires_certification': template.requires_certification,
                         'requires_senior_commander': template.requires_senior_commander,
+                        'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
                         'date': current_date
                     }
                     
@@ -2859,6 +2885,7 @@ def get_live_schedule(pluga_id, current_user):
                                     'same_mahlaka_required': template.same_mahlaka_required,
                                     'requires_certification': template.requires_certification,
                                     'requires_senior_commander': template.requires_senior_commander,
+                                    'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
                                     'date': current_date
                                 }
 

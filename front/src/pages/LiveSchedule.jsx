@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
 
@@ -205,15 +205,37 @@ const LiveSchedule = () => {
         </div>
       ) : (
         /* Assignments List */
-        <div className="card">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">
-              משימות ליום {getDayName(currentDate)}
-            </h2>
-            <span className="text-sm text-gray-500">
-              {scheduleData?.assignments?.length} משימות
-            </span>
-          </div>
+        <>
+          {/* Warnings Section */}
+          {scheduleData?.warnings && scheduleData.warnings.length > 0 && (
+            <div className="card bg-yellow-50 border-r-4 border-yellow-500">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-1" />
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-yellow-900 mb-2">
+                    אזהרות שיבוץ ({scheduleData.warnings.length})
+                  </h3>
+                  <ul className="space-y-1">
+                    {scheduleData.warnings.map((warning, index) => (
+                      <li key={index} className="text-yellow-800 text-sm">
+                        {warning}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">
+                משימות ליום {getDayName(currentDate)}
+              </h2>
+              <span className="text-sm text-gray-500">
+                {scheduleData?.assignments?.length} משימות
+              </span>
+            </div>
 
           <div className="space-y-4">
             {scheduleData?.assignments
@@ -281,7 +303,8 @@ const LiveSchedule = () => {
                 );
               })}
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Constraints Modal */}

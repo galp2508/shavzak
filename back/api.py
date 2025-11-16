@@ -1715,8 +1715,14 @@ def generate_shavzak(shavzak_id, current_user):
                     
                     all_assignments.append(assign_data)
         
-        # מיון לפי יום ושעה
-        all_assignments.sort(key=lambda x: (x['day'], x['start_hour']))
+        # מיון לפי יום ושעה, עם כוננויות אחרונות (כדי שחיילים שסיימו משימה יוכלו להמשיך לכוננות)
+        def assignment_priority(assign):
+            # כוננויות אחרונות באותה שעה
+            is_standby = assign['type'] in ['כוננות א', 'כוננות ב']
+            priority = 1 if is_standby else 0
+            return (assign['day'], assign['start_hour'], priority)
+
+        all_assignments.sort(key=assignment_priority)
         
         # הרצת השיבוץ
         schedules = {}  # soldier_id -> [(day, start, end, name, type), ...]

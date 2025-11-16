@@ -141,7 +141,8 @@ for template in templates:
         'needs_commander': template.commanders_needed,
         'needs_driver': template.drivers_needed,
         'needs_soldiers': template.soldiers_needed,
-        'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby
+        'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
+        'requires_certification': template.requires_certification if template.requires_certification else None
     }
 
     # בחירת פונקציית שיבוץ
@@ -171,7 +172,9 @@ for template in templates:
             result = logic.assign_operations(assign_data, all_people, schedules)
         elif template.assignment_type == 'תורן מטבח':
             all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]
+            print(f"   🔧 DEBUG: needs_soldiers = {assign_data.get('needs_soldiers')}, all_soldiers count = {len(all_soldiers)}")
             result = logic.assign_kitchen(assign_data, all_soldiers, schedules)
+            print(f"   🔧 DEBUG: result soldiers count = {len(result.get('soldiers', []))}")
         else:
             print(f"   ⚠️  סוג משימה לא מוכר: {template.assignment_type}")
             failed_assignments.append(template.name)
@@ -212,8 +215,10 @@ for template in templates:
                         ))
 
             if 'soldiers' in result and result['soldiers']:
+                print(f"   🔧 DEBUG: soldier IDs = {result['soldiers']}")
                 for sol_id in result['soldiers']:
                     soldier = session.query(Soldier).get(sol_id)
+                    print(f"   🔧 DEBUG: Looking for soldier ID {sol_id}: {'Found' if soldier else 'NOT FOUND'}")
                     if soldier:
                         assigned_people.append(f"{soldier.name} (לוחם)")
                         if sol_id not in schedules:

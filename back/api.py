@@ -2611,7 +2611,7 @@ def get_live_schedule(pluga_id, current_user):
 
             soldiers_list = []
             for as_soldier in soldiers_in_assignment:
-                soldier = session.query(Soldier).get(as_soldier.soldier_id)
+                soldier = session.get(Soldier, as_soldier.soldier_id)
                 if soldier:
                     soldiers_list.append({
                         'id': soldier.id,
@@ -2623,7 +2623,7 @@ def get_live_schedule(pluga_id, current_user):
             assignments_data.append({
                 'id': assignment.id,
                 'name': assignment.name,
-                'type': assignment.type,
+                'type': assignment.assignment_type,
                 'day': assignment.day,
                 'start_hour': assignment.start_hour,
                 'length_in_hours': assignment.length_in_hours,

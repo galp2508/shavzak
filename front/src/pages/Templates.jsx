@@ -191,6 +191,51 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
   });
   const [loading, setLoading] = useState(false);
 
+  // תבניות מוכנות מראש
+  const presetTemplates = {
+    'שמירה': {
+      length_in_hours: 4,
+      commanders_needed: 0,
+      drivers_needed: 0,
+      soldiers_needed: 1,
+      same_mahlaka_required: false,
+      requires_certification: '',
+    },
+    'סיור': {
+      length_in_hours: 8,
+      commanders_needed: 1,
+      drivers_needed: 1,
+      soldiers_needed: 2,
+      same_mahlaka_required: true,  // מפקד ולוחמים מאותה מחלקה, נהג לא
+      requires_certification: '',
+    },
+    'חמל': {
+      length_in_hours: 12,
+      commanders_needed: 0,
+      drivers_needed: 0,
+      soldiers_needed: 1,
+      same_mahlaka_required: false,
+      requires_certification: 'חמליסט',
+    },
+  };
+
+  // פונקציה לטעינת תבנית מוכנה
+  const loadPresetTemplate = (assignmentType) => {
+    const preset = presetTemplates[assignmentType];
+    if (preset && !template) {  // טען רק אם זו תבנית חדשה (לא עריכה)
+      setFormData({
+        ...formData,
+        assignment_type: assignmentType,
+        ...preset,
+      });
+    } else {
+      setFormData({
+        ...formData,
+        assignment_type: assignmentType,
+      });
+    }
+  };
+
   // חישוב אוטומטי של פעמים ביום
   const timesPerDay = formData.length_in_hours > 0 ? Math.floor(24 / formData.length_in_hours) : 1;
 
@@ -254,7 +299,7 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
               <label className="label">סוג משימה *</label>
               <select
                 value={formData.assignment_type}
-                onChange={(e) => setFormData({ ...formData, assignment_type: e.target.value })}
+                onChange={(e) => loadPresetTemplate(e.target.value)}
                 className="input-field"
                 required
               >
@@ -262,6 +307,11 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
                   <option key={type} value={type}>{type}</option>
                 ))}
               </select>
+              {presetTemplates[formData.assignment_type] && !template && (
+                <p className="text-xs text-green-600 mt-1">
+                  ✓ תבנית מומלצת נטענה אוטומטית
+                </p>
+              )}
             </div>
 
             <div>

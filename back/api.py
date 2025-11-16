@@ -118,6 +118,26 @@ def check_and_run_migrations():
         else:
             print("✅ start_hour כבר קיים")
 
+        # בדיקה 5: הוספת reuse_soldiers_for_standby לטבלת shavzakim
+        cursor.execute("PRAGMA table_info(shavzakim)")
+        shavzak_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'reuse_soldiers_for_standby' not in shavzak_columns:
+            print("⚠️  מזהה עמודה חסרה: reuse_soldiers_for_standby")
+            print("🔧 מריץ migration אוטומטי להוספת reuse_soldiers_for_standby...")
+            conn.close()
+            from migrate_add_reuse_soldiers import migrate
+            try:
+                migrate()
+                print("✅ Migration להוספת reuse_soldiers_for_standby הושלם בהצלחה")
+            except Exception as e:
+                print(f"❌ Migration להוספת reuse_soldiers_for_standby נכשל: {e}")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        else:
+            print("✅ reuse_soldiers_for_standby כבר קיים")
+
         conn.close()
         return True
     except Exception as e:
@@ -1687,7 +1707,10 @@ def generate_shavzak(shavzak_id, current_user):
             return True
 
         # אתחול אלגוריתם
-        logic = AssignmentLogic(min_rest_hours=shavzak.min_rest_hours)
+        logic = AssignmentLogic(
+            min_rest_hours=shavzak.min_rest_hours,
+            reuse_soldiers_for_standby=shavzak.reuse_soldiers_for_standby
+        )
         
         # יצירת משימות
         all_assignments = []
@@ -2555,7 +2578,10 @@ def get_live_schedule(pluga_id, current_user):
                         })
 
                     # אתחול אלגוריתם
-                    logic = AssignmentLogic(min_rest_hours=master_shavzak.min_rest_hours)
+                    logic = AssignmentLogic(
+                        min_rest_hours=master_shavzak.min_rest_hours,
+                        reuse_soldiers_for_standby=master_shavzak.reuse_soldiers_for_standby
+                    )
 
                     # יצירת משימות פשוטה (רק ליום הראשון לדוגמה)
                     for day in range(min(master_shavzak.days_count, 7)):  # רק 7 ימים ראשונים

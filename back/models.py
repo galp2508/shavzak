@@ -192,7 +192,8 @@ class Shavzak(Base):
     
     min_rest_hours = Column(Integer, default=8)
     emergency_mode = Column(Boolean, default=False)
-    
+    reuse_soldiers_for_standby = Column(Boolean, default=False)  # האם לאפשר שימוש חוזר בחיילים שסיימו משימה לכוננות
+
     pluga = relationship("Pluga", back_populates="shavzakim")
     assignments = relationship("Assignment", back_populates="shavzak", cascade="all, delete-orphan")
 

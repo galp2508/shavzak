@@ -2714,7 +2714,7 @@ def get_live_schedule(pluga_id, current_user):
                     pluga = session.query(Pluga).filter_by(id=pluga_id).first()
                     mahalkot = session.query(Mahlaka).filter_by(pluga_id=pluga_id).all()
 
-                    # יצירת מבנה נתונים פשוט
+                    # יצירת מבנה נתונים מלא (כמו ב-generate_shavzak)
                     mahalkot_data = []
                     for mahlaka in mahalkot:
                         soldiers = session.query(Soldier).filter_by(mahlaka_id=mahlaka.id).all()
@@ -2724,10 +2724,30 @@ def get_live_schedule(pluga_id, current_user):
                         regular_soldiers = []
 
                         for soldier in soldiers:
+                            # בדיקת זמינות
+                            unavailable = session.query(UnavailableDate).filter(
+                                UnavailableDate.soldier_id == soldier.id,
+                                UnavailableDate.date >= master_shavzak.start_date,
+                                UnavailableDate.date < master_shavzak.start_date + timedelta(days=master_shavzak.days_count)
+                            ).all()
+
+                            unavailable_dates = [u.date for u in unavailable]
+
+                            certifications = session.query(Certification).filter_by(soldier_id=soldier.id).all()
+                            cert_list = [c.certification_name for c in certifications]
+
+                            # קבל סטטוס נוכחי
+                            status = session.query(SoldierStatus).filter_by(soldier_id=soldier.id).first()
+
                             soldier_data = {
                                 'id': soldier.id,
                                 'name': soldier.name,
-                                'role': soldier.role
+                                'role': soldier.role,
+                                'kita': soldier.kita,
+                                'certifications': cert_list,
+                                'unavailable_dates': unavailable_dates,
+                                'hatash_2_days': soldier.hatash_2_days,
+                                'status_type': status.status_type if status else 'בבסיס'
                             }
 
                             if soldier.role in ['ממ', 'מכ', 'סמל']:
@@ -2745,13 +2765,37 @@ def get_live_schedule(pluga_id, current_user):
                             'soldiers': regular_soldiers
                         })
 
+                    # פונקציה לבדיקת זמינות חייל ביום מסוים
+                    def is_soldier_available(soldier_data, check_date):
+                        """בודק אם חייל זמין ביום מסוים, תוך התחשבות בהתש"ב 2 וריתוק"""
+                        # אם החייל בריתוק, הוא לא זמין (ריתוק מבטל הכל)
+                        if soldier_data.get('status_type') == 'ריתוק':
+                            return False
+
+                        # בדוק אם התאריך באי זמינות רגילה
+                        if check_date in soldier_data.get('unavailable_dates', []):
+                            return False
+
+                        # בדוק התש"ב 2 - ימים קבועים שהחייל לא זמין
+                        hatash_2_days = soldier_data.get('hatash_2_days')
+                        if hatash_2_days:
+                            day_of_week = check_date.weekday()  # 0=Monday, 6=Sunday
+                            # התאם ל-0=Sunday כמו שמצפים בממשק
+                            day_of_week = (day_of_week + 1) % 7
+                            hatash_days_list = hatash_2_days.split(',')
+                            if str(day_of_week) in hatash_days_list:
+                                return False
+
+                        return True
+
                     # אתחול אלגוריתם
                     logic = AssignmentLogic(
                         min_rest_hours=master_shavzak.min_rest_hours,
                         reuse_soldiers_for_standby=master_shavzak.reuse_soldiers_for_standby
                     )
 
-                    # יצירת משימות פשוטה (רק ליום הראשון לדוגמה)
+                    # יצירת משימות עם אלגוריתם השיבוץ המלא
+                    all_assignments = []
                     for day in range(min(master_shavzak.days_count, 7)):  # רק 7 ימים ראשונים
                         current_date = master_shavzak.start_date + timedelta(days=day)
 
@@ -2763,20 +2807,227 @@ def get_live_schedule(pluga_id, current_user):
                                 else:
                                     start_hour = slot * template.length_in_hours
 
-                                # צור משימה פשוטה ללא שיבוץ חיילים (לעת עתה)
+                                assign_data = {
+                                    'name': f"{template.name} {slot + 1}",
+                                    'type': template.assignment_type,
+                                    'day': day,
+                                    'start_hour': start_hour,
+                                    'length_in_hours': template.length_in_hours,
+                                    'commanders_needed': template.commanders_needed,
+                                    'drivers_needed': template.drivers_needed,
+                                    'soldiers_needed': template.soldiers_needed,
+                                    'same_mahlaka_required': template.same_mahlaka_required,
+                                    'requires_certification': template.requires_certification,
+                                    'requires_senior_commander': template.requires_senior_commander,
+                                    'date': current_date
+                                }
+
+                                all_assignments.append(assign_data)
+
+                    # מיון לפי יום ושעה, עם כוננויות אחרונות
+                    def assignment_priority(assign):
+                        is_standby = assign['type'] in ['כוננות א', 'כוננות ב']
+                        priority = 1 if is_standby else 0
+                        return (assign['day'], assign['start_hour'], priority)
+
+                    all_assignments.sort(key=assignment_priority)
+
+                    # הרצת השיבוץ עם אלגוריתם מלא
+                    schedules = {}  # soldier_id -> [(day, start, end, name, type), ...]
+                    mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
+
+                    all_commanders = [c for m in mahalkot_data for c in m['commanders']]
+                    all_drivers = [d for m in mahalkot_data for d in m['drivers']]
+                    all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]
+
+                    failed_assignments = []
+
+                    for assign_data in all_assignments:
+                        try:
+                            # בדיקת זמינות לפי תאריך
+                            current_date = assign_data['date']
+
+                            # סינון חיילים לא זמינים
+                            available_mahalkot = []
+                            for mahlaka_info in mahalkot_data:
+                                available_commanders = [
+                                    c for c in mahlaka_info['commanders']
+                                    if is_soldier_available(c, current_date)
+                                ]
+                                available_drivers = [
+                                    d for d in mahlaka_info['drivers']
+                                    if is_soldier_available(d, current_date)
+                                ]
+                                available_soldiers = [
+                                    s for s in mahlaka_info['soldiers']
+                                    if is_soldier_available(s, current_date)
+                                ]
+
+                                available_mahalkot.append({
+                                    'id': mahlaka_info['id'],
+                                    'number': mahlaka_info['number'],
+                                    'commanders': available_commanders,
+                                    'drivers': available_drivers,
+                                    'soldiers': available_soldiers
+                                })
+
+                            available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
+                            available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
+                            available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
+
+                            # בחירת פונקציית שיבוץ
+                            result = None
+                            if assign_data['type'] == 'סיור':
+                                result = logic.assign_patrol(assign_data, available_mahalkot, schedules, mahlaka_workload)
+                            elif assign_data['type'] == 'שמירה':
+                                result = logic.assign_guard(assign_data, available_soldiers, schedules)
+                            elif assign_data['type'] == 'כוננות א':
+                                result = logic.assign_standby_a(assign_data, available_commanders, available_drivers,
+                                                                available_soldiers, schedules)
+                            elif assign_data['type'] == 'כוננות ב':
+                                result = logic.assign_standby_b(assign_data, available_commanders, available_soldiers, schedules)
+                            elif assign_data['type'] == 'חמל':
+                                result = logic.assign_operations(assign_data, available_commanders + available_soldiers, schedules)
+                            elif assign_data['type'] == 'תורן מטבח':
+                                result = logic.assign_kitchen(assign_data, available_soldiers, schedules)
+                            elif assign_data['type'] == 'חפק גשש':
+                                result = logic.assign_hafak_gashash(assign_data, available_commanders + available_soldiers, schedules)
+                            elif assign_data['type'] == 'שלז':
+                                result = logic.assign_shalaz(assign_data, available_soldiers, schedules)
+                            elif assign_data['type'] == 'קצין תורן':
+                                result = logic.assign_duty_officer(assign_data, available_commanders, schedules)
+                            else:
+                                # ברירת מחדל - שמירה
+                                result = logic.assign_guard(assign_data, available_soldiers, schedules)
+
+                            if result:
+                                # שמירת משימה ב-DB
                                 assignment = Assignment(
                                     shavzak_id=master_shavzak.id,
-                                    name=f"{template.name} {slot + 1}",
-                                    assignment_type=template.assignment_type,
-                                    day=day,
-                                    start_hour=start_hour,
-                                    length_in_hours=template.length_in_hours,
-                                    assigned_mahlaka_id=None
+                                    name=assign_data['name'],
+                                    assignment_type=assign_data['type'],
+                                    day=assign_data['day'],
+                                    start_hour=assign_data['start_hour'],
+                                    length_in_hours=assign_data['length_in_hours'],
+                                    assigned_mahlaka_id=result.get('mahlaka_id')
                                 )
                                 session.add(assignment)
+                                session.flush()
+
+                                # הוספת חיילים
+                                for role_key in ['commanders', 'drivers', 'soldiers']:
+                                    if role_key in result:
+                                        role_name = role_key[:-1]  # הסרת 's'
+                                        for soldier_id in result[role_key]:
+                                            assign_soldier = AssignmentSoldier(
+                                                assignment_id=assignment.id,
+                                                soldier_id=soldier_id,
+                                                role_in_assignment=role_name
+                                            )
+                                            session.add(assign_soldier)
+
+                                            # עדכון schedules
+                                            if soldier_id not in schedules:
+                                                schedules[soldier_id] = []
+                                            schedules[soldier_id].append((
+                                                assign_data['day'],
+                                                assign_data['start_hour'],
+                                                assign_data['start_hour'] + assign_data['length_in_hours'],
+                                                assign_data['name'],
+                                                assign_data['type']
+                                            ))
+
+                        except Exception as e:
+                            error_msg = str(e)
+                            failed_assignments.append((assign_data, error_msg))
+                            print(f"🔴 שגיאה ביצירת שיבוץ: {error_msg}")
+                            traceback.print_exc()
+
+                    # מצב חירום
+                    if failed_assignments:
+                        logic.enable_emergency_mode()
+
+                        for assign_data, error in failed_assignments:
+                            try:
+                                current_date = assign_data['date']
+
+                                available_mahalkot = []
+                                for mahlaka_info in mahalkot_data:
+                                    available_mahalkot.append({
+                                        'id': mahlaka_info['id'],
+                                        'number': mahlaka_info['number'],
+                                        'commanders': [c for c in mahlaka_info['commanders']
+                                                     if is_soldier_available(c, current_date)],
+                                        'drivers': [d for d in mahlaka_info['drivers']
+                                                   if is_soldier_available(d, current_date)],
+                                        'soldiers': [s for s in mahlaka_info['soldiers']
+                                                    if is_soldier_available(s, current_date)]
+                                    })
+
+                                available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
+                                available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
+                                available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
+
+                                result = None
+                                if assign_data['type'] == 'סיור':
+                                    result = logic.assign_patrol(assign_data, available_mahalkot, schedules, mahlaka_workload)
+                                elif assign_data['type'] == 'שמירה':
+                                    result = logic.assign_guard(assign_data, available_soldiers, schedules)
+                                elif assign_data['type'] == 'כוננות א':
+                                    result = logic.assign_standby_a(assign_data, available_commanders, available_drivers,
+                                                                    available_soldiers, schedules)
+                                elif assign_data['type'] == 'כוננות ב':
+                                    result = logic.assign_standby_b(assign_data, available_commanders, available_soldiers, schedules)
+                                elif assign_data['type'] == 'חמל':
+                                    result = logic.assign_operations(assign_data, available_commanders + available_soldiers, schedules)
+                                elif assign_data['type'] == 'תורן מטבח':
+                                    result = logic.assign_kitchen(assign_data, available_soldiers, schedules)
+                                elif assign_data['type'] == 'חפק גשש':
+                                    result = logic.assign_hafak_gashash(assign_data, available_commanders + available_soldiers, schedules)
+                                elif assign_data['type'] == 'שלז':
+                                    result = logic.assign_shalaz(assign_data, available_soldiers, schedules)
+                                elif assign_data['type'] == 'קצין תורן':
+                                    result = logic.assign_duty_officer(assign_data, available_commanders, schedules)
+
+                                if result:
+                                    assignment = Assignment(
+                                        shavzak_id=master_shavzak.id,
+                                        name=assign_data['name'],
+                                        assignment_type=assign_data['type'],
+                                        day=assign_data['day'],
+                                        start_hour=assign_data['start_hour'],
+                                        length_in_hours=assign_data['length_in_hours'],
+                                        assigned_mahlaka_id=result.get('mahlaka_id')
+                                    )
+                                    session.add(assignment)
+                                    session.flush()
+
+                                    for role_key in ['commanders', 'drivers', 'soldiers']:
+                                        if role_key in result:
+                                            role_name = role_key[:-1]
+                                            for soldier_id in result[role_key]:
+                                                assign_soldier = AssignmentSoldier(
+                                                    assignment_id=assignment.id,
+                                                    soldier_id=soldier_id,
+                                                    role_in_assignment=role_name
+                                                )
+                                                session.add(assign_soldier)
+
+                                                if soldier_id not in schedules:
+                                                    schedules[soldier_id] = []
+                                                schedules[soldier_id].append((
+                                                    assign_data['day'],
+                                                    assign_data['start_hour'],
+                                                    assign_data['start_hour'] + assign_data['length_in_hours'],
+                                                    assign_data['name'],
+                                                    assign_data['type']
+                                                ))
+                            except Exception as e2:
+                                print(f"🔴 שגיאה גם במצב חירום: {str(e2)}")
+                                traceback.print_exc()
 
                     session.commit()
-                    print(f"✅ שיבוץ ראשוני נוצר בהצלחה")
+                    print(f"✅ שיבוץ אוטומטי נוצר בהצלחה עם {len(all_assignments) - len(failed_assignments)}/{len(all_assignments)} משימות")
 
                 except Exception as e:
                     session.rollback()

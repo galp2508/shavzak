@@ -373,7 +373,7 @@ const LiveSchedule = () => {
                         {hours.map(hour => (
                           <div
                             key={hour}
-                            className="h-16 flex items-center justify-center border-b border-gray-200 text-sm text-gray-600 font-medium"
+                            className="h-12 flex items-center justify-center border-b border-gray-200 text-sm text-gray-600 font-medium"
                           >
                             {hour.toString().padStart(2, '0')}:00
                           </div>
@@ -387,7 +387,7 @@ const LiveSchedule = () => {
                           {hours.map(hour => (
                             <div
                               key={hour}
-                              className="h-16 border-b border-gray-200"
+                              className="h-12 border-b border-gray-200"
                             />
                           ))}
 
@@ -409,47 +409,49 @@ const LiveSchedule = () => {
                                 <div
                                   key={assignment.id}
                                   onClick={() => (user.role === 'מפ' || user.role === 'ממ') && openEditAssignmentModal(assignment)}
-                                  className="absolute inset-x-1 rounded-xl shadow-lg overflow-hidden group cursor-pointer hover:shadow-2xl transition-all duration-300 hover:scale-105 transform border-2"
+                                  className="absolute rounded-lg shadow-md overflow-hidden group cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-[1.02] transform border"
                                   style={{
-                                    top: `${topPosition}%`,
-                                    height: `${height}%`,
+                                    top: `calc(${topPosition}% + 2px)`,
+                                    height: `calc(${height}% - 4px)`,
+                                    left: '6px',
+                                    right: '6px',
                                     background: `linear-gradient(135deg, ${mahlakaColor} 0%, ${mahlakaColor}dd 100%)`,
                                     borderColor: mahlakaColor,
                                   }}
                                   title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00) - ${(user.role === 'מפ' || user.role === 'ממ') ? 'לחץ לעריכה' : ''}`}
                                 >
                                   {/* Assignment Content */}
-                                  <div className="p-3 h-full flex flex-col text-white backdrop-blur-sm relative">
+                                  <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative">
                                     {/* Edit Icon */}
                                     {(user.role === 'מפ' || user.role === 'ממ') && (
-                                      <div className="absolute top-2 left-2 bg-white/30 rounded-lg p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                      <div className="absolute top-1 left-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                         <Edit className="w-3 h-3" />
                                       </div>
                                     )}
 
                                     {/* Assignment Name & Time */}
-                                    <div className="font-bold text-base mb-1.5 flex items-center gap-2">
-                                      <Clock className="w-4 h-4" />
+                                    <div className="font-bold text-sm mb-1 flex items-center gap-1.5">
+                                      <Clock className="w-3.5 h-3.5" />
                                       {assignment.name}
                                     </div>
-                                    <div className="text-sm opacity-95 mb-2 font-medium bg-black bg-opacity-20 rounded-lg px-2 py-1 inline-block">
+                                    <div className="text-xs opacity-95 mb-1.5 font-medium bg-black bg-opacity-20 rounded px-1.5 py-0.5 inline-block">
                                       {startHour.toString().padStart(2, '0')}:00 - {endHour.toString().padStart(2, '0')}:00
                                     </div>
 
                                     {/* Soldiers List */}
                                     {assignment.soldiers && assignment.soldiers.length > 0 && (
                                       <div className="flex-1 overflow-y-auto">
-                                        <div className="space-y-1.5">
+                                        <div className="space-y-1">
                                           {assignment.soldiers.map((soldier) => (
                                             <div
                                               key={soldier.id}
-                                              className="text-sm bg-white/25 backdrop-blur-md px-3 py-2 rounded-lg border border-white/30 shadow-sm hover:bg-white/35 transition-all duration-200"
+                                              className="text-xs bg-white/25 backdrop-blur-md px-2 py-1 rounded border border-white/30 shadow-sm hover:bg-white/35 transition-all duration-200"
                                             >
-                                              <div className="font-semibold flex items-center gap-1.5">
-                                                <Users className="w-3 h-3" />
+                                              <div className="font-semibold flex items-center gap-1">
+                                                <Users className="w-2.5 h-2.5" />
                                                 {soldier.name}
                                               </div>
-                                              <div className="text-xs opacity-90 font-medium mt-0.5">
+                                              <div className="text-[10px] opacity-90 font-medium">
                                                 {soldier.role_in_assignment}
                                               </div>
                                             </div>
@@ -460,7 +462,7 @@ const LiveSchedule = () => {
 
                                     {/* No soldiers indicator */}
                                     {(!assignment.soldiers || assignment.soldiers.length === 0) && (
-                                      <div className="text-sm opacity-80 italic bg-red-500/30 px-3 py-2 rounded-lg border border-red-400/50">
+                                      <div className="text-xs opacity-80 italic bg-red-500/30 px-2 py-1 rounded border border-red-400/50">
                                         אין חיילים משובצים
                                       </div>
                                     )}

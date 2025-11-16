@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Shield, Plus, Users, Trash2, Edit, X } from 'lucide-react';
+import { Shield, Plus, Users, Trash2, Edit, X, UserCheck } from 'lucide-react';
 import ROLES from '../constants/roles';
 import { toast } from 'react-toastify';
 import { SoldierStatusBadge, StatusChangeModal } from '../components/SoldierStatusBadge';
@@ -934,6 +934,17 @@ const SoldiersModal = ({ mahlaka, soldiers, onClose, onDelete, onRefresh }) => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <div className="flex gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedSoldier(soldier);
+                                setShowStatusModal(true);
+                              }}
+                              className="text-green-600 hover:text-green-800"
+                              title="שינוי סטטוס"
+                            >
+                              <UserCheck size={18} />
+                            </button>
                             <button
                               onClick={() => {
                                 setEditingSoldier(soldier);

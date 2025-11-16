@@ -286,79 +286,150 @@ const LiveSchedule = () => {
           <div className="card">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">
-                משימות ליום {getDayName(currentDate)}
+                לוח שעות - {getDayName(currentDate)}
               </h2>
               <span className="text-sm text-gray-500">
                 {scheduleData?.assignments?.length} משימות
               </span>
             </div>
 
-          <div className="space-y-4">
-            {scheduleData?.assignments
-              .sort((a, b) => a.start_hour - b.start_hour)
-              .map((assignment) => {
-                const startHour = assignment.start_hour || 0;
-                const lengthInHours = assignment.length_in_hours || 1;
-                const endHour = startHour + lengthInHours;
-                const mahlakaColor = assignment.assigned_mahlaka_id
-                  ? getMahlakaColor(assignment.assigned_mahlaka_id)
-                  : '#6B7280';
+            {/* Time Grid Schedule */}
+            <div className="overflow-x-auto">
+              {(() => {
+                // קבל את כל סוגי המשימות הייחודיים
+                const assignmentTypes = [...new Set(scheduleData?.assignments?.map(a => a.type) || [])].sort();
+
+                // צור מפה של משימות לפי סוג ושעה
+                const assignmentsByType = {};
+                assignmentTypes.forEach(type => {
+                  assignmentsByType[type] = [];
+                });
+
+                scheduleData?.assignments?.forEach(assignment => {
+                  if (!assignmentsByType[assignment.type]) {
+                    assignmentsByType[assignment.type] = [];
+                  }
+                  assignmentsByType[assignment.type].push(assignment);
+                });
+
+                // יצירת 24 שעות
+                const hours = Array.from({ length: 24 }, (_, i) => i);
 
                 return (
-                  <div
-                    key={assignment.id}
-                    className="p-4 rounded-lg hover:shadow-md transition-all"
-                    style={{
-                      backgroundColor: `${mahlakaColor}15`,
-                      borderRight: `4px solid ${mahlakaColor}`,
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-gray-900">
-                            {assignment.name || 'משימה'}
-                          </h3>
-                          <span
-                            className="text-xs px-2 py-1 rounded-full text-white font-medium"
-                            style={{ backgroundColor: mahlakaColor }}
-                          >
-                            {assignment.type || 'כללי'}
-                          </span>
+                  <div className="min-w-max">
+                    {/* Header - סוגי משימות */}
+                    <div className="flex border-b-2 border-gray-300 mb-2">
+                      <div className="w-20 flex-shrink-0 font-bold text-gray-700 p-2">
+                        שעה
+                      </div>
+                      {assignmentTypes.map(type => (
+                        <div
+                          key={type}
+                          className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300"
+                        >
+                          {type}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Clock size={16} />
-                        <span className="text-sm font-medium">
-                          {startHour.toString().padStart(2, '0')}:00 -{' '}
-                          {endHour.toString().padStart(2, '0')}:00
-                        </span>
-                      </div>
+                      ))}
                     </div>
 
-                    {/* Soldiers List */}
-                    {assignment.soldiers && assignment.soldiers.length > 0 && (
-                      <div className="flex items-start gap-2 pt-3 border-t border-gray-200">
-                        <Users size={16} className="text-gray-500 mt-1" />
-                        <div className="flex flex-wrap gap-2">
-                          {assignment.soldiers.map((soldier) => (
-                            <div
-                              key={soldier.id}
-                              className="bg-white px-3 py-1 rounded-lg text-sm border border-gray-200"
-                            >
-                              <span className="font-medium">{soldier.name}</span>
-                              <span className="text-gray-500 mr-2">
-                                ({soldier.role_in_assignment})
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                    {/* Grid Container */}
+                    <div className="flex">
+                      {/* Hours Column */}
+                      <div className="w-20 flex-shrink-0">
+                        {hours.map(hour => (
+                          <div
+                            key={hour}
+                            className="h-16 flex items-center justify-center border-b border-gray-200 text-sm text-gray-600 font-medium"
+                          >
+                            {hour.toString().padStart(2, '0')}:00
+                          </div>
+                        ))}
                       </div>
-                    )}
+
+                      {/* Assignment Type Columns */}
+                      {assignmentTypes.map(type => (
+                        <div key={type} className="flex-1 min-w-[200px] border-l border-gray-300 relative">
+                          {/* Hour Grid Lines */}
+                          {hours.map(hour => (
+                            <div
+                              key={hour}
+                              className="h-16 border-b border-gray-200"
+                            />
+                          ))}
+
+                          {/* Assignment Blocks - Positioned Absolutely */}
+                          <div className="absolute inset-0">
+                            {assignmentsByType[type]?.map(assignment => {
+                              const startHour = assignment.start_hour || 0;
+                              const lengthInHours = assignment.length_in_hours || 1;
+                              const endHour = startHour + lengthInHours;
+                              const mahlakaColor = assignment.assigned_mahlaka_id
+                                ? getMahlakaColor(assignment.assigned_mahlaka_id)
+                                : '#6B7280';
+
+                              // Calculate position and height
+                              const topPosition = (startHour / 24) * 100;
+                              const height = (lengthInHours / 24) * 100;
+
+                              return (
+                                <div
+                                  key={assignment.id}
+                                  className="absolute inset-x-1 rounded-lg shadow-md overflow-hidden group cursor-pointer hover:shadow-lg transition-all"
+                                  style={{
+                                    top: `${topPosition}%`,
+                                    height: `${height}%`,
+                                    backgroundColor: mahlakaColor,
+                                    border: `2px solid ${mahlakaColor}`,
+                                  }}
+                                  title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00)`}
+                                >
+                                  {/* Assignment Content */}
+                                  <div className="p-2 h-full flex flex-col text-white">
+                                    {/* Assignment Name & Time */}
+                                    <div className="font-bold text-sm mb-1">
+                                      {assignment.name}
+                                    </div>
+                                    <div className="text-xs opacity-90 mb-2">
+                                      {startHour.toString().padStart(2, '0')}:00 - {endHour.toString().padStart(2, '0')}:00
+                                    </div>
+
+                                    {/* Soldiers List */}
+                                    {assignment.soldiers && assignment.soldiers.length > 0 && (
+                                      <div className="flex-1 overflow-y-auto">
+                                        <div className="space-y-1">
+                                          {assignment.soldiers.map((soldier) => (
+                                            <div
+                                              key={soldier.id}
+                                              className="text-xs bg-white/20 backdrop-blur-sm px-2 py-1 rounded"
+                                            >
+                                              <div className="font-medium">{soldier.name}</div>
+                                              <div className="text-[10px] opacity-80">
+                                                {soldier.role_in_assignment}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* No soldiers indicator */}
+                                    {(!assignment.soldiers || assignment.soldiers.length === 0) && (
+                                      <div className="text-xs opacity-75 italic">
+                                        אין חיילים
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 );
-              })}
-          </div>
+              })()}
+            </div>
           </div>
         </>
       )}

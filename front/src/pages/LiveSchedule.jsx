@@ -330,20 +330,20 @@ const LiveSchedule = () => {
             {/* Time Grid Schedule */}
             <div className="overflow-x-auto">
               {(() => {
-                // קבל את כל סוגי המשימות הייחודיים
-                const assignmentTypes = [...new Set(scheduleData?.assignments?.map(a => a.type) || [])].sort();
+                // קבל את כל שמות התבניות הייחודיים
+                const assignmentNames = [...new Set(scheduleData?.assignments?.map(a => a.name) || [])].sort();
 
-                // צור מפה של משימות לפי סוג ושעה
-                const assignmentsByType = {};
-                assignmentTypes.forEach(type => {
-                  assignmentsByType[type] = [];
+                // צור מפה של משימות לפי שם ושעה
+                const assignmentsByName = {};
+                assignmentNames.forEach(name => {
+                  assignmentsByName[name] = [];
                 });
 
                 scheduleData?.assignments?.forEach(assignment => {
-                  if (!assignmentsByType[assignment.type]) {
-                    assignmentsByType[assignment.type] = [];
+                  if (!assignmentsByName[assignment.name]) {
+                    assignmentsByName[assignment.name] = [];
                   }
-                  assignmentsByType[assignment.type].push(assignment);
+                  assignmentsByName[assignment.name].push(assignment);
                 });
 
                 // יצירת 24 שעות
@@ -351,17 +351,17 @@ const LiveSchedule = () => {
 
                 return (
                   <div className="min-w-max">
-                    {/* Header - סוגי משימות */}
+                    {/* Header - שמות תבניות */}
                     <div className="flex border-b-2 border-gray-300 mb-2">
                       <div className="w-20 flex-shrink-0 font-bold text-gray-700 p-2">
                         שעה
                       </div>
-                      {assignmentTypes.map(type => (
+                      {assignmentNames.map(name => (
                         <div
-                          key={type}
+                          key={name}
                           className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300"
                         >
-                          {type}
+                          {name}
                         </div>
                       ))}
                     </div>
@@ -380,9 +380,9 @@ const LiveSchedule = () => {
                         ))}
                       </div>
 
-                      {/* Assignment Type Columns */}
-                      {assignmentTypes.map(type => (
-                        <div key={type} className="flex-1 min-w-[200px] border-l border-gray-300 relative">
+                      {/* Assignment Name Columns */}
+                      {assignmentNames.map(name => (
+                        <div key={name} className="flex-1 min-w-[200px] border-l border-gray-300 relative">
                           {/* Hour Grid Lines */}
                           {hours.map(hour => (
                             <div
@@ -393,7 +393,7 @@ const LiveSchedule = () => {
 
                           {/* Assignment Blocks - Positioned Absolutely */}
                           <div className="absolute inset-0">
-                            {assignmentsByType[type]?.map(assignment => {
+                            {assignmentsByName[name]?.map(assignment => {
                               const startHour = assignment.start_hour || 0;
                               const lengthInHours = assignment.length_in_hours || 1;
                               const endHour = startHour + lengthInHours;

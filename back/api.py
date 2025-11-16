@@ -718,8 +718,8 @@ def create_soldier(current_user):
             role=data['role'],
             mahlaka_id=mahlaka_id,
             kita=data.get('kita'),
-            idf_id=data.get('idf_id'),
-            personal_id=data.get('personal_id'),
+            idf_id=data.get('idf_id') or None,
+            personal_id=data.get('personal_id') or None,
             sex=data.get('sex'),
             phone_number=data.get('phone_number'),
             address=data.get('address'),
@@ -811,8 +811,8 @@ def create_soldiers_bulk(current_user):
                     role=soldier_data['role'],
                     mahlaka_id=mahlaka_id,
                     kita=soldier_data.get('kita'),
-                    idf_id=soldier_data.get('idf_id'),
-                    personal_id=soldier_data.get('personal_id'),
+                    idf_id=soldier_data.get('idf_id') or None,
+                    personal_id=soldier_data.get('personal_id') or None,
                     sex=soldier_data.get('sex'),
                     phone_number=soldier_data.get('phone_number'),
                     address=soldier_data.get('address'),
@@ -847,12 +847,29 @@ def create_soldiers_bulk(current_user):
                     try:
                         # Parse DD.MM.YYYY format
                         date_str = soldier_data['unavailable_date'].strip()
-                        unavailable = datetime.strptime(date_str, '%d.%m.%Y').date()
-                        unavailable_record = UnavailableDate(soldier_id=soldier.id, date=unavailable)
-                        session.add(unavailable_record)
-                    except Exception as e:
-                        # Silently fail if date parsing fails
+                        if date_str:  # רק אם התאריך לא ריק
+                            # תמיכה בשני פורמטים: DD.MM.YYYY או YYYY-MM-DD
+                            try:
+                                unavailable = datetime.strptime(date_str, '%d.%m.%Y').date()
+                            except ValueError:
+                                try:
+                                    unavailable = datetime.strptime(date_str, '%Y-%m-%d').date()
+                                except ValueError:
+                                    # אם לא הצלחנו לפרסר, נוסיף הודעת שגיאה ברורה
+                                    errors.append(f"שורה {idx + 1} ({soldier_data.get('name', 'לא ידוע')}): פורמט תאריך לא חוקי: {date_str}. השתמש ב-DD.MM.YYYY או YYYY-MM-DD")
+                                    raise ValueError("Invalid date format")
+
+                            unavailable_record = UnavailableDate(soldier_id=soldier.id, date=unavailable)
+                            session.add(unavailable_record)
+                            print(f"✅ נשמר תאריך יציאה {unavailable} לחייל {soldier_data.get('name')}")
+                    except ValueError:
+                        # שגיאת פורמט - כבר טיפלנו בזה למעלה
                         pass
+                    except Exception as e:
+                        # שגיאה אחרת - נדווח
+                        errors.append(f"שורה {idx + 1} ({soldier_data.get('name', 'לא ידוע')}): שגיאה בשמירת תאריך יציאה: {str(e)}")
+                        print(f"🔴 Error saving unavailable_date for {soldier_data.get('name')}: {str(e)}")
+                        traceback.print_exc()
                 
                 # Add certifications if provided
                 if 'certifications' in soldier_data:
@@ -1355,7 +1372,11 @@ def create_assignment_template(pluga_id, current_user):
         
         session.add(template)
         session.commit()
-        
+
+        # מחק את השיבוץ האוטומטי כדי שייווצר מחדש עם התבנית החדשה
+        _trigger_schedule_regeneration(session, pluga_id)
+        session.commit()
+
         return jsonify({
             'message': 'תבנית נוצרה בהצלחה',
             'template': {
@@ -1451,6 +1472,10 @@ def update_assignment_template(template_id, current_user):
 
         session.commit()
 
+        # מחק את השיבוץ האוטומטי כדי שייווצר מחדש עם התבנית המעודכנת
+        _trigger_schedule_regeneration(session, template.pluga_id)
+        session.commit()
+
         return jsonify({
             'message': 'תבנית עודכנה בהצלחה',
             'template': {
@@ -1483,7 +1508,12 @@ def delete_assignment_template(template_id, current_user):
         if not can_edit_pluga(current_user, template.pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
 
+        pluga_id = template.pluga_id
         session.delete(template)
+        session.commit()
+
+        # מחק את השיבוץ האוטומטי כדי שייווצר מחדש ללא התבנית שנמחקה
+        _trigger_schedule_regeneration(session, pluga_id)
         session.commit()
 
         return jsonify({'message': 'תבנית נמחקה בהצלחה'}), 200
@@ -1528,6 +1558,10 @@ def duplicate_assignment_template(template_id, current_user):
         )
 
         session.add(new_template)
+        session.commit()
+
+        # מחק את השיבוץ האוטומטי כדי שייווצר מחדש עם התבנית המשוכפלת
+        _trigger_schedule_regeneration(session, original_template.pluga_id)
         session.commit()
 
         return jsonify({
@@ -2807,8 +2841,14 @@ def get_live_schedule(pluga_id, current_user):
                                 else:
                                     start_hour = slot * template.length_in_hours
 
+                                # יצירת שם משימה - אם יש יותר מאחת ביום, הוסף מספר
+                                if template.times_per_day > 1:
+                                    task_name = f"{template.name} {slot + 1}"
+                                else:
+                                    task_name = template.name
+
                                 assign_data = {
-                                    'name': f"{template.name} {slot + 1}",
+                                    'name': task_name,
                                     'type': template.assignment_type,
                                     'day': day,
                                     'start_hour': start_hour,
@@ -3060,7 +3100,10 @@ def get_live_schedule(pluga_id, current_user):
         assignments_data = []
         warnings = []  # אזהרות על בעיות בשיבוץ
 
-        for assignment in existing_assignments:
+        # מיון המשימות לפי שם (כדי שהאזהרות יהיו מסודרות)
+        existing_assignments_sorted = sorted(existing_assignments, key=lambda a: a.name)
+
+        for assignment in existing_assignments_sorted:
             # טען חיילים
             soldiers_in_assignment = session.query(AssignmentSoldier).filter(
                 AssignmentSoldier.assignment_id == assignment.id
@@ -3097,19 +3140,23 @@ def get_live_schedule(pluga_id, current_user):
             ).first()
 
             if template:
-                # חשב סך הכל חיילים שחסרים
-                total_needed = template.commanders_needed + template.drivers_needed + template.soldiers_needed
+                # חשב סך הכל חיילים שחסרים (טיפול ב-None)
+                commanders_needed = template.commanders_needed or 0
+                drivers_needed = template.drivers_needed or 0
+                soldiers_needed = template.soldiers_needed or 0
+
+                total_needed = commanders_needed + drivers_needed + soldiers_needed
                 total_assigned = commanders + drivers + regular_soldiers
                 missing_count = total_needed - total_assigned
 
                 # בנה רשימת חסרים
                 missing_parts = []
-                if template.commanders_needed > commanders:
-                    missing_parts.append(f"{template.commanders_needed - commanders} מפקדים")
-                if template.drivers_needed > drivers:
-                    missing_parts.append(f"{template.drivers_needed - drivers} נהגים")
-                if template.soldiers_needed > regular_soldiers:
-                    missing_parts.append(f"{template.soldiers_needed - regular_soldiers} לוחמים")
+                if commanders_needed > commanders:
+                    missing_parts.append(f"{commanders_needed - commanders} מפקדים")
+                if drivers_needed > drivers:
+                    missing_parts.append(f"{drivers_needed - drivers} נהגים")
+                if soldiers_needed > regular_soldiers:
+                    missing_parts.append(f"{soldiers_needed - regular_soldiers} לוחמים")
 
                 if missing_parts:
                     message = f"⚠️ {assignment.name}: חסרים " + ", ".join(missing_parts)
@@ -3213,6 +3260,99 @@ def get_live_schedule(pluga_id, current_user):
         return jsonify(error_response), 500
     finally:
         session.close()
+
+
+@app.route('/api/plugot/<int:pluga_id>/live-schedule/regenerate', methods=['POST'])
+@token_required
+def regenerate_live_schedule(pluga_id, current_user):
+    """
+    מחק ויצור מחדש את השיבוץ האוטומטי
+    שימושי כאשר משתנות תבניות משימות או מחלקות
+    """
+    session = get_db()
+
+    try:
+        # בדיקת הרשאות - רק מפקדים יכולים לבצע פעולה זו
+        if not can_edit_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לעדכן שיבוץ'}), 403
+
+        # מצא את השיבוץ האוטומטי
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if not master_shavzak:
+            return jsonify({'error': 'לא נמצא שיבוץ אוטומטי'}), 404
+
+        # מחק את כל המשימות הקיימות
+        assignments = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id
+        ).all()
+
+        for assignment in assignments:
+            # מחק את כל השיוכים של המשימה
+            session.query(AssignmentSoldier).filter(
+                AssignmentSoldier.assignment_id == assignment.id
+            ).delete()
+            # מחק את המשימה עצמה
+            session.delete(assignment)
+
+        session.commit()
+        print(f"✅ נמחקו {len(assignments)} משימות מהשיבוץ האוטומטי")
+
+        # עכשיו ייצור מחדש את השיבוץ בפעם הבאה שנטעין את הדף
+        # (הקוד ב-get_live_schedule יזהה שאין משימות ויריץ את האלגוריתם אוטומטית)
+
+        return jsonify({
+            'success': True,
+            'message': f'השיבוץ האוטומטי נמחק בהצלחה. {len(assignments)} משימות הוסרו.',
+            'info': 'השיבוץ ייווצר מחדש אוטומטית בפעם הבאה שתיטען דף השיבוץ החי.'
+        }), 200
+
+    except Exception as e:
+        session.rollback()
+        print(f"Error in regenerate_live_schedule: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': f'שגיאה במחיקת השיבוץ: {str(e)}'}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# HELPER FUNCTIONS FOR SCHEDULE REGENERATION
+# ============================================================================
+
+def _trigger_schedule_regeneration(session, pluga_id):
+    """
+    מחיקת השיבוץ האוטומטי כדי לגרום ליצירה מחדש
+    נקראת אוטומטית כאשר משתנות תבניות משימות או מחלקות
+    """
+    try:
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if master_shavzak:
+            # מחק את כל המשימות
+            assignments = session.query(Assignment).filter(
+                Assignment.shavzak_id == master_shavzak.id
+            ).all()
+
+            for assignment in assignments:
+                session.query(AssignmentSoldier).filter(
+                    AssignmentSoldier.assignment_id == assignment.id
+                ).delete()
+                session.delete(assignment)
+
+            print(f"🔄 השיבוץ האוטומטי נמחק ({len(assignments)} משימות) - ייווצר מחדש בטעינה הבאה")
+            return len(assignments)
+        return 0
+    except Exception as e:
+        print(f"⚠️ שגיאה במחיקת השיבוץ האוטומטי: {str(e)}")
+        # לא נעצור את התהליך - רק נדווח
+        return 0
 
 
 # ============================================================================

@@ -2494,6 +2494,93 @@ def get_live_schedule(pluga_id, current_user):
             master_shavzak.days_count = max_day_needed
             session.commit()
 
+        # בדוק אם יש משימות בכלל לשיבוץ האוטומטי
+        any_assignments = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id
+        ).first()
+
+        # אם אין משימות בכלל, נסה להריץ את אלגוריתם השיבוץ אוטומטית
+        if not any_assignments:
+            # בדוק אם יש תבניות משימות
+            templates = session.query(AssignmentTemplate).filter_by(pluga_id=pluga_id).all()
+
+            if templates and len(templates) > 0:
+                # יש תבניות אבל אין משימות - נריץ את האלגוריתם אוטומטית
+                print(f"🔄 מצאתי {len(templates)} תבניות משימות אבל אין משימות - מריץ שיבוץ אוטומטי...")
+
+                try:
+                    # הרץ את אלגוריתם השיבוץ באופן סינכרוני (פעם אחת בלבד)
+                    # זה יכול לקחת כמה שניות, אבל זה קורה רק בפעם הראשונה
+                    from assignment_logic import AssignmentLogic
+
+                    # טעינת נתונים
+                    pluga = session.query(Pluga).filter_by(id=pluga_id).first()
+                    mahalkot = session.query(Mahlaka).filter_by(pluga_id=pluga_id).all()
+
+                    # יצירת מבנה נתונים פשוט
+                    mahalkot_data = []
+                    for mahlaka in mahalkot:
+                        soldiers = session.query(Soldier).filter_by(mahlaka_id=mahlaka.id).all()
+
+                        commanders = []
+                        drivers = []
+                        regular_soldiers = []
+
+                        for soldier in soldiers:
+                            soldier_data = {
+                                'id': soldier.id,
+                                'name': soldier.name,
+                                'role': soldier.role
+                            }
+
+                            if soldier.role in ['ממ', 'מכ', 'סמל']:
+                                commanders.append(soldier_data)
+                            elif soldier.role == 'נהג':
+                                drivers.append(soldier_data)
+                            else:
+                                regular_soldiers.append(soldier_data)
+
+                        mahalkot_data.append({
+                            'id': mahlaka.id,
+                            'number': mahlaka.number,
+                            'commanders': commanders,
+                            'drivers': drivers,
+                            'soldiers': regular_soldiers
+                        })
+
+                    # אתחול אלגוריתם
+                    logic = AssignmentLogic(min_rest_hours=master_shavzak.min_rest_hours)
+
+                    # יצירת משימות פשוטה (רק ליום הראשון לדוגמה)
+                    for day in range(min(master_shavzak.days_count, 7)):  # רק 7 ימים ראשונים
+                        current_date = master_shavzak.start_date + timedelta(days=day)
+
+                        for template in templates:
+                            for slot in range(template.times_per_day):
+                                start_hour = slot * template.length_in_hours
+
+                                # צור משימה פשוטה ללא שיבוץ חיילים (לעת עתה)
+                                assignment = Assignment(
+                                    shavzak_id=master_shavzak.id,
+                                    name=f"{template.name} {slot + 1}",
+                                    type=template.assignment_type,
+                                    day=day,
+                                    start_hour=start_hour,
+                                    length_in_hours=template.length_in_hours,
+                                    assigned_mahlaka_id=None
+                                )
+                                session.add(assignment)
+
+                    session.commit()
+                    print(f"✅ שיבוץ ראשוני נוצר בהצלחה")
+
+                except Exception as e:
+                    session.rollback()
+                    print(f"⚠️ שגיאה ביצירת שיבוץ ראשוני: {str(e)}")
+                    traceback.print_exc()
+            else:
+                print(f"⚠️ אין תבניות משימות במערכת - לא ניתן להריץ שיבוץ אוטומטי")
+
         # בדוק אם יש משימות קיימות ליום המבוקש
         existing_assignments = session.query(Assignment).filter(
             Assignment.shavzak_id == master_shavzak.id,
@@ -2511,7 +2598,7 @@ def get_live_schedule(pluga_id, current_user):
                 'day_index': day_diff,
                 'assignments': [],
                 'shavzak_id': master_shavzak.id,
-                'info': 'לא קיים שיבוץ ליום זה. יש ליצור שיבוץ באמצעות אלגוריתם השיבוץ הראשי.'
+                'info': 'לא קיים שיבוץ ליום זה. יש ליצור שיבוץ באמצעות אלגוריתם השיבוץ הראשי או להוסיף תבניות משימות.'
             }), 200
 
         # בנה תגובה

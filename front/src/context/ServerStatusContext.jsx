@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useCallback, useRef } from 'react';
 
 const ServerStatusContext = createContext(null);
 
@@ -12,36 +12,41 @@ export const useServerStatus = () => {
 
 export const ServerStatusProvider = ({ children }) => {
   const [isServerDown, setIsServerDown] = useState(false);
-  const [consecutiveSuccesses, setConsecutiveSuccesses] = useState(0);
+  const isServerDownRef = useRef(false);
+  const consecutiveSuccessesRef = useRef(0);
 
   const REQUIRED_SUCCESSES = 3; // מספר בקשות מוצלחות נדרש לפני שמסירים את מסך התחזוקה
 
-  const markServerDown = () => {
-    console.log('🔴 השרת לא זמין - מציג מסך תחזוקה');
-    setIsServerDown(true);
-    setConsecutiveSuccesses(0); // אפס את מונה ההצלחות
-  };
-
-  const markServerUp = () => {
-    if (!isServerDown) {
-      // אם השרת כבר פעיל, אין צורך לספור
+  const markServerDown = useCallback(() => {
+    // אם השרת כבר down, אל תעשה כלום
+    if (isServerDownRef.current) {
       return;
     }
 
-    setConsecutiveSuccesses(prev => {
-      const newCount = prev + 1;
-      console.log(`✅ בקשה מוצלחת (${newCount}/${REQUIRED_SUCCESSES})`);
+    console.log('🔴 השרת לא זמין - מציג מסך תחזוקה');
+    isServerDownRef.current = true;
+    setIsServerDown(true);
+    consecutiveSuccessesRef.current = 0; // אפס את מונה ההצלחות
+  }, []);
 
-      // רק אם יש מספיק הצלחות ברצף, נחזיר את המערכת לפעילות
-      if (newCount >= REQUIRED_SUCCESSES) {
-        console.log('🎉 השרת חזר לפעילות מלאה!');
-        setIsServerDown(false);
-        return 0; // אפס את המונה
-      }
+  const markServerUp = useCallback(() => {
+    // אם השרת כבר פעיל, אל תעשה כלום (מונע עדכוני state מיותרים)
+    if (!isServerDownRef.current) {
+      return;
+    }
 
-      return newCount;
-    });
-  };
+    consecutiveSuccessesRef.current += 1;
+    const newCount = consecutiveSuccessesRef.current;
+    console.log(`✅ בקשה מוצלחת (${newCount}/${REQUIRED_SUCCESSES})`);
+
+    // רק אם יש מספיק הצלחות ברצף, נחזיר את המערכת לפעילות
+    if (newCount >= REQUIRED_SUCCESSES) {
+      console.log('🎉 השרת חזר לפעילות מלאה!');
+      isServerDownRef.current = false;
+      setIsServerDown(false);
+      consecutiveSuccessesRef.current = 0; // אפס את המונה
+    }
+  }, []);
 
   const value = {
     isServerDown,

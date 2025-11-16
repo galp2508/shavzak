@@ -447,7 +447,7 @@ class AssignmentLogic:
     
     def assign_guard(self, assign_data: Dict, all_soldiers: List[Dict],
                     schedules: Dict) -> Dict:
-        """שיבוץ שמירה - עם מקסימום שעות מנוחה"""
+        """שיבוץ שמירה - עם מקסימום שעות מנוחה + מחלקה"""
         available = [
             s for s in all_soldiers
             if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
@@ -465,7 +465,11 @@ class AssignmentLogic:
                 ),
                 reverse=True  # מי שנח יותר קודם
             )
-            return {'soldiers': [available[0]['id']]}
+            selected_soldier = available[0]
+            return {
+                'soldiers': [selected_soldier['id']],
+                'mahlaka_id': selected_soldier.get('mahlaka_id')  # שמירת מחלקה
+            }
 
         if self.emergency_mode:
             reduced_rest = self.min_rest_hours // 2
@@ -917,7 +921,11 @@ class AssignmentLogic:
                 ),
                 reverse=True
             )
-            return {'soldiers': [certified[0]['id']]}
+            selected_person = certified[0]
+            return {
+                'soldiers': [selected_person['id']],
+                'mahlaka_id': selected_person.get('mahlaka_id')
+            }
 
         if self.emergency_mode:
             reduced_rest = self.min_rest_hours // 2
@@ -938,7 +946,11 @@ class AssignmentLogic:
                     ),
                     reverse=True
                 )
-                return {'soldiers': [certified[0]['id']]}
+                selected_person = certified[0]
+                return {
+                    'soldiers': [selected_person['id']],
+                    'mahlaka_id': selected_person.get('mahlaka_id')
+                }
 
         # 🔧 המערכת תמיד מצליחה! אם אין מוסמך חמל - ניקח מי שזמין
         # אבל עדיין צריך לבדוק שהוא לא משובץ באותו זמן!
@@ -959,10 +971,14 @@ class AssignmentLogic:
                 ),
                 reverse=True
             )
-            return {'soldiers': [available_people[0]['id']]}
+            selected_person = available_people[0]
+            return {
+                'soldiers': [selected_person['id']],
+                'mahlaka_id': selected_person.get('mahlaka_id')
+            }
 
-        return {'soldiers': []}
-    
+        return {'soldiers': [], 'mahlaka_id': None}
+
     def assign_kitchen(self, assign_data: Dict, all_soldiers: List[Dict],
                       schedules: Dict) -> Dict:
         """תורן מטבח - מספר חיילים לפי needs_soldiers"""
@@ -987,7 +1003,14 @@ class AssignmentLogic:
                 ),
                 reverse=True  # מי שנח יותר קודם
             )
-            return {'soldiers': [s['id'] for s in available[:num_needed]]}
+            selected_soldiers = available[:num_needed]
+            # בדוק אם כולם מאותה מחלקה
+            mahlaka_ids = set(s.get('mahlaka_id') for s in selected_soldiers)
+            mahlaka_id = mahlaka_ids.pop() if len(mahlaka_ids) == 1 else None
+            return {
+                'soldiers': [s['id'] for s in selected_soldiers],
+                'mahlaka_id': mahlaka_id
+            }
 
         if self.emergency_mode:
             reduced_rest = self.min_rest_hours // 2
@@ -1007,8 +1030,14 @@ class AssignmentLogic:
                     ),
                     reverse=True
                 )
-                # הוסר: אזהרת "מנוחה מופחתת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
-                return {'soldiers': [s['id'] for s in available[:num_needed]]}
+                selected_soldiers = available[:num_needed]
+                # בדוק אם כולם מאותה מחלקה
+                mahlaka_ids = set(s.get('mahlaka_id') for s in selected_soldiers)
+                mahlaka_id = mahlaka_ids.pop() if len(mahlaka_ids) == 1 else None
+                return {
+                    'soldiers': [s['id'] for s in selected_soldiers],
+                    'mahlaka_id': mahlaka_id
+                }
 
         # 🔧 המערכת תמיד מצליחה! אם אין מספיק - נשתמש במי שזמין
         # אבל עדיין צריך לבדוק שהוא לא משובץ באותו זמן!
@@ -1034,10 +1063,17 @@ class AssignmentLogic:
             shortage = num_needed - num_to_assign
             if shortage >= 2 or (shortage > 0 and shortage / num_needed > 0.3):
                 self.warnings.append(f"⚠️ {assign_data['name']}: שובצו רק {num_to_assign} מתוך {num_needed} חיילים")
-            return {'soldiers': [s['id'] for s in available_people[:num_to_assign]]}
+            selected_soldiers = available_people[:num_to_assign]
+            # בדוק אם כולם מאותה מחלקה
+            mahlaka_ids = set(s.get('mahlaka_id') for s in selected_soldiers)
+            mahlaka_id = mahlaka_ids.pop() if len(mahlaka_ids) == 1 else None
+            return {
+                'soldiers': [s['id'] for s in selected_soldiers],
+                'mahlaka_id': mahlaka_id
+            }
 
         # ממש אין אף אחד - נחזיר ריק (אבל לא Exception!)
-        return {'soldiers': []}
+        return {'soldiers': [], 'mahlaka_id': None}
     
     def assign_hafak_gashash(self, assign_data: Dict, all_people: List[Dict],
                             schedules: Dict) -> Dict:
@@ -1059,7 +1095,11 @@ class AssignmentLogic:
                 ),
                 reverse=True
             )
-            return {'soldiers': [available[0]['id']]}
+            selected_soldier = available[0]
+            return {
+                'soldiers': [selected_soldier['id']],
+                'mahlaka_id': selected_soldier.get('mahlaka_id')
+            }
 
         if self.emergency_mode:
             reduced_rest = self.min_rest_hours // 2

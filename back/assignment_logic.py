@@ -633,9 +633,11 @@ class AssignmentLogic:
                 assign_data, all_commanders, all_drivers, all_soldiers, schedules
             )
             if result:
+                # כוננות א' תמיד פלוגתית (לוקחת אנשים ממחלקות שונות)
+                result['mahlaka_id'] = 'pluga'
                 return result
             # אם לא הצלחנו לבנות מסיורים - לא משלימים! החזר ריק
-            return {'commanders': [], 'drivers': [], 'soldiers': []}
+            return {'commanders': [], 'drivers': [], 'soldiers': [], 'mahlaka_id': 'pluga'}
 
         # שיבוץ רגיל - לא מסומן reuse
         # בדוק זמינות
@@ -686,12 +688,14 @@ class AssignmentLogic:
                 reverse=True
             )
 
+            # כוננות א' תמיד פלוגתית
             return {
                 'commanders': [available_commanders[0]['id']],
                 'drivers': [available_drivers[0]['id']],
-                'soldiers': [s['id'] for s in available_soldiers[:7]]
+                'soldiers': [s['id'] for s in available_soldiers[:7]],
+                'mahlaka_id': 'pluga'
             }
-        
+
         if self.emergency_mode:
             reduced_rest = self.min_rest_hours // 2
             available_commanders = [
@@ -715,10 +719,12 @@ class AssignmentLogic:
 
             if len(available_commanders) >= 1 and len(available_drivers) >= 1 and \
                len(available_soldiers) >= 7:
+                # כוננות א' תמיד פלוגתית
                 return {
                     'commanders': [available_commanders[0]['id']],
                     'drivers': [available_drivers[0]['id']],
-                    'soldiers': [s['id'] for s in available_soldiers[:7]]
+                    'soldiers': [s['id'] for s in available_soldiers[:7]],
+                    'mahlaka_id': 'pluga'
                 }
 
         # 🔧 המערכת תמיד מצליחה! משתמשים בכל מי שזמין בלי בדיקות מנוחה
@@ -731,12 +737,14 @@ class AssignmentLogic:
         final_drivers = [all_people.pop(0)['id']] if all_people else []
         final_soldiers = [all_people.pop(0)['id'] for _ in range(min(7, len(all_people)))]
 
+        # כוננות א' תמיד פלוגתית
         return {
             'commanders': final_commanders,
             'drivers': final_drivers,
-            'soldiers': final_soldiers
+            'soldiers': final_soldiers,
+            'mahlaka_id': 'pluga'
         }
-    
+
     def _try_build_standby_b_from_tasks(self, assign_data: Dict, all_commanders: List[Dict],
                                         all_soldiers: List[Dict], schedules: Dict) -> Dict:
         """ניסיון לבנות כוננות ב' מסיור שלישי + 3 שמירות
@@ -819,9 +827,11 @@ class AssignmentLogic:
                 assign_data, all_commanders, all_soldiers, schedules
             )
             if result:
+                # כוננות ב' תמיד פלוגתית (לוקחת אנשים ממחלקות שונות)
+                result['mahlaka_id'] = 'pluga'
                 return result
             # אם לא הצלחנו לבנות - לא משלימים! החזר ריק
-            return {'commanders': [], 'soldiers': []}
+            return {'commanders': [], 'soldiers': [], 'mahlaka_id': 'pluga'}
 
         # שיבוץ רגיל - לא מסומן reuse
         # בדוק זמינות
@@ -857,11 +867,13 @@ class AssignmentLogic:
                 reverse=True
             )
 
+            # כוננות ב' תמיד פלוגתית
             return {
                 'commanders': [available_commanders[0]['id']],
-                'soldiers': [s['id'] for s in available_soldiers[:3]]
+                'soldiers': [s['id'] for s in available_soldiers[:3]],
+                'mahlaka_id': 'pluga'
             }
-        
+
         if self.emergency_mode:
             reduced_rest = self.min_rest_hours // 2
             available_commanders = [
@@ -878,9 +890,11 @@ class AssignmentLogic:
             ]
 
             if len(available_commanders) >= 1 and len(available_soldiers) >= 3:
+                # כוננות ב' תמיד פלוגתית
                 return {
                     'commanders': [available_commanders[0]['id']],
-                    'soldiers': [s['id'] for s in available_soldiers[:3]]
+                    'soldiers': [s['id'] for s in available_soldiers[:3]],
+                    'mahlaka_id': 'pluga'
                 }
 
         # 🔧 המערכת תמיד מצליחה! משתמשים בכל מי שזמין בלי בדיקות מנוחה
@@ -892,11 +906,13 @@ class AssignmentLogic:
         final_commanders = [all_people.pop(0)['id']] if all_people else []
         final_soldiers = [all_people.pop(0)['id'] for _ in range(min(3, len(all_people)))]
 
+        # כוננות ב' תמיד פלוגתית
         return {
             'commanders': final_commanders,
-            'soldiers': final_soldiers
+            'soldiers': final_soldiers,
+            'mahlaka_id': 'pluga'
         }
-    
+
     def assign_operations(self, assign_data: Dict, all_people: List[Dict],
                          schedules: Dict) -> Dict:
         """שיבוץ חמל - דורש הסמכה, עם מקסימום שעות מנוחה"""
@@ -1004,9 +1020,9 @@ class AssignmentLogic:
                 reverse=True  # מי שנח יותר קודם
             )
             selected_soldiers = available[:num_needed]
-            # בדוק אם כולם מאותה מחלקה
+            # בדוק אם כולם מאותה מחלקה - אם לא, זה פלוגתי (צהוב)
             mahlaka_ids = set(s.get('mahlaka_id') for s in selected_soldiers)
-            mahlaka_id = mahlaka_ids.pop() if len(mahlaka_ids) == 1 else None
+            mahlaka_id = mahlaka_ids.pop() if len(mahlaka_ids) == 1 else 'pluga'
             return {
                 'soldiers': [s['id'] for s in selected_soldiers],
                 'mahlaka_id': mahlaka_id
@@ -1031,9 +1047,9 @@ class AssignmentLogic:
                     reverse=True
                 )
                 selected_soldiers = available[:num_needed]
-                # בדוק אם כולם מאותה מחלקה
+                # בדוק אם כולם מאותה מחלקה - אם לא, זה פלוגתי (צהוב)
                 mahlaka_ids = set(s.get('mahlaka_id') for s in selected_soldiers)
-                mahlaka_id = mahlaka_ids.pop() if len(mahlaka_ids) == 1 else None
+                mahlaka_id = mahlaka_ids.pop() if len(mahlaka_ids) == 1 else 'pluga'
                 return {
                     'soldiers': [s['id'] for s in selected_soldiers],
                     'mahlaka_id': mahlaka_id
@@ -1064,16 +1080,16 @@ class AssignmentLogic:
             if shortage >= 2 or (shortage > 0 and shortage / num_needed > 0.3):
                 self.warnings.append(f"⚠️ {assign_data['name']}: שובצו רק {num_to_assign} מתוך {num_needed} חיילים")
             selected_soldiers = available_people[:num_to_assign]
-            # בדוק אם כולם מאותה מחלקה
+            # בדוק אם כולם מאותה מחלקה - אם לא, זה פלוגתי (צהוב)
             mahlaka_ids = set(s.get('mahlaka_id') for s in selected_soldiers)
-            mahlaka_id = mahlaka_ids.pop() if len(mahlaka_ids) == 1 else None
+            mahlaka_id = mahlaka_ids.pop() if len(mahlaka_ids) == 1 else 'pluga'
             return {
                 'soldiers': [s['id'] for s in selected_soldiers],
                 'mahlaka_id': mahlaka_id
             }
 
         # ממש אין אף אחד - נחזיר ריק (אבל לא Exception!)
-        return {'soldiers': [], 'mahlaka_id': None}
+        return {'soldiers': [], 'mahlaka_id': 'pluga'}
     
     def assign_hafak_gashash(self, assign_data: Dict, all_people: List[Dict],
                             schedules: Dict) -> Dict:

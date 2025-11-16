@@ -1785,8 +1785,10 @@ def generate_shavzak(shavzak_id, current_user):
                     else:
                         start_hour = slot * template.length_in_hours
 
+                    # שם המשימה - ללא מספר סלוט! כל המשימות של אותה תבנית יוצגו באותה עמודה
+                    # אבל בשורות שונות לפי שעת ההתחלה
                     assign_data = {
-                        'name': f"{template.name} {slot + 1}",
+                        'name': template.name,
                         'type': template.assignment_type,
                         'day': day,
                         'start_hour': start_hour,
@@ -1871,7 +1873,7 @@ def generate_shavzak(shavzak_id, current_user):
                 elif assign_data['type'] == 'תורן מטבח':
                     result = logic.assign_kitchen(assign_data, available_soldiers, schedules)
                 elif assign_data['type'] == 'חפק גשש':
-                    result = logic.assign_hafak_gashash(assign_data, available_commanders + available_soldiers, schedules)
+                    result = logic.assign_hafak_gashash(assign_data, available_soldiers, schedules)
                 elif assign_data['type'] == 'שלז':
                     result = logic.assign_shalaz(assign_data, available_soldiers, schedules)
                 elif assign_data['type'] == 'קצין תורן':
@@ -2811,11 +2813,14 @@ def get_live_schedule(pluga_id, current_user):
                                 'status_type': status.status_type if status else 'בבסיס'
                             }
 
+                            # מפקדים
                             if soldier.role in ['ממ', 'מכ', 'סמל']:
                                 commanders.append(soldier_data)
-                            elif soldier.role == 'נהג':
+                            # נהגים - גם ברשימת נהגים וגם כחיילים רגילים
+                            if soldier.role == 'נהג':
                                 drivers.append(soldier_data)
-                            else:
+                            # כל מי שלא מפקד (כולל נהגים) - חיילים רגילים
+                            if soldier.role not in ['ממ', 'מכ', 'סמל']:
                                 regular_soldiers.append(soldier_data)
 
                         mahalkot_data.append({
@@ -2868,14 +2873,10 @@ def get_live_schedule(pluga_id, current_user):
                                 else:
                                     start_hour = slot * template.length_in_hours
 
-                                # יצירת שם משימה - אם יש יותר מאחת ביום, הוסף מספר
-                                if template.times_per_day > 1:
-                                    task_name = f"{template.name} {slot + 1}"
-                                else:
-                                    task_name = template.name
-
+                                # שם המשימה - ללא מספר סלוט! כל המשימות של אותה תבנית יוצגו באותה עמודה
+                                # אבל בשורות שונות לפי שעת ההתחלה
                                 assign_data = {
-                                    'name': task_name,
+                                    'name': template.name,
                                     'type': template.assignment_type,
                                     'day': day,
                                     'start_hour': start_hour,
@@ -2959,7 +2960,7 @@ def get_live_schedule(pluga_id, current_user):
                             elif assign_data['type'] == 'תורן מטבח':
                                 result = logic.assign_kitchen(assign_data, available_soldiers, schedules)
                             elif assign_data['type'] == 'חפק גשש':
-                                result = logic.assign_hafak_gashash(assign_data, available_commanders + available_soldiers, schedules)
+                                result = logic.assign_hafak_gashash(assign_data, available_soldiers, schedules)
                             elif assign_data['type'] == 'שלז':
                                 result = logic.assign_shalaz(assign_data, available_soldiers, schedules)
                             elif assign_data['type'] == 'קצין תורן':
@@ -3051,7 +3052,7 @@ def get_live_schedule(pluga_id, current_user):
                                 elif assign_data['type'] == 'תורן מטבח':
                                     result = logic.assign_kitchen(assign_data, available_soldiers, schedules)
                                 elif assign_data['type'] == 'חפק גשש':
-                                    result = logic.assign_hafak_gashash(assign_data, available_commanders + available_soldiers, schedules)
+                                    result = logic.assign_hafak_gashash(assign_data, available_soldiers, schedules)
                                 elif assign_data['type'] == 'שלז':
                                     result = logic.assign_shalaz(assign_data, available_soldiers, schedules)
                                 elif assign_data['type'] == 'קצין תורן':

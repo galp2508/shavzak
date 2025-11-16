@@ -11,8 +11,6 @@ class AssignmentLogic:
         self.emergency_mode = False
         self.warnings = []
         self.reuse_soldiers_for_standby = reuse_soldiers_for_standby  # האם לאפשר שימוש חוזר בחיילים לכוננות
-        self.last_mahlaka_used = {}  # {day: mahlaka_id} - מעקב אחר המחלקה האחרונה שעבדה בכל יום
-        self.mahlaka_rotation_index = 0  # אינדקס לרוטציה של מחלקות
 
     def enable_emergency_mode(self):
         """הפעלת מצב חירום"""
@@ -128,24 +126,50 @@ class AssignmentLogic:
 
         raise Exception(f"לא נמצאה מחלקה זמינה לסיור")
     
+    def get_shift_number(self, start_hour: int) -> int:
+        """מחזיר את מספר המשמרת על פי שעת ההתחלה
+        משמרת 0: 00:00-08:00
+        משמרת 1: 08:00-16:00
+        משמרת 2: 16:00-00:00 (24:00)
+        """
+        if 0 <= start_hour < 8:
+            return 0
+        elif 8 <= start_hour < 16:
+            return 1
+        elif 16 <= start_hour < 24:
+            return 2
+        else:
+            # אם השעה מחוץ לטווח, נחשב לפי modulo
+            return (start_hour // 8) % 3
+
     def get_next_mahlaka_rotation(self, mahalkot: List[Dict], assign_data: Dict) -> List[Dict]:
-        """מחזיר את המחלקות במחזוריות - כל מחלקה עובדת ביחד"""
+        """מחזיר את המחלקות במחזוריות - כל מחלקה עובדת במשמרת מסוימת (לפי שעות)
+        כל מחלקה תיקח את כל המשימות באותה משמרת:
+        - מחלקה 1: 00:00-08:00
+        - מחלקה 2: 08:00-16:00
+        - מחלקה 3: 16:00-00:00
+        ובכל יום המחלקות מתחלפות משמרות
+        """
         day = assign_data['day']
+        start_hour = assign_data['start_hour']
 
-        # אם זה היום הראשון או המחלקה הקודמת לא מוגדרת, התחל מהתחלה
-        if day not in self.last_mahlaka_used:
-            # התחל מהמחלקה הראשונה
-            self.mahlaka_rotation_index = 0
-
-        # סדר המחלקות בצורה מחזורית החל מהאינדקס הנוכחי
         num_mahalkot = len(mahalkot)
         if num_mahalkot == 0:
             return []
 
-        # יצירת רשימה מסודרת במחזוריות
+        # חישוב מספר המשמרת (0, 1, או 2)
+        shift_number = self.get_shift_number(start_hour)
+
+        # חישוב איזו מחלקה צריכה לעבוד במשמרת הזו ביום הזה
+        # ביום 0: מחלקה 0 במשמרת 0, מחלקה 1 במשמרת 1, מחלקה 2 במשמרת 2
+        # ביום 1: מחלקה 1 במשמרת 0, מחלקה 2 במשמרת 1, מחלקה 0 במשמרת 2
+        # וכן הלאה (רוטציה)
+        mahlaka_index = (shift_number + day) % num_mahalkot
+
+        # יצירת רשימה מסודרת במחזוריות, כאשר המחלקה המתאימה במשמרת היא הראשונה
         rotated = []
         for i in range(num_mahalkot):
-            idx = (self.mahlaka_rotation_index + i) % num_mahalkot
+            idx = (mahlaka_index + i) % num_mahalkot
             rotated.append(mahalkot[idx])
 
         return rotated
@@ -246,13 +270,6 @@ class AssignmentLogic:
             else:
                 # אין נהג - סיור פרוק
                 self.warnings.append(f"⚠️ {assign_data['name']}: סיור פרוק - אין נהג זמין")
-
-            # עדכן את המחלקה האחרונה שעבדה
-            self.last_mahlaka_used[assign_data['day']] = mahlaka_info['id']
-
-            # עדכן את האינדקס לרוטציה - עבור למחלקה הבאה בפעם הבאה
-            mahlaka_idx = next((i for i, m in enumerate(mahalkot) if m['id'] == mahlaka_info['id']), 0)
-            self.mahlaka_rotation_index = (mahlaka_idx + 1) % len(mahalkot)
 
             return {
                 'commanders': [commander],

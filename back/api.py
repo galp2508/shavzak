@@ -3140,19 +3140,23 @@ def get_live_schedule(pluga_id, current_user):
             ).first()
 
             if template:
-                # חשב סך הכל חיילים שחסרים
-                total_needed = template.commanders_needed + template.drivers_needed + template.soldiers_needed
+                # חשב סך הכל חיילים שחסרים (טיפול ב-None)
+                commanders_needed = template.commanders_needed or 0
+                drivers_needed = template.drivers_needed or 0
+                soldiers_needed = template.soldiers_needed or 0
+
+                total_needed = commanders_needed + drivers_needed + soldiers_needed
                 total_assigned = commanders + drivers + regular_soldiers
                 missing_count = total_needed - total_assigned
 
                 # בנה רשימת חסרים
                 missing_parts = []
-                if template.commanders_needed > commanders:
-                    missing_parts.append(f"{template.commanders_needed - commanders} מפקדים")
-                if template.drivers_needed > drivers:
-                    missing_parts.append(f"{template.drivers_needed - drivers} נהגים")
-                if template.soldiers_needed > regular_soldiers:
-                    missing_parts.append(f"{template.soldiers_needed - regular_soldiers} לוחמים")
+                if commanders_needed > commanders:
+                    missing_parts.append(f"{commanders_needed - commanders} מפקדים")
+                if drivers_needed > drivers:
+                    missing_parts.append(f"{drivers_needed - drivers} נהגים")
+                if soldiers_needed > regular_soldiers:
+                    missing_parts.append(f"{soldiers_needed - regular_soldiers} לוחמים")
 
                 if missing_parts:
                     message = f"⚠️ {assignment.name}: חסרים " + ", ".join(missing_parts)

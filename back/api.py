@@ -2563,7 +2563,7 @@ def get_live_schedule(pluga_id, current_user):
                                 assignment = Assignment(
                                     shavzak_id=master_shavzak.id,
                                     name=f"{template.name} {slot + 1}",
-                                    type=template.assignment_type,
+                                    assignment_type=template.assignment_type,
                                     day=day,
                                     start_hour=start_hour,
                                     length_in_hours=template.length_in_hours,

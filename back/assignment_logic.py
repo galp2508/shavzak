@@ -263,15 +263,12 @@ class AssignmentLogic:
                     # יש רק 1 לוחם - נסה להשתמש במ"כ כלוחם נוסף אם יש
                     if len(mak_soldiers) >= 1:
                         soldiers = [available_soldiers[0]['id'], mak_soldiers[0]['id']]
-                        self.warnings.append(f"⚠️ {assign_data['name']}: משתמש במ\"כ כלוחם")
                     else:
                         # אין מ"כ זמין - המפקד ימלא גם תפקיד לוחם
                         soldiers = [s['id'] for s in available_soldiers[:1]]
-                        self.warnings.append(f"⚠️ {assign_data['name']}: רק 1 לוחם זמין, המפקד משמש גם כלוחם")
                 elif len(available_soldiers) == 0 and len(mak_soldiers) >= 2:
                     # אין לוחמים אבל יש מ"כים - השתמש בהם
                     soldiers = [m['id'] for m in mak_soldiers[:2]]
-                    self.warnings.append(f"⚠️ {assign_data['name']}: משתמש במ\"כים כלוחמים")
                 else:
                     # אין מספיק כוח אדם - עבור למחלקה הבאה
                     continue
@@ -280,12 +277,10 @@ class AssignmentLogic:
                 # אין מפקד אבל יש לפחות 3 לוחמים - 1 ישמש כמפקד + 2 כלוחמים
                 commander = available_soldiers[0]['id']
                 soldiers = [s['id'] for s in available_soldiers[1:3]]
-                self.warnings.append(f"⚠️ {assign_data['name']}: לא נמצא מפקד, משובץ לוחם כמפקד")
             elif len(available_soldiers) >= 1 and len(mak_soldiers) >= 2:
                 # אין מפקד אבל יש לוחמים ומ"כים - מ"כ ישמש כמפקד
                 commander = mak_soldiers[0]['id']
                 soldiers = [available_soldiers[0]['id'], mak_soldiers[1]['id']]
-                self.warnings.append(f"⚠️ {assign_data['name']}: משתמש במ\"כ כמפקד וכלוחם")
             else:
                 # לא מספיק כוח אדם במחלקה הזו
                 continue
@@ -295,8 +290,8 @@ class AssignmentLogic:
             if all_available_drivers:
                 driver_list = [all_available_drivers[0]['id']]
             else:
-                # אין נהג - סיור פרוק
-                self.warnings.append(f"⚠️ {assign_data['name']}: סיור פרוק - אין נהג זמין")
+                # אין נהג - סיור פרוק (זה בסדר, לא צריך אזהרה)
+                driver_list = []
 
             return {
                 'commanders': [commander],
@@ -350,7 +345,6 @@ class AssignmentLogic:
                 elif len(available_soldiers) == 1:
                     # יש רק 1 לוחם - המפקד ימלא גם תפקיד לוחם
                     soldiers = [s['id'] for s in available_soldiers[:1]]
-                    self.warnings.append(f"⚠️ {assign_data['name']}: רק 1 לוחם זמין, המפקד משמש גם כלוחם (חירום)")
                 else:
                     # אין לוחמים בכלל - עבור למחלקה הבאה
                     continue
@@ -359,7 +353,6 @@ class AssignmentLogic:
                 # אין מפקד אבל יש לפחות 3 לוחמים
                 commander = available_soldiers[0]['id']
                 soldiers = [s['id'] for s in available_soldiers[1:3]]
-                self.warnings.append(f"⚠️ {assign_data['name']}: לא נמצא מפקד, משובץ לוחם כמפקד (חירום)")
             else:
                 # לא מספיק כוח אדם במחלקה הזו
                 continue
@@ -369,9 +362,7 @@ class AssignmentLogic:
             if all_available_drivers:
                 driver_list = [all_available_drivers[0]['id']]
             else:
-                self.warnings.append(f"⚠️ {assign_data['name']}: סיור פרוק - אין נהג זמין")
-
-            self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת ל-{reduced_rest} שעות")
+                driver_list = []
             return {
                 'commanders': [commander],
                 'drivers': driver_list,
@@ -593,10 +584,9 @@ class AssignmentLogic:
                                     assign_data['start_hour'], assign_data['length_in_hours'], 
                                     reduced_rest)
             ]
-            
+
             if len(available_commanders) >= 1 and len(available_drivers) >= 1 and \
                len(available_soldiers) >= 7:
-                self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
                 return {
                     'commanders': [available_commanders[0]['id']],
                     'drivers': [available_drivers[0]['id']],
@@ -604,7 +594,6 @@ class AssignmentLogic:
                 }
 
         # 🔧 המערכת תמיד מצליחה! משתמשים בכל מי שזמין בלי בדיקות מנוחה
-        self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא מנוחה מספקת")
         all_people = all_commanders + all_drivers + all_soldiers
         all_people.sort(key=lambda x: (
             0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
@@ -734,16 +723,14 @@ class AssignmentLogic:
                                     assign_data['start_hour'], assign_data['length_in_hours'], 
                                     reduced_rest)
             ]
-            
+
             if len(available_commanders) >= 1 and len(available_soldiers) >= 3:
-                self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
                 return {
                     'commanders': [available_commanders[0]['id']],
                     'soldiers': [s['id'] for s in available_soldiers[:3]]
                 }
 
         # 🔧 המערכת תמיד מצליחה! משתמשים בכל מי שזמין בלי בדיקות מנוחה
-        self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא מנוחה מספקת")
         all_people = all_commanders + all_soldiers
         all_people.sort(key=lambda x: (
             0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
@@ -799,7 +786,6 @@ class AssignmentLogic:
                     ),
                     reverse=True
                 )
-                self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
                 return {'soldiers': [certified[0]['id']]}
 
         # 🔧 המערכת תמיד מצליחה! אם אין מוסמך חמל - ניקח מי שזמין (עדיפות: מ"כ → סמל → ממ"ד)
@@ -808,7 +794,6 @@ class AssignmentLogic:
         ))
 
         if all_people_sorted:
-            self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא הסמכת חמל")
             return {'soldiers': [all_people_sorted[0]['id']]}
 
         return {'soldiers': []}
@@ -858,7 +843,6 @@ class AssignmentLogic:
                     ),
                     reverse=True
                 )
-                self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
                 return {'soldiers': [available[0]['id']]}
 
         # 🔧 המערכת תמיד מצליחה! ניקח מי שזמין (עדיפות: מ"כ → סמל → ממ"ד)
@@ -867,7 +851,6 @@ class AssignmentLogic:
         ))
 
         if all_people_sorted:
-            self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא מנוחה מספקת")
             return {'soldiers': [all_people_sorted[0]['id']]}
 
         return {'soldiers': []}
@@ -917,7 +900,6 @@ class AssignmentLogic:
                     ),
                     reverse=True
                 )
-                self.warnings.append(f"⚠️ {assign_data['name']}: מפקד לא בכיר")
                 return {'commanders': [available[0]['id']]}
 
         # 🔧 המערכת תמיד מצליחה! ניקח כל מפקד זמין (עדיפות: מ"כ → סמל → ממ"ד)
@@ -926,7 +908,6 @@ class AssignmentLogic:
         ))
 
         if all_commanders_sorted:
-            self.warnings.append(f"⚠️ {assign_data['name']}: שובץ מפקד ללא מנוחה מספקת")
             return {'commanders': [all_commanders_sorted[0]['id']]}
 
         return {'commanders': []}

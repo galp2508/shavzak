@@ -27,6 +27,18 @@ const LiveSchedule = () => {
     }
   }, [currentDate]);
 
+  // האזן לשינויים בתבניות משימות
+  useEffect(() => {
+    const handleTemplateChange = () => {
+      if (currentDate) {
+        loadSchedule(currentDate);
+      }
+    };
+
+    window.addEventListener('templateChanged', handleTemplateChange);
+    return () => window.removeEventListener('templateChanged', handleTemplateChange);
+  }, [currentDate]);
+
   // טיפול במקלדת - חצים
   useEffect(() => {
     const handleKeyDown = (e) => {

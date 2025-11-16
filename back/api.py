@@ -1719,8 +1719,12 @@ def generate_shavzak(shavzak_id, current_user):
             
             for template in templates:
                 for slot in range(template.times_per_day):
-                    start_hour = slot * template.length_in_hours
-                    
+                    # אם start_hour מוגדר בתבנית, השתמש בו. אחרת, חשב אוטומטית
+                    if template.start_hour is not None:
+                        start_hour = template.start_hour + (slot * template.length_in_hours)
+                    else:
+                        start_hour = slot * template.length_in_hours
+
                     assign_data = {
                         'name': f"{template.name} {slot + 1}",
                         'type': template.assignment_type,
@@ -2589,7 +2593,11 @@ def get_live_schedule(pluga_id, current_user):
 
                         for template in templates:
                             for slot in range(template.times_per_day):
-                                start_hour = slot * template.length_in_hours
+                                # אם start_hour מוגדר בתבנית, השתמש בו. אחרת, חשב אוטומטית
+                                if template.start_hour is not None:
+                                    start_hour = template.start_hour + (slot * template.length_in_hours)
+                                else:
+                                    start_hour = slot * template.length_in_hours
 
                                 # צור משימה פשוטה ללא שיבוץ חיילים (לעת עתה)
                                 assignment = Assignment(

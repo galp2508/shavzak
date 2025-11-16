@@ -80,8 +80,8 @@ class AssignmentLogic:
 
     def get_recently_finished_soldiers(self, all_people: List[Dict], schedules: Dict,
                                        day: int, start_hour: int) -> List[Dict]:
-        """מוצא חיילים שסיימו משימה לפני שעת ההתחלה של הכוננות.
-        מיועד לכוננויות - חיילים שסיימו משימה יכולים להמשיך לכוננות."""
+        """מוצא חיילים שסיימו משימה ממש לפני שעת ההתחלה של הכוננות.
+        מיועד לכוננויות - חיילים שסיימו משימה יכולים להמשיך לכוננות מיד."""
         recently_finished = []
 
         for person in all_people:
@@ -89,24 +89,34 @@ class AssignmentLogic:
             if person_id not in schedules or not schedules[person_id]:
                 continue
 
-            # מצא את המשימה האחרונה של החייל ביום זה
-            assignments_today = [
-                (assign_start, assign_end, assign_name)
+            # מצא את המשימה האחרונה של החייל בכל הימים עד עכשיו
+            all_assignments = [
+                (assign_day, assign_start, assign_end, assign_name)
                 for assign_day, assign_start, assign_end, assign_name, _ in schedules[person_id]
-                if assign_day == day and assign_end <= start_hour
             ]
 
-            if assignments_today:
-                # מצא את המשימה שהסתיימה הכי קרוב לשעת ההתחלה
-                last_assignment = max(assignments_today, key=lambda x: x[1])  # מקסימום לפי end_hour
-                assign_start, assign_end, assign_name = last_assignment
+            if all_assignments:
+                # מצא את המשימה שהסתיימה הכי לאחרונה (לפי יום ושעה)
+                last_assignment = max(all_assignments, key=lambda x: (x[0], x[2]))  # (day, end_hour)
+                assign_day, assign_start, assign_end, assign_name = last_assignment
 
-                # אם החייל סיים משימה ממש לפני (עד 2 שעות לפני), הוא מועדף
-                hours_since_finished = start_hour - assign_end
-                if 0 <= hours_since_finished <= 2:
+                # חשב כמה שעות עברו מאז סיום המשימה
+                if assign_day == day:
+                    # אותו יום
+                    hours_since = start_hour - assign_end
+                elif assign_day == day - 1:
+                    # יום קודם
+                    hours_since = (24 - assign_end) + start_hour
+                else:
+                    # יותר מיום
+                    hours_since = ((day - assign_day - 1) * 24) + (24 - assign_end) + start_hour
+
+                # רק אם המשימה הסתיימה ממש לפני (עד 1 שעה)
+                # זה מבטיח שהחייל ירד ממשימה ומיד ממשיך לכוננות
+                if 0 <= hours_since <= 1:
                     recently_finished.append({
                         **person,
-                        'hours_since_finished': hours_since_finished,
+                        'hours_since_finished': hours_since,
                         'last_assignment': assign_name
                     })
 
@@ -169,31 +179,28 @@ class AssignmentLogic:
             # אם השעה מחוץ לטווח, נחשב לפי modulo
             return (start_hour // 8) % 3
 
-    def get_next_mahlaka_rotation(self, mahalkot: List[Dict], assign_data: Dict) -> List[Dict]:
-        """מחזיר את המחלקות במחזוריות - כל מחלקה עובדת במשמרת מסוימת (לפי שעות)
-        כל מחלקה תיקח את כל המשימות באותה משמרת:
-        - מחלקה 1: 00:00-08:00
-        - מחלקה 2: 08:00-16:00
-        - מחלקה 3: 16:00-00:00
-        ובכל יום המחלקות מתחלפות משמרות
+    def get_next_mahlaka_rotation(self, mahalkot: List[Dict], assign_data: Dict, mahlaka_workload: Dict = None) -> List[Dict]:
+        """מחזיר את המחלקות לפי עומס עבודה - מחלקות שעבדו פחות קודמות
+        אם אין נתוני עומס, משתמש ברוטציה מכנית לפי יום ומשמרת
         """
-        day = assign_data['day']
-        start_hour = assign_data['start_hour']
-
         num_mahalkot = len(mahalkot)
         if num_mahalkot == 0:
             return []
 
-        # חישוב מספר המשמרת (0, 1, או 2)
-        shift_number = self.get_shift_number(start_hour)
+        # אם יש נתוני עומס, מיין לפי העומס (מי שעבד פחות קודם)
+        if mahlaka_workload is not None:
+            sorted_mahalkot = sorted(
+                mahalkot,
+                key=lambda m: mahlaka_workload.get(m['id'], 0)
+            )
+            return sorted_mahalkot
 
-        # חישוב איזו מחלקה צריכה לעבוד במשמרת הזו ביום הזה
-        # ביום 0: מחלקה 0 במשמרת 0, מחלקה 1 במשמרת 1, מחלקה 2 במשמרת 2
-        # ביום 1: מחלקה 1 במשמרת 0, מחלקה 2 במשמרת 1, מחלקה 0 במשמרת 2
-        # וכן הלאה (רוטציה)
+        # אחרת, רוטציה מכנית (גיבוי)
+        day = assign_data['day']
+        start_hour = assign_data['start_hour']
+        shift_number = self.get_shift_number(start_hour)
         mahlaka_index = (shift_number + day) % num_mahalkot
 
-        # יצירת רשימה מסודרת במחזוריות, כאשר המחלקה המתאימה במשמרת היא הראשונה
         rotated = []
         for i in range(num_mahalkot):
             idx = (mahlaka_index + i) % num_mahalkot
@@ -205,8 +212,8 @@ class AssignmentLogic:
         """ניסיון רגיל לשיבוץ סיור - מפקד ולוחמים מאותה מחלקה, נהג מכל מחלקה
         משתמש ברוטציה של מחלקות - כל מחלקה עובדת ביחד בבלוק"""
 
-        # קבל מחלקות בסדר מחזורי
-        mahalkot_sorted = self.get_next_mahlaka_rotation(mahalkot, assign_data)
+        # קבל מחלקות בסדר לפי עומס (מי שעבד פחות קודם)
+        mahalkot_sorted = self.get_next_mahlaka_rotation(mahalkot, assign_data, mahlaka_workload)
 
         # איסוף כל הנהגים הזמינים מכל המחלקות (נהג לא חייב להיות מאותה מחלקה)
         all_available_drivers = []
@@ -293,6 +300,10 @@ class AssignmentLogic:
                 # אין נהג - סיור פרוק (זה בסדר, לא צריך אזהרה)
                 driver_list = []
 
+            # עדכון עומס המחלקה
+            if mahlaka_workload is not None:
+                mahlaka_workload[mahlaka_info['id']] = mahlaka_workload.get(mahlaka_info['id'], 0) + assign_data['length_in_hours']
+
             return {
                 'commanders': [commander],
                 'drivers': driver_list,  # רשימה ריקה אם אין נהג
@@ -363,6 +374,11 @@ class AssignmentLogic:
                 driver_list = [all_available_drivers[0]['id']]
             else:
                 driver_list = []
+
+            # עדכון עומס המחלקה
+            if mahlaka_workload is not None:
+                mahlaka_workload[mahlaka_info['id']] = mahlaka_workload.get(mahlaka_info['id'], 0) + assign_data['length_in_hours']
+
             return {
                 'commanders': [commander],
                 'drivers': driver_list,
@@ -416,15 +432,26 @@ class AssignmentLogic:
                 # הוסר: אזהרת "מנוחה מופחתת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
                 return {'soldiers': [available[0]['id']]}
 
-        # 🔧 המערכת תמיד מצליחה! אם אין מי שעומד בדרישות מנוחה - נשתמש במי שיש
-        # עדיפות: מ"כ → סמל → ממ"ד
-        all_people_sorted = sorted(all_soldiers, key=lambda x: (
-            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
-        ))
+        # 🔧 המערכת תמיד מצליחה! אם אין מי שעומד בדרישות מנוחה - נשתמש במי שזמין
+        # אבל עדיין צריך לבדוק שהוא לא משובץ באותו זמן!
+        available_people = [
+            s for s in all_soldiers
+            if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                                 assign_data['start_hour'], assign_data['length_in_hours'],
+                                 0)  # אפס מנוחה - רק בדיקת חפיפה
+        ]
 
-        if all_people_sorted:
-            # הוסר: אזהרת "שובץ ללא מנוחה מספקת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
-            return {'soldiers': [all_people_sorted[0]['id']]}
+        if available_people:
+            # עדיפות: מי שנח הכי הרבה
+            available_people.sort(
+                key=lambda x: self.calculate_rest_hours(
+                    schedules.get(x['id'], []),
+                    assign_data['day'],
+                    assign_data['start_hour']
+                ),
+                reverse=True
+            )
+            return {'soldiers': [available_people[0]['id']]}
 
         # ממש אין אף אחד - נחזיר ריק (אבל לא Exception!)
         return {'soldiers': []}
@@ -791,13 +818,26 @@ class AssignmentLogic:
                 )
                 return {'soldiers': [certified[0]['id']]}
 
-        # 🔧 המערכת תמיד מצליחה! אם אין מוסמך חמל - ניקח מי שזמין (עדיפות: מ"כ → סמל → ממ"ד)
-        all_people_sorted = sorted(all_people, key=lambda x: (
-            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
-        ))
+        # 🔧 המערכת תמיד מצליחה! אם אין מוסמך חמל - ניקח מי שזמין
+        # אבל עדיין צריך לבדוק שהוא לא משובץ באותו זמן!
+        available_people = [
+            p for p in all_people
+            if self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
+                                 assign_data['start_hour'], assign_data['length_in_hours'],
+                                 0)  # אפס מנוחה - רק בדיקת חפיפה
+        ]
 
-        if all_people_sorted:
-            return {'soldiers': [all_people_sorted[0]['id']]}
+        if available_people:
+            # עדיפות: מי שנח הכי הרבה
+            available_people.sort(
+                key=lambda x: self.calculate_rest_hours(
+                    schedules.get(x['id'], []),
+                    assign_data['day'],
+                    assign_data['start_hour']
+                ),
+                reverse=True
+            )
+            return {'soldiers': [available_people[0]['id']]}
 
         return {'soldiers': []}
     
@@ -848,19 +888,31 @@ class AssignmentLogic:
                 # הוסר: אזהרת "מנוחה מופחתת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
                 return {'soldiers': [s['id'] for s in available[:num_needed]]}
 
-        # 🔧 המערכת תמיד מצליחה! אם אין מספיק - נשתמש במה שיש
-        # עדיפות: מ"כ → סמל → ממ"ד
-        all_people_sorted = sorted(all_soldiers, key=lambda x: (
-            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
-        ))
+        # 🔧 המערכת תמיד מצליחה! אם אין מספיק - נשתמש במי שזמין
+        # אבל עדיין צריך לבדוק שהוא לא משובץ באותו זמן!
+        available_people = [
+            s for s in all_soldiers
+            if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                                 assign_data['start_hour'], assign_data['length_in_hours'],
+                                 0)  # אפס מנוחה - רק בדיקת חפיפה
+        ]
 
-        if all_people_sorted:
-            num_to_assign = min(num_needed, len(all_people_sorted))
+        if available_people:
+            # עדיפות: מי שנח הכי הרבה
+            available_people.sort(
+                key=lambda x: self.calculate_rest_hours(
+                    schedules.get(x['id'], []),
+                    assign_data['day'],
+                    assign_data['start_hour']
+                ),
+                reverse=True
+            )
+            num_to_assign = min(num_needed, len(available_people))
             # אזהרה רק אם חסרים יותר מ-30% מהחיילים הנדרשים (או לפחות 2 חיילים)
             shortage = num_needed - num_to_assign
             if shortage >= 2 or (shortage > 0 and shortage / num_needed > 0.3):
                 self.warnings.append(f"⚠️ {assign_data['name']}: שובצו רק {num_to_assign} מתוך {num_needed} חיילים")
-            return {'soldiers': [s['id'] for s in all_people_sorted[:num_to_assign]]}
+            return {'soldiers': [s['id'] for s in available_people[:num_to_assign]]}
 
         # ממש אין אף אחד - נחזיר ריק (אבל לא Exception!)
         return {'soldiers': []}
@@ -907,13 +959,26 @@ class AssignmentLogic:
                 )
                 return {'soldiers': [available[0]['id']]}
 
-        # 🔧 המערכת תמיד מצליחה! ניקח מי שזמין (עדיפות: מ"כ → סמל → ממ"ד)
-        all_people_sorted = sorted(all_people, key=lambda x: (
-            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
-        ))
+        # 🔧 המערכת תמיד מצליחה! ניקח מי שזמין
+        # אבל עדיין צריך לבדוק שהוא לא משובץ באותו זמן!
+        available_people = [
+            p for p in all_people
+            if self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
+                                 assign_data['start_hour'], assign_data['length_in_hours'],
+                                 0)  # אפס מנוחה - רק בדיקת חפיפה
+        ]
 
-        if all_people_sorted:
-            return {'soldiers': [all_people_sorted[0]['id']]}
+        if available_people:
+            # עדיפות: מי שנח הכי הרבה
+            available_people.sort(
+                key=lambda x: self.calculate_rest_hours(
+                    schedules.get(x['id'], []),
+                    assign_data['day'],
+                    assign_data['start_hour']
+                ),
+                reverse=True
+            )
+            return {'soldiers': [available_people[0]['id']]}
 
         return {'soldiers': []}
     
@@ -964,12 +1029,25 @@ class AssignmentLogic:
                 )
                 return {'commanders': [available[0]['id']]}
 
-        # 🔧 המערכת תמיד מצליחה! ניקח כל מפקד זמין (עדיפות: מ"כ → סמל → ממ"ד)
-        all_commanders_sorted = sorted(all_commanders, key=lambda x: (
-            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
-        ))
+        # 🔧 המערכת תמיד מצליחה! ניקח מפקד זמין
+        # אבל עדיין צריך לבדוק שהוא לא משובץ באותו זמן!
+        available_commanders = [
+            c for c in all_commanders
+            if self.can_assign_at(schedules.get(c['id'], []), assign_data['day'],
+                                 assign_data['start_hour'], assign_data['length_in_hours'],
+                                 0)  # אפס מנוחה - רק בדיקת חפיפה
+        ]
 
-        if all_commanders_sorted:
-            return {'commanders': [all_commanders_sorted[0]['id']]}
+        if available_commanders:
+            # עדיפות: מי שנח הכי הרבה
+            available_commanders.sort(
+                key=lambda x: self.calculate_rest_hours(
+                    schedules.get(x['id'], []),
+                    assign_data['day'],
+                    assign_data['start_hour']
+                ),
+                reverse=True
+            )
+            return {'commanders': [available_commanders[0]['id']]}
 
         return {'commanders': []}

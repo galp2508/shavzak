@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
+import AssignmentModal from '../components/AssignmentModal';
 
 const LiveSchedule = () => {
   const { user } = useAuth();
@@ -12,6 +13,8 @@ const LiveSchedule = () => {
   const [mahalkot, setMahalkot] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConstraints, setShowConstraints] = useState(false);
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState(null);
 
   useEffect(() => {
     // התחל עם מחר
@@ -121,6 +124,25 @@ const LiveSchedule = () => {
     }
   };
 
+  const openNewAssignmentModal = () => {
+    setEditingAssignment(null);
+    setShowAssignmentModal(true);
+  };
+
+  const openEditAssignmentModal = (assignment) => {
+    setEditingAssignment(assignment);
+    setShowAssignmentModal(true);
+  };
+
+  const closeAssignmentModal = () => {
+    setShowAssignmentModal(false);
+    setEditingAssignment(null);
+  };
+
+  const handleAssignmentSave = () => {
+    loadSchedule(currentDate);
+  };
+
   if (loading && !scheduleData) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -174,13 +196,23 @@ const LiveSchedule = () => {
 
           <div className="flex items-center gap-2 mr-4">
             {(user.role === 'מפ' || user.role === 'ממ') && (
-              <button
-                onClick={() => setShowConstraints(true)}
-                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
-                title="אילוצי שיבוץ"
-              >
-                <Shield size={24} />
-              </button>
+              <>
+                <button
+                  onClick={openNewAssignmentModal}
+                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors flex items-center gap-2"
+                  title="הוסף משימה חדשה"
+                >
+                  <Plus size={24} />
+                  <span className="hidden md:inline">משימה חדשה</span>
+                </button>
+                <button
+                  onClick={() => setShowConstraints(true)}
+                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                  title="אילוצי שיבוץ"
+                >
+                  <Shield size={24} />
+                </button>
+              </>
             )}
             <button
               onClick={() => loadSchedule(currentDate)}
@@ -376,6 +408,7 @@ const LiveSchedule = () => {
                               return (
                                 <div
                                   key={assignment.id}
+                                  onClick={() => (user.role === 'מפ' || user.role === 'ממ') && openEditAssignmentModal(assignment)}
                                   className="absolute inset-x-1 rounded-xl shadow-lg overflow-hidden group cursor-pointer hover:shadow-2xl transition-all duration-300 hover:scale-105 transform border-2"
                                   style={{
                                     top: `${topPosition}%`,
@@ -383,10 +416,17 @@ const LiveSchedule = () => {
                                     background: `linear-gradient(135deg, ${mahlakaColor} 0%, ${mahlakaColor}dd 100%)`,
                                     borderColor: mahlakaColor,
                                   }}
-                                  title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00)`}
+                                  title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00) - ${(user.role === 'מפ' || user.role === 'ממ') ? 'לחץ לעריכה' : ''}`}
                                 >
                                   {/* Assignment Content */}
-                                  <div className="p-3 h-full flex flex-col text-white backdrop-blur-sm">
+                                  <div className="p-3 h-full flex flex-col text-white backdrop-blur-sm relative">
+                                    {/* Edit Icon */}
+                                    {(user.role === 'מפ' || user.role === 'ממ') && (
+                                      <div className="absolute top-2 left-2 bg-white/30 rounded-lg p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                        <Edit className="w-3 h-3" />
+                                      </div>
+                                    )}
+
                                     {/* Assignment Name & Time */}
                                     <div className="font-bold text-base mb-1.5 flex items-center gap-2">
                                       <Clock className="w-4 h-4" />
@@ -450,6 +490,19 @@ const LiveSchedule = () => {
               loadSchedule(currentDate);
             }
           }}
+        />
+      )}
+
+      {/* Assignment Modal */}
+      {showAssignmentModal && (
+        <AssignmentModal
+          assignment={editingAssignment}
+          date={currentDate}
+          dayIndex={scheduleData?.day_index}
+          shavzakId={scheduleData?.shavzak_id}
+          plugaId={user.pluga_id}
+          onClose={closeAssignmentModal}
+          onSave={handleAssignmentSave}
         />
       )}
     </div>

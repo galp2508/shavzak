@@ -11,10 +11,27 @@ class AssignmentLogic:
         self.emergency_mode = False
         self.warnings = []
         self.reuse_soldiers_for_standby = reuse_soldiers_for_standby  # האם לאפשר שימוש חוזר בחיילים לכוננות
+        self.last_mahlaka_used = {}  # {day: mahlaka_id} - מעקב אחר המחלקה האחרונה שעבדה בכל יום
+        self.mahlaka_rotation_index = 0  # אינדקס לרוטציה של מחלקות
 
     def enable_emergency_mode(self):
         """הפעלת מצב חירום"""
         self.emergency_mode = True
+
+    def can_serve_as_soldier(self, person: Dict) -> bool:
+        """בדיקה אם אדם יכול לשמש כלוחם רגיל
+        חמליסט יכול לשמש כלוחם אם נדרש"""
+        role = person.get('role', '')
+        # חמליסט יכול לשמש כלוחם
+        if 'חמל' in person.get('certifications', []):
+            return True
+        # מפקדים יכולים לשמש כלוחמים במקרי חירום
+        if role in ['מכ', 'סמל']:
+            return True
+        # לוחם רגיל
+        if role == 'לוחם':
+            return True
+        return False
 
     def calculate_rest_hours(self, schedule: List[Tuple], current_day: int, current_start_hour: int) -> float:
         """מחשב כמה שעות מנוחה יש לחייל מאז המשימה האחרונה
@@ -111,10 +128,34 @@ class AssignmentLogic:
 
         raise Exception(f"לא נמצאה מחלקה זמינה לסיור")
     
+    def get_next_mahlaka_rotation(self, mahalkot: List[Dict], assign_data: Dict) -> List[Dict]:
+        """מחזיר את המחלקות במחזוריות - כל מחלקה עובדת ביחד"""
+        day = assign_data['day']
+
+        # אם זה היום הראשון או המחלקה הקודמת לא מוגדרת, התחל מהתחלה
+        if day not in self.last_mahlaka_used:
+            # התחל מהמחלקה הראשונה
+            self.mahlaka_rotation_index = 0
+
+        # סדר המחלקות בצורה מחזורית החל מהאינדקס הנוכחי
+        num_mahalkot = len(mahalkot)
+        if num_mahalkot == 0:
+            return []
+
+        # יצירת רשימה מסודרת במחזוריות
+        rotated = []
+        for i in range(num_mahalkot):
+            idx = (self.mahlaka_rotation_index + i) % num_mahalkot
+            rotated.append(mahalkot[idx])
+
+        return rotated
+
     def _try_assign_patrol_normal(self, assign_data, mahalkot, schedules, mahlaka_workload):
-        """ניסיון רגיל לשיבוץ סיור - מפקד ולוחמים מאותה מחלקה, נהג מכל מחלקה"""
-        # מיון לפי עומס
-        mahalkot_sorted = sorted(mahalkot, key=lambda x: mahlaka_workload.get(x['id'], 0))
+        """ניסיון רגיל לשיבוץ סיור - מפקד ולוחמים מאותה מחלקה, נהג מכל מחלקה
+        משתמש ברוטציה של מחלקות - כל מחלקה עובדת ביחד בבלוק"""
+
+        # קבל מחלקות בסדר מחזורי
+        mahalkot_sorted = self.get_next_mahlaka_rotation(mahalkot, assign_data)
 
         # איסוף כל הנהגים הזמינים מכל המחלקות (נהג לא חייב להיות מאותה מחלקה)
         all_available_drivers = []
@@ -132,9 +173,20 @@ class AssignmentLogic:
                                     assign_data['start_hour'], assign_data['length_in_hours'],
                                     self.min_rest_hours)
             ]
+            # לוחמים - כולל חמליסטים שיכולים לשמש כלוחמים
             available_soldiers = [
                 s for s in mahlaka_info['soldiers']
-                if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                if self.can_serve_as_soldier(s) and
+                   self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                                    assign_data['start_hour'], assign_data['length_in_hours'],
+                                    self.min_rest_hours)
+            ]
+
+            # הוסף מ"כים כלוחמים פוטנציאליים (אם צריך)
+            mak_soldiers = [
+                c for c in mahlaka_info['commanders']
+                if c.get('role') == 'מכ' and
+                   self.can_assign_at(schedules.get(c['id'], []), assign_data['day'],
                                     assign_data['start_hour'], assign_data['length_in_hours'],
                                     self.min_rest_hours)
             ]
@@ -157,11 +209,20 @@ class AssignmentLogic:
                     # מצוין! יש 2 לוחמים
                     soldiers = [s['id'] for s in available_soldiers[:2]]
                 elif len(available_soldiers) == 1:
-                    # יש רק 1 לוחם - המפקד ימלא גם תפקיד לוחם
-                    soldiers = [s['id'] for s in available_soldiers[:1]]
-                    self.warnings.append(f"⚠️ {assign_data['name']}: רק 1 לוחם זמין, המפקד משמש גם כלוחם")
+                    # יש רק 1 לוחם - נסה להשתמש במ"כ כלוחם נוסף אם יש
+                    if len(mak_soldiers) >= 1:
+                        soldiers = [available_soldiers[0]['id'], mak_soldiers[0]['id']]
+                        self.warnings.append(f"⚠️ {assign_data['name']}: משתמש במ\"כ כלוחם")
+                    else:
+                        # אין מ"כ זמין - המפקד ימלא גם תפקיד לוחם
+                        soldiers = [s['id'] for s in available_soldiers[:1]]
+                        self.warnings.append(f"⚠️ {assign_data['name']}: רק 1 לוחם זמין, המפקד משמש גם כלוחם")
+                elif len(available_soldiers) == 0 and len(mak_soldiers) >= 2:
+                    # אין לוחמים אבל יש מ"כים - השתמש בהם
+                    soldiers = [m['id'] for m in mak_soldiers[:2]]
+                    self.warnings.append(f"⚠️ {assign_data['name']}: משתמש במ\"כים כלוחמים")
                 else:
-                    # אין לוחמים בכלל - לא מספיק, עבור למחלקה הבאה
+                    # אין מספיק כוח אדם - עבור למחלקה הבאה
                     continue
 
             elif len(available_soldiers) >= 3:
@@ -169,6 +230,11 @@ class AssignmentLogic:
                 commander = available_soldiers[0]['id']
                 soldiers = [s['id'] for s in available_soldiers[1:3]]
                 self.warnings.append(f"⚠️ {assign_data['name']}: לא נמצא מפקד, משובץ לוחם כמפקד")
+            elif len(available_soldiers) >= 1 and len(mak_soldiers) >= 2:
+                # אין מפקד אבל יש לוחמים ומ"כים - מ"כ ישמש כמפקד
+                commander = mak_soldiers[0]['id']
+                soldiers = [available_soldiers[0]['id'], mak_soldiers[1]['id']]
+                self.warnings.append(f"⚠️ {assign_data['name']}: משתמש במ\"כ כמפקד וכלוחם")
             else:
                 # לא מספיק כוח אדם במחלקה הזו
                 continue
@@ -180,6 +246,13 @@ class AssignmentLogic:
             else:
                 # אין נהג - סיור פרוק
                 self.warnings.append(f"⚠️ {assign_data['name']}: סיור פרוק - אין נהג זמין")
+
+            # עדכן את המחלקה האחרונה שעבדה
+            self.last_mahlaka_used[assign_data['day']] = mahlaka_info['id']
+
+            # עדכן את האינדקס לרוטציה - עבור למחלקה הבאה בפעם הבאה
+            mahlaka_idx = next((i for i, m in enumerate(mahalkot) if m['id'] == mahlaka_info['id']), 0)
+            self.mahlaka_rotation_index = (mahlaka_idx + 1) % len(mahalkot)
 
             return {
                 'commanders': [commander],

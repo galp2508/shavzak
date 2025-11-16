@@ -847,12 +847,29 @@ def create_soldiers_bulk(current_user):
                     try:
                         # Parse DD.MM.YYYY format
                         date_str = soldier_data['unavailable_date'].strip()
-                        unavailable = datetime.strptime(date_str, '%d.%m.%Y').date()
-                        unavailable_record = UnavailableDate(soldier_id=soldier.id, date=unavailable)
-                        session.add(unavailable_record)
-                    except Exception as e:
-                        # Silently fail if date parsing fails
+                        if date_str:  # רק אם התאריך לא ריק
+                            # תמיכה בשני פורמטים: DD.MM.YYYY או YYYY-MM-DD
+                            try:
+                                unavailable = datetime.strptime(date_str, '%d.%m.%Y').date()
+                            except ValueError:
+                                try:
+                                    unavailable = datetime.strptime(date_str, '%Y-%m-%d').date()
+                                except ValueError:
+                                    # אם לא הצלחנו לפרסר, נוסיף הודעת שגיאה ברורה
+                                    errors.append(f"שורה {idx + 1} ({soldier_data.get('name', 'לא ידוע')}): פורמט תאריך לא חוקי: {date_str}. השתמש ב-DD.MM.YYYY או YYYY-MM-DD")
+                                    raise ValueError("Invalid date format")
+
+                            unavailable_record = UnavailableDate(soldier_id=soldier.id, date=unavailable)
+                            session.add(unavailable_record)
+                            print(f"✅ נשמר תאריך יציאה {unavailable} לחייל {soldier_data.get('name')}")
+                    except ValueError:
+                        # שגיאת פורמט - כבר טיפלנו בזה למעלה
                         pass
+                    except Exception as e:
+                        # שגיאה אחרת - נדווח
+                        errors.append(f"שורה {idx + 1} ({soldier_data.get('name', 'לא ידוע')}): שגיאה בשמירת תאריך יציאה: {str(e)}")
+                        print(f"🔴 Error saving unavailable_date for {soldier_data.get('name')}: {str(e)}")
+                        traceback.print_exc()
                 
                 # Add certifications if provided
                 if 'certifications' in soldier_data:

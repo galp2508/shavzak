@@ -2905,6 +2905,34 @@ def get_live_schedule(pluga_id, current_user):
                     schedules = {}  # soldier_id -> [(day, start, end, name, type), ...]
                     mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
 
+                    # 🔧 תיקון: טען משימות קיימות מכל הימים הקודמים כדי להבטיח המשכיות
+                    # טען את כל המשימות שכבר קיימות מההתחלה עד היום הנוכחי
+                    existing_assignments = session.query(Assignment).filter(
+                        Assignment.shavzak_id == master_shavzak.id,
+                        Assignment.day < min(master_shavzak.days_count, 7)  # טען רק ימים שהאלגוריתם יעבד
+                    ).all()
+
+                    # בנה את schedules מהמשימות הקיימות
+                    for existing_assignment in existing_assignments:
+                        # טען את החיילים שמשובצים למשימה הזו
+                        soldiers_in_assignment = session.query(AssignmentSoldier).filter_by(
+                            assignment_id=existing_assignment.id
+                        ).all()
+
+                        for soldier_assignment in soldiers_in_assignment:
+                            soldier_id = soldier_assignment.soldier_id
+                            if soldier_id not in schedules:
+                                schedules[soldier_id] = []
+
+                            # הוסף את המשימה ל-schedule של החייל
+                            schedules[soldier_id].append((
+                                existing_assignment.day,
+                                existing_assignment.start_hour,
+                                existing_assignment.start_hour + existing_assignment.length_in_hours,
+                                existing_assignment.name,
+                                existing_assignment.assignment_type
+                            ))
+
                     all_commanders = [c for m in mahalkot_data for c in m['commanders']]
                     all_drivers = [d for m in mahalkot_data for d in m['drivers']]
                     all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]

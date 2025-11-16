@@ -443,32 +443,18 @@ class AssignmentLogic:
                     all_soldiers, schedules, assign_data['day'], assign_data['start_hour']
                 )
 
-                # העדף מפקדים שסיימו משימה לאחרונה
+                # 🔧 תיקון: כאשר האופציה מסומנת - קח **בהכרח** אנשים שירדו ממשימות בלבד
+                # אין fallback לאנשים רגילים - רק מי שירד ממשימות
                 available_commander_ids = {c['id'] for c in available_commanders}
                 preferred_commanders = [c for c in recently_finished_commanders if c['id'] in available_commander_ids]
-                if not preferred_commanders:
-                    preferred_commanders = available_commanders
 
-                # העדף נהגים שסיימו משימה לאחרונה
                 available_driver_ids = {d['id'] for d in available_drivers}
                 preferred_drivers = [d for d in recently_finished_drivers if d['id'] in available_driver_ids]
-                if not preferred_drivers:
-                    preferred_drivers = available_drivers
 
-                # העדף לוחמים שסיימו משימה לאחרונה
                 available_soldier_ids = {s['id'] for s in available_soldiers}
                 preferred_soldiers = [s for s in recently_finished_soldiers if s['id'] in available_soldier_ids]
 
-                # השלם עם לוחמים רגילים אם צריך
-                remaining_needed = 7 - len(preferred_soldiers)
-                if remaining_needed > 0:
-                    preferred_soldier_ids = {s['id'] for s in preferred_soldiers}
-                    other_soldiers = [s for s in available_soldiers if s['id'] not in preferred_soldier_ids]
-                    # מיון לפי שעות עבודה (מי שעבד פחות)
-                    other_soldiers.sort(key=lambda x: sum(
-                        end - start for _, start, end, _, _ in schedules.get(x['id'], [])
-                    ))
-                    preferred_soldiers.extend(other_soldiers[:remaining_needed])
+                # לא משלימים עם חיילים רגילים - רק מי שירד ממשימות!
             else:
                 # אופציה לא מופעלת - שיבוץ רגיל לפי שעות מנוחה (מקסימום מנוחה!)
                 preferred_commanders = available_commanders
@@ -571,24 +557,15 @@ class AssignmentLogic:
 
                 # העדף מפקדים שסיימו משימה לאחרונה
                 available_commander_ids = {c['id'] for c in available_commanders}
+                # 🔧 תיקון: כאשר האופציה מסומנת - קח **בהכרח** אנשים שירדו ממשימות בלבד
+                # אין fallback לאנשים רגילים - רק מי שירד ממשימות
                 preferred_commanders = [c for c in recently_finished_commanders if c['id'] in available_commander_ids]
-                if not preferred_commanders:
-                    preferred_commanders = available_commanders
 
                 # העדף לוחמים שסיימו משימה לאחרונה
                 available_soldier_ids = {s['id'] for s in available_soldiers}
                 preferred_soldiers = [s for s in recently_finished_soldiers if s['id'] in available_soldier_ids]
 
-                # השלם עם לוחמים רגילים אם צריך
-                remaining_needed = 3 - len(preferred_soldiers)
-                if remaining_needed > 0:
-                    preferred_soldier_ids = {s['id'] for s in preferred_soldiers}
-                    other_soldiers = [s for s in available_soldiers if s['id'] not in preferred_soldier_ids]
-                    # מיון לפי שעות עבודה
-                    other_soldiers.sort(key=lambda x: sum(
-                        end - start for _, start, end, _, _ in schedules.get(x['id'], [])
-                    ))
-                    preferred_soldiers.extend(other_soldiers[:remaining_needed])
+                # לא משלימים עם חיילים רגילים - רק מי שירד ממשימות!
             else:
                 # אופציה לא מופעלת - שיבוץ רגיל לפי שעות מנוחה (מקסימום מנוחה!)
                 preferred_commanders = available_commanders

@@ -397,9 +397,10 @@ const LiveSchedule = () => {
                               const startHour = assignment.start_hour || 0;
                               const lengthInHours = assignment.length_in_hours || 1;
                               const endHour = startHour + lengthInHours;
+                              // משימות מעורבבות (לא מחלקתיות) מקבלות צבע נטרלי אפור
                               const mahlakaColor = assignment.assigned_mahlaka_id
                                 ? getMahlakaColor(assignment.assigned_mahlaka_id)
-                                : '#6B7280';
+                                : '#9CA3AF'; // צבע אפור נטרלי למשימות מעורבבות
 
                               // Calculate position and height
                               const topPosition = (startHour / 24) * 100;

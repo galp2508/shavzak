@@ -241,9 +241,10 @@ const ShavzakView = () => {
                     const lengthInHours = assignment.length_in_hours || 1;
                     const endHour = startHour + lengthInHours;
                     const soldiers = assignment.soldiers || [];
+                    // משימות מעורבבות (לא מחלקתיות) מקבלות צבע נטרלי אפור
                     const mahlakaColor = assignment.assigned_mahlaka_id
                       ? getMahlakaColor(assignment.assigned_mahlaka_id)
-                      : '#6B7280';
+                      : '#9CA3AF'; // צבע אפור נטרלי למשימות מעורבבות
 
                     return (
                       <div

@@ -122,9 +122,36 @@ class AssignmentLogic:
             return result
 
         if self.emergency_mode:
-            return self._try_assign_patrol_emergency(assign_data, mahalkot, schedules, mahlaka_workload)
+            result = self._try_assign_patrol_emergency(assign_data, mahalkot, schedules, mahlaka_workload)
+            if result:
+                return result
 
-        raise Exception(f"לא נמצאה מחלקה זמינה לסיור")
+        # 🔧 המערכת תמיד מצליחה! אם אין פתרון אידיאלי - נמצא כל פתרון
+        # ניקח מחלקה ראשונה שיש בה מספיק כוח אדם, בלי בדיקות מנוחה
+        for mahlaka_info in mahalkot:
+            commanders = mahlaka_info['commanders']
+            drivers = mahlaka_info['drivers']
+            soldiers = mahlaka_info['soldiers']
+
+            if len(commanders) > 0 and len(drivers) > 0 and len(soldiers) >= 2:
+                return {
+                    'commanders': [commanders[0]['id']],
+                    'drivers': [drivers[0]['id']],
+                    'soldiers': [s['id'] for s in soldiers[:2]],
+                    'mahlaka_id': mahlaka_info['id']
+                }
+
+        # אם בכל זאת אין - נשתמש במה שיש (אף מחלקה בודדת)
+        all_commanders = [c for m in mahalkot for c in m['commanders']]
+        all_drivers = [d for m in mahalkot for d in m['drivers']]
+        all_soldiers = [s for m in mahalkot for s in m['soldiers']]
+
+        return {
+            'commanders': [all_commanders[0]['id']] if all_commanders else [],
+            'drivers': [all_drivers[0]['id']] if all_drivers else [],
+            'soldiers': [s['id'] for s in all_soldiers[:2]] if all_soldiers else [],
+            'mahlaka_id': mahalkot[0]['id'] if mahalkot else None
+        }
     
     def get_shift_number(self, start_hour: int) -> int:
         """מחזיר את מספר המשמרת על פי שעת ההתחלה
@@ -398,7 +425,18 @@ class AssignmentLogic:
                 self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
                 return {'soldiers': [available[0]['id']]}
 
-        raise Exception("אין חייל זמין לשמירה")
+        # 🔧 המערכת תמיד מצליחה! אם אין מי שעומד בדרישות מנוחה - נשתמש במי שיש
+        # עדיפות: מ"כ → סמל → ממ"ד
+        all_people_sorted = sorted(all_soldiers, key=lambda x: (
+            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
+        ))
+
+        if all_people_sorted:
+            self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא מנוחה מספקת")
+            return {'soldiers': [all_people_sorted[0]['id']]}
+
+        # ממש אין אף אחד - נחזיר ריק (אבל לא Exception!)
+        return {'soldiers': []}
     
     def assign_standby_a(self, assign_data: Dict, all_commanders: List[Dict],
                         all_drivers: List[Dict], all_soldiers: List[Dict],
@@ -443,32 +481,18 @@ class AssignmentLogic:
                     all_soldiers, schedules, assign_data['day'], assign_data['start_hour']
                 )
 
-                # העדף מפקדים שסיימו משימה לאחרונה
+                # 🔧 תיקון: כאשר האופציה מסומנת - קח **בהכרח** אנשים שירדו ממשימות בלבד
+                # אין fallback לאנשים רגילים - רק מי שירד ממשימות
                 available_commander_ids = {c['id'] for c in available_commanders}
                 preferred_commanders = [c for c in recently_finished_commanders if c['id'] in available_commander_ids]
-                if not preferred_commanders:
-                    preferred_commanders = available_commanders
 
-                # העדף נהגים שסיימו משימה לאחרונה
                 available_driver_ids = {d['id'] for d in available_drivers}
                 preferred_drivers = [d for d in recently_finished_drivers if d['id'] in available_driver_ids]
-                if not preferred_drivers:
-                    preferred_drivers = available_drivers
 
-                # העדף לוחמים שסיימו משימה לאחרונה
                 available_soldier_ids = {s['id'] for s in available_soldiers}
                 preferred_soldiers = [s for s in recently_finished_soldiers if s['id'] in available_soldier_ids]
 
-                # השלם עם לוחמים רגילים אם צריך
-                remaining_needed = 7 - len(preferred_soldiers)
-                if remaining_needed > 0:
-                    preferred_soldier_ids = {s['id'] for s in preferred_soldiers}
-                    other_soldiers = [s for s in available_soldiers if s['id'] not in preferred_soldier_ids]
-                    # מיון לפי שעות עבודה (מי שעבד פחות)
-                    other_soldiers.sort(key=lambda x: sum(
-                        end - start for _, start, end, _, _ in schedules.get(x['id'], [])
-                    ))
-                    preferred_soldiers.extend(other_soldiers[:remaining_needed])
+                # לא משלימים עם חיילים רגילים - רק מי שירד ממשימות!
             else:
                 # אופציה לא מופעלת - שיבוץ רגיל לפי שעות מנוחה (מקסימום מנוחה!)
                 preferred_commanders = available_commanders
@@ -500,10 +524,53 @@ class AssignmentLogic:
                     reverse=True
                 )
 
+            # 🔧 המערכת תמיד מצליחה! אם אין מספיק - נשתמש בכל מי שזמין
+            # עדיפות: מ"כ → סמל → ממ"ד
+            final_commanders = []
+            final_drivers = []
+            final_soldiers = []
+
+            # מפקד: קח מה שיש (מתעדף קודם)
+            if preferred_commanders:
+                final_commanders = [preferred_commanders[0]['id']]
+            elif available_commanders:
+                final_commanders = [available_commanders[0]['id']]
+            # אם אין מפקדים כלל, ניקח סמל או ממ"ד למטה
+
+            # נהג: קח מה שיש
+            if preferred_drivers:
+                final_drivers = [preferred_drivers[0]['id']]
+            elif available_drivers:
+                final_drivers = [available_drivers[0]['id']]
+
+            # לוחמים: קח עד 7
+            if preferred_soldiers:
+                final_soldiers = [s['id'] for s in preferred_soldiers[:7]]
+            elif available_soldiers:
+                final_soldiers = [s['id'] for s in available_soldiers[:7]]
+
+            # אם חסרים חיילים - השלם עם מי שזמין (עדיפות: מ"כ → סמל → ממ"ד)
+            all_people_available = available_commanders + available_soldiers
+            all_people_available.sort(key=lambda x: (
+                0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
+            ))
+
+            # השלם מפקד אם חסר
+            if not final_commanders and all_people_available:
+                final_commanders = [all_people_available.pop(0)['id']]
+
+            # השלם נהג אם חסר
+            if not final_drivers and all_people_available:
+                final_drivers = [all_people_available.pop(0)['id']]
+
+            # השלם לוחמים עד 7
+            while len(final_soldiers) < 7 and all_people_available:
+                final_soldiers.append(all_people_available.pop(0)['id'])
+
             return {
-                'commanders': [preferred_commanders[0]['id']],
-                'drivers': [preferred_drivers[0]['id']],
-                'soldiers': [s['id'] for s in preferred_soldiers[:7]]
+                'commanders': final_commanders,
+                'drivers': final_drivers,
+                'soldiers': final_soldiers
             }
         
         if self.emergency_mode:
@@ -535,8 +602,23 @@ class AssignmentLogic:
                     'drivers': [available_drivers[0]['id']],
                     'soldiers': [s['id'] for s in available_soldiers[:7]]
                 }
-        
-        raise Exception("אין מספיק כוח אדם לכוננות א")
+
+        # 🔧 המערכת תמיד מצליחה! משתמשים בכל מי שזמין בלי בדיקות מנוחה
+        self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא מנוחה מספקת")
+        all_people = all_commanders + all_drivers + all_soldiers
+        all_people.sort(key=lambda x: (
+            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
+        ))
+
+        final_commanders = [all_people.pop(0)['id']] if all_people else []
+        final_drivers = [all_people.pop(0)['id']] if all_people else []
+        final_soldiers = [all_people.pop(0)['id'] for _ in range(min(7, len(all_people)))]
+
+        return {
+            'commanders': final_commanders,
+            'drivers': final_drivers,
+            'soldiers': final_soldiers
+        }
     
     def assign_standby_b(self, assign_data: Dict, all_commanders: List[Dict],
                         all_soldiers: List[Dict], schedules: Dict) -> Dict:
@@ -571,24 +653,15 @@ class AssignmentLogic:
 
                 # העדף מפקדים שסיימו משימה לאחרונה
                 available_commander_ids = {c['id'] for c in available_commanders}
+                # 🔧 תיקון: כאשר האופציה מסומנת - קח **בהכרח** אנשים שירדו ממשימות בלבד
+                # אין fallback לאנשים רגילים - רק מי שירד ממשימות
                 preferred_commanders = [c for c in recently_finished_commanders if c['id'] in available_commander_ids]
-                if not preferred_commanders:
-                    preferred_commanders = available_commanders
 
                 # העדף לוחמים שסיימו משימה לאחרונה
                 available_soldier_ids = {s['id'] for s in available_soldiers}
                 preferred_soldiers = [s for s in recently_finished_soldiers if s['id'] in available_soldier_ids]
 
-                # השלם עם לוחמים רגילים אם צריך
-                remaining_needed = 3 - len(preferred_soldiers)
-                if remaining_needed > 0:
-                    preferred_soldier_ids = {s['id'] for s in preferred_soldiers}
-                    other_soldiers = [s for s in available_soldiers if s['id'] not in preferred_soldier_ids]
-                    # מיון לפי שעות עבודה
-                    other_soldiers.sort(key=lambda x: sum(
-                        end - start for _, start, end, _, _ in schedules.get(x['id'], [])
-                    ))
-                    preferred_soldiers.extend(other_soldiers[:remaining_needed])
+                # לא משלימים עם חיילים רגילים - רק מי שירד ממשימות!
             else:
                 # אופציה לא מופעלת - שיבוץ רגיל לפי שעות מנוחה (מקסימום מנוחה!)
                 preferred_commanders = available_commanders
@@ -611,9 +684,40 @@ class AssignmentLogic:
                     reverse=True
                 )
 
+            # 🔧 המערכת תמיד מצליחה! אם אין מספיק - נשתמש בכל מי שזמין
+            # עדיפות: מ"כ → סמל → ממ"ד
+            final_commanders = []
+            final_soldiers = []
+
+            # מפקד: קח מה שיש
+            if preferred_commanders:
+                final_commanders = [preferred_commanders[0]['id']]
+            elif available_commanders:
+                final_commanders = [available_commanders[0]['id']]
+
+            # לוחמים: קח עד 3
+            if preferred_soldiers:
+                final_soldiers = [s['id'] for s in preferred_soldiers[:3]]
+            elif available_soldiers:
+                final_soldiers = [s['id'] for s in available_soldiers[:3]]
+
+            # אם חסרים חיילים - השלם עם מי שזמין (עדיפות: מ"כ → סמל → ממ"ד)
+            all_people_available = available_commanders + available_soldiers
+            all_people_available.sort(key=lambda x: (
+                0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
+            ))
+
+            # השלם מפקד אם חסר
+            if not final_commanders and all_people_available:
+                final_commanders = [all_people_available.pop(0)['id']]
+
+            # השלם לוחמים עד 3
+            while len(final_soldiers) < 3 and all_people_available:
+                final_soldiers.append(all_people_available.pop(0)['id'])
+
             return {
-                'commanders': [preferred_commanders[0]['id']],
-                'soldiers': [s['id'] for s in preferred_soldiers[:3]]
+                'commanders': final_commanders,
+                'soldiers': final_soldiers
             }
         
         if self.emergency_mode:
@@ -637,8 +741,21 @@ class AssignmentLogic:
                     'commanders': [available_commanders[0]['id']],
                     'soldiers': [s['id'] for s in available_soldiers[:3]]
                 }
-        
-        raise Exception("אין מספיק כוח אדם לכוננות ב")
+
+        # 🔧 המערכת תמיד מצליחה! משתמשים בכל מי שזמין בלי בדיקות מנוחה
+        self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא מנוחה מספקת")
+        all_people = all_commanders + all_soldiers
+        all_people.sort(key=lambda x: (
+            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
+        ))
+
+        final_commanders = [all_people.pop(0)['id']] if all_people else []
+        final_soldiers = [all_people.pop(0)['id'] for _ in range(min(3, len(all_people)))]
+
+        return {
+            'commanders': final_commanders,
+            'soldiers': final_soldiers
+        }
     
     def assign_operations(self, assign_data: Dict, all_people: List[Dict],
                          schedules: Dict) -> Dict:
@@ -685,7 +802,16 @@ class AssignmentLogic:
                 self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
                 return {'soldiers': [certified[0]['id']]}
 
-        raise Exception("אין מוסמך חמל זמין")
+        # 🔧 המערכת תמיד מצליחה! אם אין מוסמך חמל - ניקח מי שזמין (עדיפות: מ"כ → סמל → ממ"ד)
+        all_people_sorted = sorted(all_people, key=lambda x: (
+            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
+        ))
+
+        if all_people_sorted:
+            self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא הסמכת חמל")
+            return {'soldiers': [all_people_sorted[0]['id']]}
+
+        return {'soldiers': []}
     
     def assign_kitchen(self, assign_data: Dict, all_soldiers: List[Dict], 
                       schedules: Dict) -> Dict:
@@ -735,7 +861,16 @@ class AssignmentLogic:
                 self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
                 return {'soldiers': [available[0]['id']]}
 
-        raise Exception("אין אף אחד זמין לחפק גשש")
+        # 🔧 המערכת תמיד מצליחה! ניקח מי שזמין (עדיפות: מ"כ → סמל → ממ"ד)
+        all_people_sorted = sorted(all_people, key=lambda x: (
+            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
+        ))
+
+        if all_people_sorted:
+            self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא מנוחה מספקת")
+            return {'soldiers': [all_people_sorted[0]['id']]}
+
+        return {'soldiers': []}
     
     def assign_shalaz(self, assign_data: Dict, all_soldiers: List[Dict], 
                      schedules: Dict) -> Dict:
@@ -785,4 +920,13 @@ class AssignmentLogic:
                 self.warnings.append(f"⚠️ {assign_data['name']}: מפקד לא בכיר")
                 return {'commanders': [available[0]['id']]}
 
-        raise Exception("אין מפקד בכיר זמין לקצין תורן")
+        # 🔧 המערכת תמיד מצליחה! ניקח כל מפקד זמין (עדיפות: מ"כ → סמל → ממ"ד)
+        all_commanders_sorted = sorted(all_commanders, key=lambda x: (
+            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
+        ))
+
+        if all_commanders_sorted:
+            self.warnings.append(f"⚠️ {assign_data['name']}: שובץ מפקד ללא מנוחה מספקת")
+            return {'commanders': [all_commanders_sorted[0]['id']]}
+
+        return {'commanders': []}

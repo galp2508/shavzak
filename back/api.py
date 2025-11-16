@@ -1719,8 +1719,12 @@ def generate_shavzak(shavzak_id, current_user):
             
             for template in templates:
                 for slot in range(template.times_per_day):
-                    start_hour = slot * template.length_in_hours
-                    
+                    # אם start_hour מוגדר בתבנית, השתמש בו. אחרת, חשב אוטומטית
+                    if template.start_hour is not None:
+                        start_hour = template.start_hour + (slot * template.length_in_hours)
+                    else:
+                        start_hour = slot * template.length_in_hours
+
                     assign_data = {
                         'name': f"{template.name} {slot + 1}",
                         'type': template.assignment_type,
@@ -2304,6 +2308,219 @@ def duplicate_assignment(assignment_id, current_user):
         session.close()
 
 
+@app.route('/api/shavzakim/<int:shavzak_id>/assignments', methods=['POST'])
+@token_required
+def create_manual_assignment(shavzak_id, current_user):
+    """יצירת משימה חדשה באופן ידני"""
+    try:
+        session = get_db()
+
+        # בדיקת הרשאות
+        shavzak = session.query(Shavzak).filter_by(id=shavzak_id).first()
+        if not shavzak:
+            return jsonify({'error': 'שבצ"ק לא נמצא'}), 404
+
+        if not can_edit_pluga(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+
+        # יצירת המשימה
+        assignment = Assignment(
+            shavzak_id=shavzak_id,
+            name=data['name'],
+            assignment_type=data['assignment_type'],
+            day=data['day'],
+            start_hour=data['start_hour'],
+            length_in_hours=data['length_in_hours'],
+            assigned_mahlaka_id=data.get('assigned_mahlaka_id')
+        )
+
+        session.add(assignment)
+        session.flush()  # כדי לקבל את ה-ID
+
+        # הוספת חיילים אם קיימים
+        if 'soldiers' in data and data['soldiers']:
+            for soldier_data in data['soldiers']:
+                soldier_assignment = AssignmentSoldier(
+                    assignment_id=assignment.id,
+                    soldier_id=soldier_data['soldier_id'],
+                    role_in_assignment=soldier_data['role']
+                )
+                session.add(soldier_assignment)
+
+        session.commit()
+
+        # בניית תגובה עם פרטי המשימה
+        soldiers = []
+        soldier_assignments = session.query(AssignmentSoldier).filter_by(
+            assignment_id=assignment.id
+        ).all()
+
+        for sa in soldier_assignments:
+            soldier = session.query(Soldier).filter_by(id=sa.soldier_id).first()
+            if soldier:
+                soldiers.append({
+                    'id': soldier.id,
+                    'name': soldier.name,
+                    'role': soldier.role,
+                    'role_in_assignment': sa.role_in_assignment
+                })
+
+        return jsonify({
+            'message': 'משימה נוצרה בהצלחה',
+            'assignment': {
+                'id': assignment.id,
+                'name': assignment.name,
+                'type': assignment.assignment_type,
+                'day': assignment.day,
+                'start_hour': assignment.start_hour,
+                'length_in_hours': assignment.length_in_hours,
+                'assigned_mahlaka_id': assignment.assigned_mahlaka_id,
+                'soldiers': soldiers
+            }
+        }), 201
+    except Exception as e:
+        print(f"🔴 שגיאה ביצירת משימה ידנית: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/assignments/<int:assignment_id>', methods=['PUT'])
+@token_required
+def update_assignment(assignment_id, current_user):
+    """עדכון משימה קיימת"""
+    try:
+        session = get_db()
+
+        assignment = session.query(Assignment).filter_by(id=assignment_id).first()
+        if not assignment:
+            return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        shavzak = session.query(Shavzak).filter_by(id=assignment.shavzak_id).first()
+        if not can_edit_pluga(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+
+        # עדכון שדות המשימה
+        if 'name' in data:
+            assignment.name = data['name']
+        if 'assignment_type' in data:
+            assignment.assignment_type = data['assignment_type']
+        if 'day' in data:
+            assignment.day = data['day']
+        if 'start_hour' in data:
+            assignment.start_hour = data['start_hour']
+        if 'length_in_hours' in data:
+            assignment.length_in_hours = data['length_in_hours']
+        if 'assigned_mahlaka_id' in data:
+            assignment.assigned_mahlaka_id = data['assigned_mahlaka_id']
+
+        session.commit()
+
+        # החזרת המשימה המעודכנת
+        soldiers = []
+        soldier_assignments = session.query(AssignmentSoldier).filter_by(
+            assignment_id=assignment.id
+        ).all()
+
+        for sa in soldier_assignments:
+            soldier = session.query(Soldier).filter_by(id=sa.soldier_id).first()
+            if soldier:
+                soldiers.append({
+                    'id': soldier.id,
+                    'name': soldier.name,
+                    'role': soldier.role,
+                    'role_in_assignment': sa.role_in_assignment
+                })
+
+        return jsonify({
+            'message': 'משימה עודכנה בהצלחה',
+            'assignment': {
+                'id': assignment.id,
+                'name': assignment.name,
+                'type': assignment.assignment_type,
+                'day': assignment.day,
+                'start_hour': assignment.start_hour,
+                'length_in_hours': assignment.length_in_hours,
+                'assigned_mahlaka_id': assignment.assigned_mahlaka_id,
+                'soldiers': soldiers
+            }
+        }), 200
+    except Exception as e:
+        print(f"🔴 שגיאה בעדכון משימה: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/assignments/<int:assignment_id>/soldiers', methods=['PUT'])
+@token_required
+def update_assignment_soldiers(assignment_id, current_user):
+    """עדכון החיילים המשובצים למשימה"""
+    try:
+        session = get_db()
+
+        assignment = session.query(Assignment).filter_by(id=assignment_id).first()
+        if not assignment:
+            return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        shavzak = session.query(Shavzak).filter_by(id=assignment.shavzak_id).first()
+        if not can_edit_pluga(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+
+        # מחיקת כל החיילים הקיימים
+        session.query(AssignmentSoldier).filter_by(assignment_id=assignment_id).delete()
+
+        # הוספת החיילים החדשים
+        if 'soldiers' in data and data['soldiers']:
+            for soldier_data in data['soldiers']:
+                soldier_assignment = AssignmentSoldier(
+                    assignment_id=assignment_id,
+                    soldier_id=soldier_data['soldier_id'],
+                    role_in_assignment=soldier_data['role']
+                )
+                session.add(soldier_assignment)
+
+        session.commit()
+
+        # החזרת רשימת החיילים המעודכנת
+        soldiers = []
+        soldier_assignments = session.query(AssignmentSoldier).filter_by(
+            assignment_id=assignment_id
+        ).all()
+
+        for sa in soldier_assignments:
+            soldier = session.query(Soldier).filter_by(id=sa.soldier_id).first()
+            if soldier:
+                soldiers.append({
+                    'id': soldier.id,
+                    'name': soldier.name,
+                    'role': soldier.role,
+                    'role_in_assignment': sa.role_in_assignment
+                })
+
+        return jsonify({
+            'message': 'חיילים עודכנו בהצלחה',
+            'soldiers': soldiers
+        }), 200
+    except Exception as e:
+        print(f"🔴 שגיאה בעדכון חיילים: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 # ============================================================================
 # JOIN REQUESTS
 # ============================================================================
@@ -2589,7 +2806,11 @@ def get_live_schedule(pluga_id, current_user):
 
                         for template in templates:
                             for slot in range(template.times_per_day):
-                                start_hour = slot * template.length_in_hours
+                                # אם start_hour מוגדר בתבנית, השתמש בו. אחרת, חשב אוטומטית
+                                if template.start_hour is not None:
+                                    start_hour = template.start_hour + (slot * template.length_in_hours)
+                                else:
+                                    start_hour = slot * template.length_in_hours
 
                                 # צור משימה פשוטה ללא שיבוץ חיילים (לעת עתה)
                                 assignment = Assignment(

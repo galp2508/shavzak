@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
+import AssignmentModal from '../components/AssignmentModal';
 
 const LiveSchedule = () => {
   const { user } = useAuth();
@@ -12,6 +13,8 @@ const LiveSchedule = () => {
   const [mahalkot, setMahalkot] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConstraints, setShowConstraints] = useState(false);
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState(null);
 
   useEffect(() => {
     // התחל עם מחר
@@ -121,6 +124,25 @@ const LiveSchedule = () => {
     }
   };
 
+  const openNewAssignmentModal = () => {
+    setEditingAssignment(null);
+    setShowAssignmentModal(true);
+  };
+
+  const openEditAssignmentModal = (assignment) => {
+    setEditingAssignment(assignment);
+    setShowAssignmentModal(true);
+  };
+
+  const closeAssignmentModal = () => {
+    setShowAssignmentModal(false);
+    setEditingAssignment(null);
+  };
+
+  const handleAssignmentSave = () => {
+    loadSchedule(currentDate);
+  };
+
   if (loading && !scheduleData) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -132,53 +154,65 @@ const LiveSchedule = () => {
   return (
     <div className="space-y-6">
       {/* Header with Date Navigation */}
-      <div className="card bg-gradient-to-r from-military-600 to-military-700 text-white">
+      <div className="card bg-gradient-to-br from-military-600 via-military-700 to-military-800 text-white shadow-2xl border-none">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 flex-1">
-            <Calendar className="w-12 h-12" />
+            <div className="bg-white bg-opacity-20 p-3 rounded-2xl backdrop-blur-sm">
+              <Calendar className="w-12 h-12" />
+            </div>
             <div className="flex-1">
-              <h1 className="text-3xl font-bold">שיבוץ חי</h1>
-              <p className="text-military-100">ניווט אוטומטי בין ימים</p>
+              <h1 className="text-4xl font-bold tracking-tight">שיבוץ חי</h1>
+              <p className="text-military-100 text-lg font-medium">ניווט אוטומטי בין ימים</p>
             </div>
           </div>
 
           {/* Date Navigation */}
-          <div className="flex items-center gap-4 bg-white bg-opacity-20 rounded-lg p-3">
+          <div className="flex items-center gap-4 bg-white bg-opacity-20 backdrop-blur-md rounded-2xl p-4 shadow-lg">
             <button
               onClick={() => navigateDay(-1)}
-              className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+              className="p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
               title="יום קודם (מקש חץ ימינה)"
             >
-              <ChevronRight size={24} />
+              <ChevronRight size={28} />
             </button>
 
-            <div className="text-center min-w-[200px]">
-              <div className="text-2xl font-bold">
+            <div className="text-center min-w-[220px]">
+              <div className="text-3xl font-bold tracking-wide">
                 {currentDate && getDayName(currentDate)}
               </div>
-              <div className="text-sm opacity-90">
+              <div className="text-base opacity-90 font-medium mt-1">
                 {currentDate && currentDate.toLocaleDateString('he-IL')}
               </div>
             </div>
 
             <button
               onClick={() => navigateDay(1)}
-              className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+              className="p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
               title="יום הבא (מקש חץ שמאלה)"
             >
-              <ChevronLeft size={24} />
+              <ChevronLeft size={28} />
             </button>
           </div>
 
           <div className="flex items-center gap-2 mr-4">
             {(user.role === 'מפ' || user.role === 'ממ') && (
-              <button
-                onClick={() => setShowConstraints(true)}
-                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
-                title="אילוצי שיבוץ"
-              >
-                <Shield size={24} />
-              </button>
+              <>
+                <button
+                  onClick={openNewAssignmentModal}
+                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors flex items-center gap-2"
+                  title="הוסף משימה חדשה"
+                >
+                  <Plus size={24} />
+                  <span className="hidden md:inline">משימה חדשה</span>
+                </button>
+                <button
+                  onClick={() => setShowConstraints(true)}
+                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                  title="אילוצי שיבוץ"
+                >
+                  <Shield size={24} />
+                </button>
+              </>
             )}
             <button
               onClick={() => loadSchedule(currentDate)}
@@ -374,36 +408,48 @@ const LiveSchedule = () => {
                               return (
                                 <div
                                   key={assignment.id}
-                                  className="absolute inset-x-1 rounded-lg shadow-md overflow-hidden group cursor-pointer hover:shadow-lg transition-all"
+                                  onClick={() => (user.role === 'מפ' || user.role === 'ממ') && openEditAssignmentModal(assignment)}
+                                  className="absolute inset-x-1 rounded-xl shadow-lg overflow-hidden group cursor-pointer hover:shadow-2xl transition-all duration-300 hover:scale-105 transform border-2"
                                   style={{
                                     top: `${topPosition}%`,
                                     height: `${height}%`,
-                                    backgroundColor: mahlakaColor,
-                                    border: `2px solid ${mahlakaColor}`,
+                                    background: `linear-gradient(135deg, ${mahlakaColor} 0%, ${mahlakaColor}dd 100%)`,
+                                    borderColor: mahlakaColor,
                                   }}
-                                  title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00)`}
+                                  title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00) - ${(user.role === 'מפ' || user.role === 'ממ') ? 'לחץ לעריכה' : ''}`}
                                 >
                                   {/* Assignment Content */}
-                                  <div className="p-2 h-full flex flex-col text-white">
+                                  <div className="p-3 h-full flex flex-col text-white backdrop-blur-sm relative">
+                                    {/* Edit Icon */}
+                                    {(user.role === 'מפ' || user.role === 'ממ') && (
+                                      <div className="absolute top-2 left-2 bg-white/30 rounded-lg p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                        <Edit className="w-3 h-3" />
+                                      </div>
+                                    )}
+
                                     {/* Assignment Name & Time */}
-                                    <div className="font-bold text-sm mb-1">
+                                    <div className="font-bold text-base mb-1.5 flex items-center gap-2">
+                                      <Clock className="w-4 h-4" />
                                       {assignment.name}
                                     </div>
-                                    <div className="text-xs opacity-90 mb-2">
+                                    <div className="text-sm opacity-95 mb-2 font-medium bg-black bg-opacity-20 rounded-lg px-2 py-1 inline-block">
                                       {startHour.toString().padStart(2, '0')}:00 - {endHour.toString().padStart(2, '0')}:00
                                     </div>
 
                                     {/* Soldiers List */}
                                     {assignment.soldiers && assignment.soldiers.length > 0 && (
                                       <div className="flex-1 overflow-y-auto">
-                                        <div className="space-y-1">
+                                        <div className="space-y-1.5">
                                           {assignment.soldiers.map((soldier) => (
                                             <div
                                               key={soldier.id}
-                                              className="text-xs bg-white/20 backdrop-blur-sm px-2 py-1 rounded"
+                                              className="text-sm bg-white/25 backdrop-blur-md px-3 py-2 rounded-lg border border-white/30 shadow-sm hover:bg-white/35 transition-all duration-200"
                                             >
-                                              <div className="font-medium">{soldier.name}</div>
-                                              <div className="text-[10px] opacity-80">
+                                              <div className="font-semibold flex items-center gap-1.5">
+                                                <Users className="w-3 h-3" />
+                                                {soldier.name}
+                                              </div>
+                                              <div className="text-xs opacity-90 font-medium mt-0.5">
                                                 {soldier.role_in_assignment}
                                               </div>
                                             </div>
@@ -414,8 +460,8 @@ const LiveSchedule = () => {
 
                                     {/* No soldiers indicator */}
                                     {(!assignment.soldiers || assignment.soldiers.length === 0) && (
-                                      <div className="text-xs opacity-75 italic">
-                                        אין חיילים
+                                      <div className="text-sm opacity-80 italic bg-red-500/30 px-3 py-2 rounded-lg border border-red-400/50">
+                                        אין חיילים משובצים
                                       </div>
                                     )}
                                   </div>
@@ -444,6 +490,19 @@ const LiveSchedule = () => {
               loadSchedule(currentDate);
             }
           }}
+        />
+      )}
+
+      {/* Assignment Modal */}
+      {showAssignmentModal && (
+        <AssignmentModal
+          assignment={editingAssignment}
+          date={currentDate}
+          dayIndex={scheduleData?.day_index}
+          shavzakId={scheduleData?.shavzak_id}
+          plugaId={user.pluga_id}
+          onClose={closeAssignmentModal}
+          onSave={handleAssignmentSave}
         />
       )}
     </div>

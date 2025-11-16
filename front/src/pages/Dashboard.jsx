@@ -127,17 +127,23 @@ const Dashboard = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Welcome */}
-      <div className="card bg-gradient-to-r from-military-600 to-military-700 text-white">
-        <div className="flex items-center justify-between">
+      <div className="card bg-gradient-to-br from-military-600 via-military-700 to-military-800 text-white shadow-2xl border-none overflow-hidden relative">
+        <div className="absolute top-0 left-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-x-32 -translate-y-32"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-white opacity-5 rounded-full translate-x-48 translate-y-48"></div>
+        <div className="flex items-center justify-between relative z-10">
           <div>
-            <h1 className="text-3xl font-bold mb-2">
+            <h1 className="text-4xl font-bold mb-3 tracking-tight">
               שלום, {user?.full_name} 👋
             </h1>
-            <p className="text-military-100">
-              {user?.role} · {pluga?.name || user?.pluga_id || 'טוען...'}
+            <p className="text-military-100 text-lg font-medium flex items-center gap-2">
+              <span className="bg-white/20 px-3 py-1 rounded-full">{user?.role}</span>
+              <span>·</span>
+              <span>{pluga?.name || user?.pluga_id || 'טוען...'}</span>
             </p>
           </div>
-          <Activity className="w-16 h-16 opacity-50" />
+          <div className="bg-white bg-opacity-20 p-4 rounded-2xl backdrop-blur-sm">
+            <Activity className="w-20 h-20" />
+          </div>
         </div>
       </div>
 
@@ -148,16 +154,19 @@ const Dashboard = () => {
           return (
             <div
               key={index}
-              className="card hover:shadow-lg transition-shadow animate-slideIn"
+              className="card hover:shadow-2xl transition-all duration-300 hover:scale-105 transform animate-slideIn overflow-hidden relative group"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
-              <div className="flex items-center justify-between mb-4">
-                <div className={`${stat.color} p-3 rounded-lg text-white`}>
-                  <Icon size={24} />
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-gray-100 to-transparent rounded-full -translate-y-16 translate-x-16 group-hover:scale-150 transition-transform duration-500"></div>
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`${stat.color} bg-gradient-to-br p-4 rounded-2xl text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                    <Icon size={28} />
+                  </div>
                 </div>
+                <h3 className="text-gray-600 text-base font-semibold mb-2">{stat.title}</h3>
+                <p className="text-4xl font-bold text-gray-900 tracking-tight">{stat.value}</p>
               </div>
-              <h3 className="text-gray-600 text-sm mb-1">{stat.title}</h3>
-              <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
             </div>
           );
         })}
@@ -236,14 +245,14 @@ const QuickAction = ({ title, description, icon: Icon, href }) => {
   return (
     <a
       href={href}
-      className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
+      className="flex items-center gap-5 p-5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl hover:from-military-50 hover:to-military-100 transition-all duration-300 group shadow-md hover:shadow-xl transform hover:scale-102"
     >
-      <div className="bg-military-600 p-3 rounded-lg text-white group-hover:bg-military-700 transition-colors">
-        <Icon size={20} />
+      <div className="bg-gradient-to-br from-military-600 to-military-700 p-4 rounded-2xl text-white group-hover:from-military-700 group-hover:to-military-800 transition-all duration-300 shadow-lg group-hover:scale-110 transform">
+        <Icon size={24} />
       </div>
       <div className="flex-1">
-        <h3 className="font-medium text-gray-900">{title}</h3>
-        <p className="text-sm text-gray-600">{description}</p>
+        <h3 className="font-bold text-gray-900 text-lg mb-1">{title}</h3>
+        <p className="text-sm text-gray-600 font-medium">{description}</p>
       </div>
     </a>
   );

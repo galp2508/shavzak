@@ -604,6 +604,49 @@ def create_mahlaka(current_user):
         session.close()
 
 
+@app.route('/api/mahalkot/<int:mahlaka_id>', methods=['PUT'])
+@token_required
+def update_mahlaka(mahlaka_id, current_user):
+    """עדכון פרטי מחלקה (צבע, מספר)"""
+    try:
+        session = get_db()
+
+        if not can_edit_mahlaka(current_user, mahlaka_id, session):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        mahlaka = session.query(Mahlaka).filter_by(id=mahlaka_id).first()
+        if not mahlaka:
+            return jsonify({'error': 'מחלקה לא נמצאה'}), 404
+
+        data = request.json
+
+        # עדכון צבע
+        if 'color' in data:
+            mahlaka.color = data['color']
+
+        # עדכון מספר מחלקה
+        if 'number' in data:
+            mahlaka.number = data['number']
+
+        session.commit()
+
+        return jsonify({
+            'message': 'מחלקה עודכנה בהצלחה',
+            'mahlaka': {
+                'id': mahlaka.id,
+                'number': mahlaka.number,
+                'color': mahlaka.color
+            }
+        }), 200
+    except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @app.route('/api/mahalkot/bulk', methods=['POST'])
 @token_required
 @role_required(['מפ'])
@@ -882,7 +925,21 @@ def create_soldiers_bulk(current_user):
 
                             unavailable_record = UnavailableDate(soldier_id=soldier.id, date=unavailable)
                             session.add(unavailable_record)
-                            print(f"✅ נשמר תאריך יציאה {unavailable} לחייל {soldier_data.get('name')}")
+
+                            # עדכון סטטוס החייל ל-"בסבב קו" עם תאריך חזרה
+                            soldier_status = session.query(SoldierStatus).filter_by(soldier_id=soldier.id).first()
+                            if not soldier_status:
+                                soldier_status = SoldierStatus(
+                                    soldier_id=soldier.id,
+                                    status_type='בסבב קו',
+                                    return_date=unavailable
+                                )
+                                session.add(soldier_status)
+                            else:
+                                soldier_status.status_type = 'בסבב קו'
+                                soldier_status.return_date = unavailable
+
+                            print(f"✅ נשמר תאריך יציאה {unavailable} לחייל {soldier_data.get('name')} + עודכן סטטוס ל-'בסבב קו'")
                     except ValueError:
                         # שגיאת פורמט - כבר טיפלנו בזה למעלה
                         pass
@@ -3757,6 +3814,84 @@ def update_soldier_status(soldier_id, current_user):
 
         return jsonify({
             'message': 'סטטוס עודכן בהצלחה',
+            'status': {
+                'status_type': status.status_type,
+                'return_date': status.return_date.isoformat() if status.return_date else None
+            }
+        }), 200
+    except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/soldiers/<int:soldier_id>/exit-date', methods=['PUT'])
+@token_required
+def update_soldier_exit_date(soldier_id, current_user):
+    """עדכון תאריך יציאה (סבב קו) של חייל - מעדכן גם UnavailableDate וגם SoldierStatus"""
+    session = get_db()
+    try:
+        if not can_edit_soldier(current_user, soldier_id, session):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        soldier = session.query(Soldier).get(soldier_id)
+        if not soldier:
+            return jsonify({'error': 'חייל לא נמצא'}), 404
+
+        data = request.json
+        exit_date_str = data.get('exit_date')
+
+        if not exit_date_str:
+            return jsonify({'error': 'חסר תאריך יציאה'}), 400
+
+        # המרת תאריך (תמיכה בפורמטים שונים)
+        try:
+            # נסה DD.MM.YYYY
+            exit_date = datetime.strptime(exit_date_str, '%d.%m.%Y').date()
+        except ValueError:
+            try:
+                # נסה YYYY-MM-DD
+                exit_date = datetime.strptime(exit_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'פורמט תאריך לא חוקי. השתמש ב-DD.MM.YYYY או YYYY-MM-DD'}), 400
+
+        # עדכון/יצירת UnavailableDate
+        unavailable = session.query(UnavailableDate).filter_by(
+            soldier_id=soldier_id,
+            date=exit_date
+        ).first()
+
+        if not unavailable:
+            unavailable = UnavailableDate(
+                soldier_id=soldier_id,
+                date=exit_date
+            )
+            session.add(unavailable)
+
+        # עדכון SoldierStatus
+        status = session.query(SoldierStatus).filter_by(soldier_id=soldier_id).first()
+        if not status:
+            status = SoldierStatus(
+                soldier_id=soldier_id,
+                status_type='בסבב קו',
+                return_date=exit_date
+            )
+            session.add(status)
+        else:
+            status.status_type = 'בסבב קו'
+            status.return_date = exit_date
+
+        status.updated_by = current_user.get('user_id')
+        status.updated_at = datetime.now()
+
+        session.commit()
+
+        return jsonify({
+            'message': 'תאריך יציאה עודכן בהצלחה',
+            'exit_date': exit_date.isoformat(),
             'status': {
                 'status_type': status.status_type,
                 'return_date': status.return_date.isoformat() if status.return_date else None

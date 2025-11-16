@@ -413,7 +413,7 @@ class AssignmentLogic:
                     ),
                     reverse=True
                 )
-                self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
+                # הוסר: אזהרת "מנוחה מופחתת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
                 return {'soldiers': [available[0]['id']]}
 
         # 🔧 המערכת תמיד מצליחה! אם אין מי שעומד בדרישות מנוחה - נשתמש במי שיש
@@ -423,7 +423,7 @@ class AssignmentLogic:
         ))
 
         if all_people_sorted:
-            self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא מנוחה מספקת")
+            # הוסר: אזהרת "שובץ ללא מנוחה מספקת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
             return {'soldiers': [all_people_sorted[0]['id']]}
 
         # ממש אין אף אחד - נחזיר ריק (אבל לא Exception!)
@@ -747,9 +747,12 @@ class AssignmentLogic:
     def assign_operations(self, assign_data: Dict, all_people: List[Dict],
                          schedules: Dict) -> Dict:
         """שיבוץ חמל - דורש הסמכה, עם מקסימום שעות מנוחה"""
+        # קבל את שם ההסמכה הנדרשת מהתבנית (או ברירת מחדל 'חמל')
+        required_cert = assign_data.get('requires_certification', 'חמל')
+
         certified = [
             p for p in all_people
-            if 'חמל' in p.get('certifications', [])
+            if required_cert in p.get('certifications', [])
             and self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
                                   assign_data['start_hour'], assign_data['length_in_hours'],
                                   self.min_rest_hours)
@@ -771,7 +774,7 @@ class AssignmentLogic:
             reduced_rest = self.min_rest_hours // 2
             certified = [
                 p for p in all_people
-                if 'חמל' in p.get('certifications', [])
+                if required_cert in p.get('certifications', [])
                 and self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
                                       assign_data['start_hour'], assign_data['length_in_hours'],
                                       reduced_rest)
@@ -798,10 +801,69 @@ class AssignmentLogic:
 
         return {'soldiers': []}
     
-    def assign_kitchen(self, assign_data: Dict, all_soldiers: List[Dict], 
+    def assign_kitchen(self, assign_data: Dict, all_soldiers: List[Dict],
                       schedules: Dict) -> Dict:
-        """תורן מטבח - 24 שעות"""
-        return self.assign_guard(assign_data, all_soldiers, schedules)
+        """תורן מטבח - מספר חיילים לפי needs_soldiers"""
+        # כמה חיילים נדרשים?
+        num_needed = assign_data.get('needs_soldiers', 1)
+
+        # מצא חיילים זמינים
+        available = [
+            s for s in all_soldiers
+            if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                                assign_data['start_hour'], assign_data['length_in_hours'],
+                                self.min_rest_hours)
+        ]
+
+        if len(available) >= num_needed:
+            # מיון לפי שעות מנוחה (מי שנח יותר קודם) - מקסימום מנוחה!
+            available.sort(
+                key=lambda x: self.calculate_rest_hours(
+                    schedules.get(x['id'], []),
+                    assign_data['day'],
+                    assign_data['start_hour']
+                ),
+                reverse=True  # מי שנח יותר קודם
+            )
+            return {'soldiers': [s['id'] for s in available[:num_needed]]}
+
+        if self.emergency_mode:
+            reduced_rest = self.min_rest_hours // 2
+            available = [
+                s for s in all_soldiers
+                if self.can_assign_at(schedules.get(s['id'], []), assign_data['day'],
+                                    assign_data['start_hour'], assign_data['length_in_hours'],
+                                    reduced_rest)
+            ]
+            if len(available) >= num_needed:
+                # מיון לפי שעות מנוחה גם במצב חירום
+                available.sort(
+                    key=lambda x: self.calculate_rest_hours(
+                        schedules.get(x['id'], []),
+                        assign_data['day'],
+                        assign_data['start_hour']
+                    ),
+                    reverse=True
+                )
+                # הוסר: אזהרת "מנוחה מופחתת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
+                return {'soldiers': [s['id'] for s in available[:num_needed]]}
+
+        # 🔧 המערכת תמיד מצליחה! אם אין מספיק - נשתמש במה שיש
+        # עדיפות: מ"כ → סמל → ממ"ד
+        all_people_sorted = sorted(all_soldiers, key=lambda x: (
+            0 if x['role'] == 'מכ' else 1 if x['role'] == 'סמל' else 2
+        ))
+
+        if all_people_sorted:
+            num_to_assign = min(num_needed, len(all_people_sorted))
+            # אזהרה רק אם חסרים יותר מ-30% מהחיילים הנדרשים (או לפחות 2 חיילים)
+            shortage = num_needed - num_to_assign
+            if shortage >= 2 or (shortage > 0 and shortage / num_needed > 0.3):
+                self.warnings.append(f"⚠️ {assign_data['name']}: שובצו רק {num_to_assign} מתוך {num_needed} חיילים")
+            return {'soldiers': [s['id'] for s in all_people_sorted[:num_to_assign]]}
+
+        # ממש אין אף אחד - נחזיר ריק (אבל לא Exception!)
+        return {'soldiers': []}
     
     def assign_hafak_gashash(self, assign_data: Dict, all_people: List[Dict],
                             schedules: Dict) -> Dict:

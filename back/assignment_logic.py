@@ -169,31 +169,28 @@ class AssignmentLogic:
             # אם השעה מחוץ לטווח, נחשב לפי modulo
             return (start_hour // 8) % 3
 
-    def get_next_mahlaka_rotation(self, mahalkot: List[Dict], assign_data: Dict) -> List[Dict]:
-        """מחזיר את המחלקות במחזוריות - כל מחלקה עובדת במשמרת מסוימת (לפי שעות)
-        כל מחלקה תיקח את כל המשימות באותה משמרת:
-        - מחלקה 1: 00:00-08:00
-        - מחלקה 2: 08:00-16:00
-        - מחלקה 3: 16:00-00:00
-        ובכל יום המחלקות מתחלפות משמרות
+    def get_next_mahlaka_rotation(self, mahalkot: List[Dict], assign_data: Dict, mahlaka_workload: Dict = None) -> List[Dict]:
+        """מחזיר את המחלקות לפי עומס עבודה - מחלקות שעבדו פחות קודמות
+        אם אין נתוני עומס, משתמש ברוטציה מכנית לפי יום ומשמרת
         """
-        day = assign_data['day']
-        start_hour = assign_data['start_hour']
-
         num_mahalkot = len(mahalkot)
         if num_mahalkot == 0:
             return []
 
-        # חישוב מספר המשמרת (0, 1, או 2)
-        shift_number = self.get_shift_number(start_hour)
+        # אם יש נתוני עומס, מיין לפי העומס (מי שעבד פחות קודם)
+        if mahlaka_workload is not None:
+            sorted_mahalkot = sorted(
+                mahalkot,
+                key=lambda m: mahlaka_workload.get(m['id'], 0)
+            )
+            return sorted_mahalkot
 
-        # חישוב איזו מחלקה צריכה לעבוד במשמרת הזו ביום הזה
-        # ביום 0: מחלקה 0 במשמרת 0, מחלקה 1 במשמרת 1, מחלקה 2 במשמרת 2
-        # ביום 1: מחלקה 1 במשמרת 0, מחלקה 2 במשמרת 1, מחלקה 0 במשמרת 2
-        # וכן הלאה (רוטציה)
+        # אחרת, רוטציה מכנית (גיבוי)
+        day = assign_data['day']
+        start_hour = assign_data['start_hour']
+        shift_number = self.get_shift_number(start_hour)
         mahlaka_index = (shift_number + day) % num_mahalkot
 
-        # יצירת רשימה מסודרת במחזוריות, כאשר המחלקה המתאימה במשמרת היא הראשונה
         rotated = []
         for i in range(num_mahalkot):
             idx = (mahlaka_index + i) % num_mahalkot
@@ -205,8 +202,8 @@ class AssignmentLogic:
         """ניסיון רגיל לשיבוץ סיור - מפקד ולוחמים מאותה מחלקה, נהג מכל מחלקה
         משתמש ברוטציה של מחלקות - כל מחלקה עובדת ביחד בבלוק"""
 
-        # קבל מחלקות בסדר מחזורי
-        mahalkot_sorted = self.get_next_mahlaka_rotation(mahalkot, assign_data)
+        # קבל מחלקות בסדר לפי עומס (מי שעבד פחות קודם)
+        mahalkot_sorted = self.get_next_mahlaka_rotation(mahalkot, assign_data, mahlaka_workload)
 
         # איסוף כל הנהגים הזמינים מכל המחלקות (נהג לא חייב להיות מאותה מחלקה)
         all_available_drivers = []
@@ -293,6 +290,10 @@ class AssignmentLogic:
                 # אין נהג - סיור פרוק (זה בסדר, לא צריך אזהרה)
                 driver_list = []
 
+            # עדכון עומס המחלקה
+            if mahlaka_workload is not None:
+                mahlaka_workload[mahlaka_info['id']] = mahlaka_workload.get(mahlaka_info['id'], 0) + assign_data['length_in_hours']
+
             return {
                 'commanders': [commander],
                 'drivers': driver_list,  # רשימה ריקה אם אין נהג
@@ -363,6 +364,11 @@ class AssignmentLogic:
                 driver_list = [all_available_drivers[0]['id']]
             else:
                 driver_list = []
+
+            # עדכון עומס המחלקה
+            if mahlaka_workload is not None:
+                mahlaka_workload[mahlaka_info['id']] = mahlaka_workload.get(mahlaka_info['id'], 0) + assign_data['length_in_hours']
+
             return {
                 'commanders': [commander],
                 'drivers': driver_list,

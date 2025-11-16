@@ -1355,7 +1355,11 @@ def create_assignment_template(pluga_id, current_user):
         
         session.add(template)
         session.commit()
-        
+
+        # מחק את השיבוץ האוטומטי כדי שייווצר מחדש עם התבנית החדשה
+        _trigger_schedule_regeneration(session, pluga_id)
+        session.commit()
+
         return jsonify({
             'message': 'תבנית נוצרה בהצלחה',
             'template': {
@@ -1451,6 +1455,10 @@ def update_assignment_template(template_id, current_user):
 
         session.commit()
 
+        # מחק את השיבוץ האוטומטי כדי שייווצר מחדש עם התבנית המעודכנת
+        _trigger_schedule_regeneration(session, template.pluga_id)
+        session.commit()
+
         return jsonify({
             'message': 'תבנית עודכנה בהצלחה',
             'template': {
@@ -1483,7 +1491,12 @@ def delete_assignment_template(template_id, current_user):
         if not can_edit_pluga(current_user, template.pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403
 
+        pluga_id = template.pluga_id
         session.delete(template)
+        session.commit()
+
+        # מחק את השיבוץ האוטומטי כדי שייווצר מחדש ללא התבנית שנמחקה
+        _trigger_schedule_regeneration(session, pluga_id)
         session.commit()
 
         return jsonify({'message': 'תבנית נמחקה בהצלחה'}), 200
@@ -1528,6 +1541,10 @@ def duplicate_assignment_template(template_id, current_user):
         )
 
         session.add(new_template)
+        session.commit()
+
+        # מחק את השיבוץ האוטומטי כדי שייווצר מחדש עם התבנית המשוכפלת
+        _trigger_schedule_regeneration(session, original_template.pluga_id)
         session.commit()
 
         return jsonify({
@@ -2807,8 +2824,14 @@ def get_live_schedule(pluga_id, current_user):
                                 else:
                                     start_hour = slot * template.length_in_hours
 
+                                # יצירת שם משימה - אם יש יותר מאחת ביום, הוסף מספר
+                                if template.times_per_day > 1:
+                                    task_name = f"{template.name} {slot + 1}"
+                                else:
+                                    task_name = template.name
+
                                 assign_data = {
-                                    'name': f"{template.name} {slot + 1}",
+                                    'name': task_name,
                                     'type': template.assignment_type,
                                     'day': day,
                                     'start_hour': start_hour,
@@ -3060,7 +3083,10 @@ def get_live_schedule(pluga_id, current_user):
         assignments_data = []
         warnings = []  # אזהרות על בעיות בשיבוץ
 
-        for assignment in existing_assignments:
+        # מיון המשימות לפי שם (כדי שהאזהרות יהיו מסודרות)
+        existing_assignments_sorted = sorted(existing_assignments, key=lambda a: a.name)
+
+        for assignment in existing_assignments_sorted:
             # טען חיילים
             soldiers_in_assignment = session.query(AssignmentSoldier).filter(
                 AssignmentSoldier.assignment_id == assignment.id
@@ -3213,6 +3239,99 @@ def get_live_schedule(pluga_id, current_user):
         return jsonify(error_response), 500
     finally:
         session.close()
+
+
+@app.route('/api/plugot/<int:pluga_id>/live-schedule/regenerate', methods=['POST'])
+@token_required
+def regenerate_live_schedule(pluga_id, current_user):
+    """
+    מחק ויצור מחדש את השיבוץ האוטומטי
+    שימושי כאשר משתנות תבניות משימות או מחלקות
+    """
+    session = get_db()
+
+    try:
+        # בדיקת הרשאות - רק מפקדים יכולים לבצע פעולה זו
+        if not can_edit_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לעדכן שיבוץ'}), 403
+
+        # מצא את השיבוץ האוטומטי
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if not master_shavzak:
+            return jsonify({'error': 'לא נמצא שיבוץ אוטומטי'}), 404
+
+        # מחק את כל המשימות הקיימות
+        assignments = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id
+        ).all()
+
+        for assignment in assignments:
+            # מחק את כל השיוכים של המשימה
+            session.query(AssignmentSoldier).filter(
+                AssignmentSoldier.assignment_id == assignment.id
+            ).delete()
+            # מחק את המשימה עצמה
+            session.delete(assignment)
+
+        session.commit()
+        print(f"✅ נמחקו {len(assignments)} משימות מהשיבוץ האוטומטי")
+
+        # עכשיו ייצור מחדש את השיבוץ בפעם הבאה שנטעין את הדף
+        # (הקוד ב-get_live_schedule יזהה שאין משימות ויריץ את האלגוריתם אוטומטית)
+
+        return jsonify({
+            'success': True,
+            'message': f'השיבוץ האוטומטי נמחק בהצלחה. {len(assignments)} משימות הוסרו.',
+            'info': 'השיבוץ ייווצר מחדש אוטומטית בפעם הבאה שתיטען דף השיבוץ החי.'
+        }), 200
+
+    except Exception as e:
+        session.rollback()
+        print(f"Error in regenerate_live_schedule: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': f'שגיאה במחיקת השיבוץ: {str(e)}'}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# HELPER FUNCTIONS FOR SCHEDULE REGENERATION
+# ============================================================================
+
+def _trigger_schedule_regeneration(session, pluga_id):
+    """
+    מחיקת השיבוץ האוטומטי כדי לגרום ליצירה מחדש
+    נקראת אוטומטית כאשר משתנות תבניות משימות או מחלקות
+    """
+    try:
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if master_shavzak:
+            # מחק את כל המשימות
+            assignments = session.query(Assignment).filter(
+                Assignment.shavzak_id == master_shavzak.id
+            ).all()
+
+            for assignment in assignments:
+                session.query(AssignmentSoldier).filter(
+                    AssignmentSoldier.assignment_id == assignment.id
+                ).delete()
+                session.delete(assignment)
+
+            print(f"🔄 השיבוץ האוטומטי נמחק ({len(assignments)} משימות) - ייווצר מחדש בטעינה הבאה")
+            return len(assignments)
+        return 0
+    except Exception as e:
+        print(f"⚠️ שגיאה במחיקת השיבוץ האוטומטי: {str(e)}")
+        # לא נעצור את התהליך - רק נדווח
+        return 0
 
 
 # ============================================================================

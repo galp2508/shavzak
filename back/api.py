@@ -2635,23 +2635,23 @@ def get_live_schedule(pluga_id, current_user):
                         regular_soldiers += 1
 
             # בדוק אזהרות למשימה זו
-            if not soldiers_list:
-                warnings.append(f"⚠️ {assignment.name}: אין חיילים משובצים")
-            else:
-                # טען את התבנית המקורית אם קיימת
-                template = session.query(AssignmentTemplate).filter(
-                    AssignmentTemplate.pluga_id == pluga_id,
-                    AssignmentTemplate.assignment_type == assignment.assignment_type
-                ).first()
+            # טען את התבנית המקורית אם קיימת
+            template = session.query(AssignmentTemplate).filter(
+                AssignmentTemplate.pluga_id == pluga_id,
+                AssignmentTemplate.assignment_type == assignment.assignment_type
+            ).first()
 
-                if template:
-                    # בדוק התאמה לתבנית
-                    if template.commanders_needed > commanders:
-                        warnings.append(f"⚠️ {assignment.name}: חסרים {template.commanders_needed - commanders} מפקדים")
-                    if template.drivers_needed > drivers:
-                        warnings.append(f"⚠️ {assignment.name}: חסרים {template.drivers_needed - drivers} נהגים")
-                    if template.soldiers_needed > regular_soldiers:
-                        warnings.append(f"⚠️ {assignment.name}: חסרים {template.soldiers_needed - regular_soldiers} לוחמים")
+            if template:
+                # בדוק התאמה לתבנית
+                if template.commanders_needed > commanders:
+                    warnings.append(f"⚠️ {assignment.name}: חסרים {template.commanders_needed - commanders} מפקדים")
+                if template.drivers_needed > drivers:
+                    warnings.append(f"⚠️ {assignment.name}: חסרים {template.drivers_needed - drivers} נהגים")
+                if template.soldiers_needed > regular_soldiers:
+                    warnings.append(f"⚠️ {assignment.name}: חסרים {template.soldiers_needed - regular_soldiers} לוחמים")
+            elif not soldiers_list:
+                # אין תבנית ואין חיילים - זה מצב לא רגיל
+                warnings.append(f"⚠️ {assignment.name}: אין חיילים משובצים")
 
             assignments_data.append({
                 'id': assignment.id,

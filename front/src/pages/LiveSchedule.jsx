@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
 
@@ -103,6 +103,22 @@ const LiveSchedule = () => {
   const getDayName = (date) => {
     const days = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
     return days[date.getDay()];
+  };
+
+  const deleteAssignment = async (assignmentId, assignmentName) => {
+    if (!window.confirm(`האם אתה בטוח שברצונך למחוק את המשימה "${assignmentName}"?`)) {
+      return;
+    }
+
+    try {
+      await api.delete(`/assignments/${assignmentId}`);
+      toast.success(`המשימה "${assignmentName}" נמחקה בהצלחה`);
+      // רענן את הנתונים
+      loadSchedule(currentDate);
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+      toast.error(error.response?.data?.error || 'שגיאה במחיקת המשימה');
+    }
   };
 
   if (loading && !scheduleData) {
@@ -212,16 +228,56 @@ const LiveSchedule = () => {
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-1" />
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-yellow-900 mb-2">
+                  <h3 className="text-lg font-bold text-yellow-900 mb-3">
                     אזהרות שיבוץ ({scheduleData.warnings.length})
                   </h3>
-                  <ul className="space-y-1">
-                    {scheduleData.warnings.map((warning, index) => (
-                      <li key={index} className="text-yellow-800 text-sm">
-                        {warning}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="space-y-3">
+                    {scheduleData.warnings.map((warning, index) => {
+                      // תמיכה בפורמט ישן (string) וחדש (object)
+                      const isObject = typeof warning === 'object';
+                      const message = isObject ? warning.message : warning;
+                      const severity = isObject ? warning.severity : 'warning';
+                      const suggestion = isObject ? warning.suggestion : null;
+                      const suggestDeletion = isObject ? warning.suggest_deletion : false;
+                      const assignmentId = isObject ? warning.assignment_id : null;
+                      const assignmentName = isObject ? warning.assignment_name : null;
+
+                      // צבעים לפי רמת חומרה
+                      const severityColors = {
+                        critical: 'bg-red-100 border-red-300',
+                        high: 'bg-orange-100 border-orange-300',
+                        warning: 'bg-yellow-100 border-yellow-300'
+                      };
+                      const bgColor = severityColors[severity] || severityColors.warning;
+
+                      return (
+                        <div key={index} className={`p-3 rounded-lg border-r-2 ${bgColor}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                              <p className="text-gray-800 text-sm font-medium mb-1">
+                                {message}
+                              </p>
+                              {suggestion && (
+                                <p className="text-gray-700 text-xs mt-2 bg-white/60 p-2 rounded">
+                                  💡 {suggestion}
+                                </p>
+                              )}
+                            </div>
+                            {suggestDeletion && assignmentId && (
+                              <button
+                                onClick={() => deleteAssignment(assignmentId, assignmentName)}
+                                className="btn-secondary-sm flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white border-red-700"
+                                title="מחק משימה זו"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                <span className="text-xs">מחק</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>

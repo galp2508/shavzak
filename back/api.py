@@ -2642,16 +2642,56 @@ def get_live_schedule(pluga_id, current_user):
             ).first()
 
             if template:
-                # בדוק התאמה לתבנית
+                # חשב סך הכל חיילים שחסרים
+                total_needed = template.commanders_needed + template.drivers_needed + template.soldiers_needed
+                total_assigned = commanders + drivers + regular_soldiers
+                missing_count = total_needed - total_assigned
+
+                # בנה רשימת חסרים
+                missing_parts = []
                 if template.commanders_needed > commanders:
-                    warnings.append(f"⚠️ {assignment.name}: חסרים {template.commanders_needed - commanders} מפקדים")
+                    missing_parts.append(f"{template.commanders_needed - commanders} מפקדים")
                 if template.drivers_needed > drivers:
-                    warnings.append(f"⚠️ {assignment.name}: חסרים {template.drivers_needed - drivers} נהגים")
+                    missing_parts.append(f"{template.drivers_needed - drivers} נהגים")
                 if template.soldiers_needed > regular_soldiers:
-                    warnings.append(f"⚠️ {assignment.name}: חסרים {template.soldiers_needed - regular_soldiers} לוחמים")
+                    missing_parts.append(f"{template.soldiers_needed - regular_soldiers} לוחמים")
+
+                if missing_parts:
+                    message = f"⚠️ {assignment.name}: חסרים " + ", ".join(missing_parts)
+
+                    # אם המשימה ריקה לחלוטין או חסרים יותר מ-50% - הצע למחוק
+                    suggest_deletion = False
+                    severity = "warning"
+
+                    if total_assigned == 0:
+                        severity = "critical"
+                        suggest_deletion = True
+                        suggestion = "המשימה ריקה לחלוטין. מומלץ למחוק אותה כדי לפנות משאבים."
+                    elif missing_count >= total_needed * 0.5:
+                        severity = "high"
+                        suggest_deletion = True
+                        suggestion = f"חסרים {missing_count} מתוך {total_needed} חיילים ({int(missing_count/total_needed*100)}%). מומלץ למחוק משימה זו."
+                    else:
+                        suggestion = None
+
+                    warnings.append({
+                        'message': message,
+                        'assignment_id': assignment.id,
+                        'assignment_name': assignment.name,
+                        'severity': severity,
+                        'suggest_deletion': suggest_deletion,
+                        'suggestion': suggestion
+                    })
             elif not soldiers_list:
                 # אין תבנית ואין חיילים - זה מצב לא רגיל
-                warnings.append(f"⚠️ {assignment.name}: אין חיילים משובצים")
+                warnings.append({
+                    'message': f"⚠️ {assignment.name}: אין חיילים משובצים",
+                    'assignment_id': assignment.id,
+                    'assignment_name': assignment.name,
+                    'severity': 'warning',
+                    'suggest_deletion': False,
+                    'suggestion': None
+                })
 
             assignments_data.append({
                 'id': assignment.id,

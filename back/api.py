@@ -2905,15 +2905,16 @@ def get_live_schedule(pluga_id, current_user):
                     schedules = {}  # soldier_id -> [(day, start, end, name, type), ...]
                     mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
 
-                    # 🔧 תיקון: טען משימות קיימות מכל הימים הקודמים כדי להבטיח המשכיות
-                    # טען את כל המשימות שכבר קיימות מההתחלה עד היום הנוכחי
-                    existing_assignments = session.query(Assignment).filter(
-                        Assignment.shavzak_id == master_shavzak.id,
-                        Assignment.day < min(master_shavzak.days_count, 7)  # טען רק ימים שהאלגוריתם יעבד
+                    # 🔧 תיקון: טען את כל המשימות הקיימות בשיבוץ האוטומטי (כולל ימים קודמים)
+                    # זה קריטי כדי שהאלגוריתם יתחשב בהיסטוריה המלאה
+                    existing_assignments_all = session.query(Assignment).filter(
+                        Assignment.shavzak_id == master_shavzak.id
                     ).all()
 
-                    # בנה את schedules מהמשימות הקיימות
-                    for existing_assignment in existing_assignments:
+                    print(f"🔄 טוען {len(existing_assignments_all)} משימות קיימות מהשיבוץ האוטומטי...")
+
+                    # בנה את schedules מכל המשימות הקיימות (גם מימים קודמים)
+                    for existing_assignment in existing_assignments_all:
                         # טען את החיילים שמשובצים למשימה הזו
                         soldiers_in_assignment = session.query(AssignmentSoldier).filter_by(
                             assignment_id=existing_assignment.id
@@ -2932,6 +2933,25 @@ def get_live_schedule(pluga_id, current_user):
                                 existing_assignment.name,
                                 existing_assignment.assignment_type
                             ))
+
+                    # מחק משימות קיימות מהימים שאנחנו עומדים ליצור (כדי למנוע כפילויות)
+                    days_to_create = set(range(min(master_shavzak.days_count, 7)))
+                    assignments_to_delete = [a for a in existing_assignments_all if a.day in days_to_create]
+
+                    if assignments_to_delete:
+                        print(f"🗑️  מוחק {len(assignments_to_delete)} משימות קיימות מהימים שאנחנו עומדים ליצור...")
+                        for assignment in assignments_to_delete:
+                            # מחק את השיוכים
+                            session.query(AssignmentSoldier).filter_by(assignment_id=assignment.id).delete()
+                            session.delete(assignment)
+                        session.commit()
+
+                        # עדכן את schedules - הסר משימות שנמחקו
+                        for soldier_id in list(schedules.keys()):
+                            schedules[soldier_id] = [
+                                s for s in schedules[soldier_id]
+                                if s[0] not in days_to_create
+                            ]
 
                     all_commanders = [c for m in mahalkot_data for c in m['commanders']]
                     all_drivers = [d for m in mahalkot_data for d in m['drivers']]

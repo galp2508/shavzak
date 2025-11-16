@@ -7,6 +7,7 @@ from flask_cors import CORS
 from datetime import datetime, timedelta
 from sqlalchemy import func
 import traceback
+import re
 
 from models import (
     init_db, get_session, User, Pluga, Mahlaka, Soldier,
@@ -3161,10 +3162,22 @@ def get_live_schedule(pluga_id, current_user):
 
             # בדוק אזהרות למשימה זו
             # טען את התבנית המקורית אם קיימת
+            # חלץ את שם התבנית מתוך שם המשימה (הסר מספרים בסוף)
+            # למשל: "שמירה בוקר 2" -> "שמירה בוקר"
+            template_name_match = re.match(r'^(.+?)\s+\d+$', assignment.name)
+            template_name = template_name_match.group(1).strip() if template_name_match else assignment.name
+
             template = session.query(AssignmentTemplate).filter(
                 AssignmentTemplate.pluga_id == pluga_id,
-                AssignmentTemplate.assignment_type == assignment.assignment_type
+                AssignmentTemplate.name == template_name
             ).first()
+
+            # אם לא מצאנו לפי שם, נסה לפי סוג (תאימות לאחור)
+            if not template:
+                template = session.query(AssignmentTemplate).filter(
+                    AssignmentTemplate.pluga_id == pluga_id,
+                    AssignmentTemplate.assignment_type == assignment.assignment_type
+                ).first()
 
             if template:
                 # חשב סך הכל חיילים שחסרים (טיפול ב-None)

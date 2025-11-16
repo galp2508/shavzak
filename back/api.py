@@ -2145,55 +2145,6 @@ def delete_shavzak(shavzak_id, current_user):
         session.close()
 
 
-@app.route('/api/assignments/<int:assignment_id>', methods=['PUT'])
-@token_required
-def update_assignment(assignment_id, current_user):
-    """עדכון משימה"""
-    try:
-        session = get_db()
-
-        assignment = session.query(Assignment).filter_by(id=assignment_id).first()
-        if not assignment:
-            return jsonify({'error': 'משימה לא נמצאה'}), 404
-
-        shavzak = session.query(Shavzak).filter_by(id=assignment.shavzak_id).first()
-        if not can_view_shavzak(current_user, shavzak.pluga_id):
-            return jsonify({'error': 'אין לך הרשאה'}), 403
-
-        data = request.json
-
-        if 'name' in data:
-            assignment.name = data['name']
-        if 'assignment_type' in data:
-            assignment.assignment_type = data['assignment_type']
-        if 'day' in data:
-            assignment.day = data['day']
-        if 'start_hour' in data:
-            assignment.start_hour = data['start_hour']
-        if 'length_in_hours' in data:
-            assignment.length_in_hours = data['length_in_hours']
-        if 'assigned_mahlaka_id' in data:
-            assignment.assigned_mahlaka_id = data['assigned_mahlaka_id']
-
-        session.commit()
-
-        return jsonify({
-            'message': 'משימה עודכנה בהצלחה',
-            'assignment': {
-                'id': assignment.id,
-                'name': assignment.name,
-                'type': assignment.assignment_type
-            }
-        }), 200
-    except Exception as e:
-        print(f"🔴 שגיאה: {str(e)}")
-        traceback.print_exc()
-        session.rollback()
-        return jsonify({'error': str(e)}), 500
-    finally:
-        session.close()
-
-
 @app.route('/api/assignments/<int:assignment_id>', methods=['DELETE'])
 @token_required
 def delete_assignment(assignment_id, current_user):

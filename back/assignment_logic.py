@@ -412,7 +412,9 @@ class AssignmentLogic:
            len(available_soldiers) >= 7:
 
             # אם האופציה של שימוש חוזר מופעלת - העדף חיילים שסיימו משימה
-            if self.reuse_soldiers_for_standby:
+            # קח את הערך מהתבנית, ואם לא קיים שם - קח מההגדרה הכללית
+            reuse_from_template = assign_data.get('reuse_soldiers_for_standby', self.reuse_soldiers_for_standby)
+            if reuse_from_template:
                 # מצא חיילים שסיימו משימה לאחרונה
                 recently_finished_commanders = self.get_recently_finished_soldiers(
                     all_commanders, schedules, assign_data['day'], assign_data['start_hour']
@@ -539,7 +541,9 @@ class AssignmentLogic:
 
         if len(available_commanders) >= 1 and len(available_soldiers) >= 3:
             # אם האופציה של שימוש חוזר מופעלת - העדף חיילים שסיימו משימה
-            if self.reuse_soldiers_for_standby:
+            # קח את הערך מהתבנית, ואם לא קיים שם - קח מההגדרה הכללית
+            reuse_from_template = assign_data.get('reuse_soldiers_for_standby', self.reuse_soldiers_for_standby)
+            if reuse_from_template:
                 # מצא חיילים שסיימו משימה לאחרונה
                 recently_finished_commanders = self.get_recently_finished_soldiers(
                     all_commanders, schedules, assign_data['day'], assign_data['start_hour']

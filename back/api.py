@@ -2603,6 +2603,8 @@ def get_live_schedule(pluga_id, current_user):
 
         # בנה תגובה
         assignments_data = []
+        warnings = []  # אזהרות על בעיות בשיבוץ
+
         for assignment in existing_assignments:
             # טען חיילים
             soldiers_in_assignment = session.query(AssignmentSoldier).filter(
@@ -2610,6 +2612,10 @@ def get_live_schedule(pluga_id, current_user):
             ).all()
 
             soldiers_list = []
+            commanders = 0
+            drivers = 0
+            regular_soldiers = 0
+
             for as_soldier in soldiers_in_assignment:
                 soldier = session.get(Soldier, as_soldier.soldier_id)
                 if soldier:
@@ -2619,6 +2625,33 @@ def get_live_schedule(pluga_id, current_user):
                         'role': soldier.role,
                         'role_in_assignment': as_soldier.role_in_assignment
                     })
+
+                    # ספור לפי תפקיד
+                    if as_soldier.role_in_assignment == 'מפקד':
+                        commanders += 1
+                    elif as_soldier.role_in_assignment == 'נהג':
+                        drivers += 1
+                    else:
+                        regular_soldiers += 1
+
+            # בדוק אזהרות למשימה זו
+            if not soldiers_list:
+                warnings.append(f"⚠️ {assignment.name}: אין חיילים משובצים")
+            else:
+                # טען את התבנית המקורית אם קיימת
+                template = session.query(AssignmentTemplate).filter(
+                    AssignmentTemplate.pluga_id == pluga_id,
+                    AssignmentTemplate.assignment_type == assignment.assignment_type
+                ).first()
+
+                if template:
+                    # בדוק התאמה לתבנית
+                    if template.commanders_needed > commanders:
+                        warnings.append(f"⚠️ {assignment.name}: חסרים {template.commanders_needed - commanders} מפקדים")
+                    if template.drivers_needed > drivers:
+                        warnings.append(f"⚠️ {assignment.name}: חסרים {template.drivers_needed - drivers} נהגים")
+                    if template.soldiers_needed > regular_soldiers:
+                        warnings.append(f"⚠️ {assignment.name}: חסרים {template.soldiers_needed - regular_soldiers} לוחמים")
 
             assignments_data.append({
                 'id': assignment.id,
@@ -2636,7 +2669,8 @@ def get_live_schedule(pluga_id, current_user):
             'date_display': requested_date.strftime('%d/%m/%Y'),
             'day_index': day_diff,
             'assignments': assignments_data,
-            'shavzak_id': master_shavzak.id
+            'shavzak_id': master_shavzak.id,
+            'warnings': warnings
         }), 200
 
     except Exception as e:

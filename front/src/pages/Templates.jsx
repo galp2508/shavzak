@@ -35,6 +35,8 @@ const Templates = () => {
       await api.delete(`/assignment-templates/${id}`);
       toast.success('התבנית נמחקה בהצלחה');
       loadTemplates();
+      // שדר אירוע שתבנית השתנתה
+      window.dispatchEvent(new Event('templateChanged'));
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה במחיקת תבנית');
     }
@@ -45,6 +47,8 @@ const Templates = () => {
       await api.post(`/assignment-templates/${id}/duplicate`);
       toast.success('התבנית שוכפלה בהצלחה');
       loadTemplates();
+      // שדר אירוע שתבנית השתנתה
+      window.dispatchEvent(new Event('templateChanged'));
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה בשכפול תבנית');
     }
@@ -211,6 +215,8 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
         await api.post(`/plugot/${plugaId}/assignment-templates`, dataToSend);
         toast.success('התבנית נוספה בהצלחה');
       }
+      // שדר אירוע שתבנית השתנתה
+      window.dispatchEvent(new Event('templateChanged'));
       onSave();
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה בשמירה');

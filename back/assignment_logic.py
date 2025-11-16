@@ -413,7 +413,7 @@ class AssignmentLogic:
                     ),
                     reverse=True
                 )
-                self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
+                # הוסר: אזהרת "מנוחה מופחתת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
                 return {'soldiers': [available[0]['id']]}
 
         # 🔧 המערכת תמיד מצליחה! אם אין מי שעומד בדרישות מנוחה - נשתמש במי שיש
@@ -423,7 +423,7 @@ class AssignmentLogic:
         ))
 
         if all_people_sorted:
-            self.warnings.append(f"⚠️ {assign_data['name']}: שובץ ללא מנוחה מספקת")
+            # הוסר: אזהרת "שובץ ללא מנוחה מספקת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
             return {'soldiers': [all_people_sorted[0]['id']]}
 
         # ממש אין אף אחד - נחזיר ריק (אבל לא Exception!)
@@ -845,7 +845,7 @@ class AssignmentLogic:
                     ),
                     reverse=True
                 )
-                self.warnings.append(f"⚠️ {assign_data['name']}: מנוחה מופחתת")
+                # הוסר: אזהרת "מנוחה מופחתת" - לא רלוונטי כי המערכת מטפלת בזה אוטומטית
                 return {'soldiers': [s['id'] for s in available[:num_needed]]}
 
         # 🔧 המערכת תמיד מצליחה! אם אין מספיק - נשתמש במה שיש
@@ -856,7 +856,9 @@ class AssignmentLogic:
 
         if all_people_sorted:
             num_to_assign = min(num_needed, len(all_people_sorted))
-            if num_to_assign < num_needed:
+            # אזהרה רק אם חסרים יותר מ-30% מהחיילים הנדרשים (או לפחות 2 חיילים)
+            shortage = num_needed - num_to_assign
+            if shortage >= 2 or (shortage > 0 and shortage / num_needed > 0.3):
                 self.warnings.append(f"⚠️ {assign_data['name']}: שובצו רק {num_to_assign} מתוך {num_needed} חיילים")
             return {'soldiers': [s['id'] for s in all_people_sorted[:num_to_assign]]}
 

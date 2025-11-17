@@ -4506,6 +4506,7 @@ def ml_regenerate_schedule(current_user):
     Body:
     {
         "shavzak_id": 123,
+        "assignment_id": 456,  // אופציונלי - במידה ו-shavzak_id לא סופק
         "reason": "פידבק שלילי - יצירת שיבוץ משופר"
     }
     """
@@ -4514,7 +4515,20 @@ def ml_regenerate_schedule(current_user):
     try:
         data = request.get_json()
         shavzak_id = data.get('shavzak_id')
+        assignment_id = data.get('assignment_id')
         reason = data.get('reason', 'יצירת איטרציה חדשה')
+
+        # אם shavzak_id לא סופק, נסה למצוא אותו דרך המשימה
+        if shavzak_id is None and assignment_id is not None:
+            assignment = session.get(Assignment, assignment_id)
+            if assignment:
+                shavzak_id = assignment.shavzak_id
+                print(f"ℹ️ regenerate: shavzak_id לא סופק, נמצא דרך assignment: {shavzak_id}")
+
+        # וודא ש-shavzak_id קיים
+        if shavzak_id is None:
+            print(f"❌ regenerate: חסר shavzak_id: {data}")
+            return jsonify({'error': 'חסר shavzak_id או assignment_id', 'received_data': data}), 400
 
         # טען שיבוץ
         from models import Shavzak, ScheduleIteration, Assignment, AssignmentSoldier

@@ -560,20 +560,20 @@ class AssignmentLogic:
                 else:
                     soldiers_from_patrols.append(participant)
 
-        # מצא מפקד בכיר - רק מכ או ממ (לא סמל!)
-        # עדיפות: 1. מכ (מפקד מחלקה), 2. ממ
+        # מצא מפקד בכיר - ממ ואם אין אז סמל
+        # עדיפות: 1. ממ (מפקד מחלקה), 2. סמל
         senior_commander = None
 
-        # קודם כולם - מכ (מפקד מחלקה)
+        # קודם כולם - ממ (מפקד מחלקה)
         for cmd in commanders_from_patrols:
-            if cmd['role'] == 'מכ':
+            if cmd['role'] == 'ממ':
                 senior_commander = cmd
                 break
 
-        # אם אין מכ, קח ממ
+        # אם אין ממ, קח סמל
         if not senior_commander:
             for cmd in commanders_from_patrols:
-                if cmd['role'] == 'ממ':
+                if cmd['role'] == 'סמל':
                     senior_commander = cmd
                     break
 
@@ -1170,21 +1170,21 @@ class AssignmentLogic:
     
     def assign_duty_officer(self, assign_data: Dict, all_commanders: List[Dict],
                            schedules: Dict) -> Dict:
-        """קצין תורן - מפקד בכיר (רק מכ או ממ), עם מקסימום שעות מנוחה"""
-        # סינון: רק מכ או ממ (לא סמל!)
+        """קצין תורן - מפקד בכיר (ממ ואם אין אז סמל), עם מקסימום שעות מנוחה"""
+        # סינון: ממ או סמל
         senior = [
             c for c in all_commanders
-            if c['role'] in ['ממ', 'מכ'] and
+            if c['role'] in ['ממ', 'סמל'] and
                self.can_assign_at(schedules.get(c['id'], []), assign_data['day'],
                                   assign_data['start_hour'], assign_data['length_in_hours'],
                                   self.min_rest_hours)
         ]
 
         if senior:
-            # מיון: עדיפות למכים, אחר כך לפי מנוחה
+            # מיון: עדיפות לממ, אחר כך לפי מנוחה
             def priority_key(commander):
-                # מכ מקבל בונוס גבוה
-                role_priority = 10000 if commander['role'] == 'מכ' else 0
+                # ממ מקבל בונוס גבוה
+                role_priority = 10000 if commander['role'] == 'ממ' else 0
                 rest_hours = self.calculate_rest_hours(
                     schedules.get(commander['id'], []),
                     assign_data['day'],

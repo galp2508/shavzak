@@ -24,6 +24,7 @@ const SmartSchedule = () => {
   const [showConstraints, setShowConstraints] = useState(false);
   const [showManualAssignModal, setShowManualAssignModal] = useState(false);
   const [rejectedAssignment, setRejectedAssignment] = useState(null);
+  const [editingAssignment, setEditingAssignment] = useState(null);
 
   useEffect(() => {
     const tomorrow = new Date();
@@ -138,21 +139,25 @@ const SmartSchedule = () => {
       // אם הפידבק שלילי - הצע לשבץ ידנית
       if (rating === 'rejected') {
         // מצא את המשימה ששלילית
-        const assignment = scheduleData?.schedules
-          ?.flatMap(s => s.assignments || [])
-          .find(a => a.id === assignmentId);
+        const assignment = scheduleData?.assignments?.find(a => a.id === assignmentId) ||
+          scheduleData?.schedules?.flatMap(s => s.assignments || [])
+            .find(a => a.id === assignmentId);
 
         if (assignment) {
           setRejectedAssignment(assignment);
-          toast.info('💡 רוצה לשבץ ידנית? זה יעזור למערכת ללמוד!', {
-            autoClose: 5000,
-            onClick: () => setShowManualAssignModal(true)
+          // פתח אוטומטית את המודל לעריכה
+          setTimeout(() => {
+            setShowManualAssignModal(true);
+          }, 500);
+          toast.info('💡 פתחתי עבורך את חלון העריכה - שבץ ידנית כדי שהמערכת תלמד!', {
+            autoClose: 3000
           });
         }
       }
 
+      // רענן את הנתונים מיידית
+      await loadSchedule(currentDate);
       loadMLStats();
-      loadSchedule(currentDate);
     } catch (error) {
       toast.error('שגיאה בשמירת פידבק');
       console.error('Feedback error:', error);
@@ -163,18 +168,25 @@ const SmartSchedule = () => {
     try {
       // המשימה כבר נשמרה ע"י AssignmentModal
       // עכשיו נשלח פידבק ל-ML שהמשתמש ערך אותה ידנית
-      await api.post('/ml/feedback', {
-        assignment_id: rejectedAssignment.id,
-        shavzak_id: currentShavzakId,
-        rating: 'modified',
-        changes: {
-          feedback_text: 'המשתמש דחה את השיבוץ ואז ערך אותו ידנית - לימוד מהעריכה'
-        }
-      });
+      const assignmentToFeedback = rejectedAssignment || editingAssignment;
 
-      toast.success('✅ שיבוץ ידני נשמר וישמש כדוגמה למערכת!');
+      if (assignmentToFeedback) {
+        await api.post('/ml/feedback', {
+          assignment_id: assignmentToFeedback.id,
+          shavzak_id: currentShavzakId,
+          rating: 'modified',
+          changes: {
+            feedback_text: rejectedAssignment
+              ? 'המשתמש דחה את השיבוץ ואז ערך אותו ידנית - לימוד מהעריכה'
+              : 'המשתמש ערך את השיבוץ ידנית - לימוד מהעריכה'
+          }
+        });
+      }
+
+      toast.success('✅ שיבוץ נשמר בהצלחה!');
       setShowManualAssignModal(false);
       setRejectedAssignment(null);
+      setEditingAssignment(null);
       loadSchedule(currentDate);
       loadMLStats();
     } catch (error) {
@@ -593,7 +605,7 @@ const SmartSchedule = () => {
                                 >
                                   {/* Assignment Content */}
                                   <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative">
-                                    {/* Feedback Buttons */}
+                                    {/* Feedback and Edit Buttons */}
                                     {(user.role === 'מפ' || user.role === 'ממ') && (
                                       <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
                                         <button
@@ -615,6 +627,17 @@ const SmartSchedule = () => {
                                           title="שיבוץ לא טוב"
                                         >
                                           <ThumbsDown size={14} />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingAssignment(assignment);
+                                            setShowManualAssignModal(true);
+                                          }}
+                                          className="bg-blue-500 hover:bg-blue-600 rounded p-1 text-white"
+                                          title="ערוך משימה"
+                                        >
+                                          <Edit size={14} />
                                         </button>
                                       </div>
                                     )}
@@ -694,17 +717,18 @@ const SmartSchedule = () => {
         />
       )}
 
-      {/* Manual Assignment Modal - after rejected feedback */}
-      {showManualAssignModal && rejectedAssignment && (
+      {/* Manual Assignment Modal - for editing or after rejected feedback */}
+      {showManualAssignModal && (rejectedAssignment || editingAssignment) && (
         <AssignmentModal
-          assignment={rejectedAssignment}
+          assignment={rejectedAssignment || editingAssignment}
           date={currentDate}
-          dayIndex={rejectedAssignment.day}
+          dayIndex={(rejectedAssignment || editingAssignment)?.day}
           shavzakId={currentShavzakId}
           plugaId={user.pluga_id}
           onClose={() => {
             setShowManualAssignModal(false);
             setRejectedAssignment(null);
+            setEditingAssignment(null);
           }}
           onSave={handleManualAssignmentSave}
         />

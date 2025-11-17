@@ -1384,6 +1384,58 @@ const SoldierEditModal = ({ soldier, mahlakaId, onClose, onSave }) => {
 
 // Soldier Details Modal Component
 const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [showAddCertModal, setShowAddCertModal] = useState(false);
+  // הסמכות יכולות להיות מערך של אובייקטים {id, name} או מחרוזות (לתאימות לאחור)
+  const [certifications, setCertifications] = useState(
+    (soldier.certifications || []).map(cert =>
+      typeof cert === 'string' ? { id: null, name: cert } : cert
+    )
+  );
+
+  // טען רשימת תפקידים/הסמכות זמינים
+  useEffect(() => {
+    const loadAvailableRoles = async () => {
+      try {
+        const response = await api.get('/available-roles-certifications');
+        setAvailableRoles(response.data.roles_certifications || []);
+      } catch (error) {
+        console.error('Error loading available roles:', error);
+        setAvailableRoles(['מפקד', 'נהג', 'חמל', 'קצין תורן']);
+      }
+    };
+    loadAvailableRoles();
+  }, []);
+
+  // הוסף הסמכה
+  const handleAddCertification = async (certName) => {
+    try {
+      const response = await api.post(`/soldiers/${soldier.id}/certifications`, {
+        certification_name: certName
+      });
+      // הוסף את ההסמכה החדשה עם ה-ID שהתקבל מהשרת
+      const newCert = response.data.certification;
+      setCertifications([...certifications, { id: newCert.id, name: newCert.name }]);
+      toast.success(`הסמכת "${certName}" נוספה בהצלחה`);
+      setShowAddCertModal(false);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה בהוספת הסמכה');
+    }
+  };
+
+  // מחק הסמכה
+  const handleDeleteCertification = async (cert) => {
+    if (!window.confirm(`האם למחוק את הסמכת "${cert.name}"?`)) return;
+
+    try {
+      await api.delete(`/certifications/${cert.id}`);
+      setCertifications(certifications.filter(c => c.id !== cert.id));
+      toast.success('ההסמכה נמחקה בהצלחה');
+    } catch (error) {
+      toast.error('שגיאה במחיקת הסמכה');
+    }
+  };
+
   // חישוב סבב יציאה נוכחי (כל 21 יום)
   const calculateCurrentRound = () => {
     if (!soldier.home_round_date) return null;
@@ -1547,21 +1599,42 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
           )}
 
           {/* Certifications */}
-          {soldier.certifications && soldier.certifications.length > 0 && (
-            <div className="pt-4 border-t">
-              <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+          <div className="pt-4 border-t">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2">
                 <Shield size={20} className="text-military-600" />
-                הסמכות
+                הסמכות ({certifications.length})
               </h3>
+              <button
+                onClick={() => setShowAddCertModal(true)}
+                className="btn-primary text-sm px-3 py-1 flex items-center gap-1"
+              >
+                <Plus size={16} />
+                הוסף הסמכה
+              </button>
+            </div>
+            {certifications.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {soldier.certifications.map((cert, idx) => (
-                  <span key={idx} className="badge badge-blue">
-                    {cert}
+                {certifications.map((cert) => (
+                  <span
+                    key={cert.id}
+                    className="badge badge-blue flex items-center gap-2 group"
+                  >
+                    {cert.name}
+                    <button
+                      onClick={() => handleDeleteCertification(cert)}
+                      className="opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity"
+                      title="מחק הסמכה"
+                    >
+                      <X size={14} />
+                    </button>
                   </span>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="text-gray-500 text-sm">אין הסמכות</p>
+            )}
+          </div>
 
           {/* Status */}
           {soldier.has_hatashab && (
@@ -1626,6 +1699,56 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
           </button>
         </div>
       </div>
+
+      {/* Add Certification Modal */}
+      {showAddCertModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70]">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">הוסף הסמכה</h3>
+              <button
+                onClick={() => setShowAddCertModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 mb-4">
+                בחר הסמכה להוספה עבור {soldier.name}
+              </p>
+
+              {availableRoles
+                .filter(role => !certifications.some(c => c.name === role))
+                .map(role => (
+                  <button
+                    key={role}
+                    onClick={() => handleAddCertification(role)}
+                    className="w-full text-right p-3 border-2 border-gray-200 rounded-lg hover:border-military-600 hover:bg-military-50 transition-colors"
+                  >
+                    {role}
+                  </button>
+                ))}
+
+              {availableRoles.filter(role => !certifications.some(c => c.name === role)).length === 0 && (
+                <p className="text-center text-gray-500 py-4">
+                  כל ההסמכות כבר נוספו
+                </p>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowAddCertModal(false)}
+                className="btn-secondary"
+              >
+                ביטול
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

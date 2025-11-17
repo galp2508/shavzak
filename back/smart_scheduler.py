@@ -24,7 +24,8 @@ class SmartScheduler:
     משלב אילוצים קשיחים עם למידה מדוגמאות
     """
 
-    def __init__(self, min_rest_hours: int = 8):
+    def __init__(self, min_rest_hours: int = 16):
+        # לבנות: 8 שעות עבודה + 16 שעות מנוחה
         self.min_rest_hours = min_rest_hours
 
         # נתוני למידה
@@ -57,32 +58,42 @@ class SmartScheduler:
         בדיקת זמינות חייל - אילוץ קשיח
 
         בודק:
-        1. לא משובץ בו זמנית
-        2. מנוחה מינימלית (8 שעות)
+        1. לא משובץ בו זמנית (אי-כפילות)
+        2. מנוחה מינימלית (16 שעות ללבנות)
         3. אי-זמינות (חופשות, ריתוק, התש"ב)
         """
         soldier_id = soldier['id']
         end_hour = start_hour + length
 
-        # בדיקת חפיפה
+        # בדיקת חפיפה - אסור שחייל יהיה משובץ פעמיים באותו זמן
         if soldier_id in schedules:
             for assign_day, assign_start, assign_end, _, _ in schedules[soldier_id]:
+                # בדוק חפיפה בזמן
                 if assign_day == day:
                     if not (end_hour <= assign_start or start_hour >= assign_end):
-                        return False  # חפיפה!
+                        print(f"⚠️  חייל {soldier_id} כבר משובץ ביום {day} בשעה {assign_start}-{assign_end}")
+                        return False  # חפיפה! חייל משובץ פעמיים
 
-        # בדיקת מנוחה מינימלית
+        # בדיקת מנוחה מינימלית (16 שעות ללבנות - 2 לבנות של 8 שעות)
+        # לבנה = 8 שעות עבודה + 16 שעות מנוחה
         if soldier_id in schedules and schedules[soldier_id]:
             last_assign = max(schedules[soldier_id], key=lambda x: (x[0], x[2]))
             last_day, _, last_end, _, _ = last_assign
 
+            # חשב שעות מאז המשימה האחרונה
             if last_day == day:
-                if start_hour < last_end + self.min_rest_hours:
-                    return False  # מנוחה לא מספקת
-
-            if last_day == day - 1:
-                hours_since = (24 - last_end) + start_hour
+                # אותו יום
+                hours_since = start_hour - last_end
                 if hours_since < self.min_rest_hours:
+                    return False  # מנוחה לא מספקת
+            else:
+                # ימים שונים - חשב מנוחה כוללת
+                hours_until_midnight = 24 - last_end
+                hours_between_days = (day - last_day - 1) * 24
+                hours_from_midnight = start_hour
+                total_rest = hours_until_midnight + hours_between_days + hours_from_midnight
+
+                if total_rest < self.min_rest_hours:
                     return False  # מנוחה לא מספקת בין ימים
 
         # בדיקת הסמכות (אם נדרש)
@@ -762,13 +773,15 @@ class SmartScheduler:
             }
 
         # התבנית דורשת הסמכה - חובה!
+        # חשוב: רק חיילים רגילים (לא מפקדים) יכולים לשמש בחמ"ל
         certified = [s for s in all_soldiers
-                    if self.has_certification(s, cert_name) and
+                    if not self.is_commander(s) and
+                       self.has_certification(s, cert_name) and
                        self.check_availability(s, task['day'], task['start_hour'],
                                              task['length_in_hours'], schedules)]
 
         if not certified:
-            print(f"❌ {task['name']} יום {task['day']}: אין חייל מוסמך '{cert_name}' (אילוץ קשיח)")
+            print(f"❌ {task['name']} יום {task['day']}: אין חייל (לא מפקד!) מוסמך '{cert_name}' (אילוץ קשיח)")
             return None
 
         scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))

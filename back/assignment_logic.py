@@ -919,10 +919,12 @@ class AssignmentLogic:
         # קבל את שם ההסמכה הנדרשת מהתבנית (או ברירת מחדל 'חמל')
         required_cert = assign_data.get('requires_certification', 'חמל')
 
+        # חשוב: רק חיילים רגילים (לא מפקדים) יכולים לשמש בחמ"ל
         certified = [
             p for p in all_people
-            if required_cert in p.get('certifications', [])
-            and self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
+            if p.get('role') not in ['ממ', 'מכ', 'סמל', 'מפ'] and
+               required_cert in p.get('certifications', []) and
+               self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
                                   assign_data['start_hour'], assign_data['length_in_hours'],
                                   self.min_rest_hours)
         ]
@@ -945,10 +947,12 @@ class AssignmentLogic:
 
         if self.emergency_mode:
             reduced_rest = self.min_rest_hours // 2
+            # גם במצב חירום - רק חיילים רגילים (לא מפקדים) בחמ"ל
             certified = [
                 p for p in all_people
-                if required_cert in p.get('certifications', [])
-                and self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
+                if p.get('role') not in ['ממ', 'מכ', 'סמל', 'מפ'] and
+                   required_cert in p.get('certifications', []) and
+                   self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
                                       assign_data['start_hour'], assign_data['length_in_hours'],
                                       reduced_rest)
             ]

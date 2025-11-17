@@ -178,6 +178,36 @@ const SmartSchedule = () => {
     return mahlaka?.color || '#6B7280';
   };
 
+  // פונקציה לקביעת צבע משימה - פלוגתי או מחלקתי
+  const getAssignmentColor = (assignment) => {
+    const soldiers = assignment.soldiers || [];
+
+    if (soldiers.length === 0) {
+      return '#9CA3AF'; // אפור למשימות ללא חיילים
+    }
+
+    // מצא את כל המחלקות השונות
+    const mahalkotSet = new Set(
+      soldiers
+        .map(s => s.mahlaka_id)
+        .filter(id => id != null)
+    );
+
+    // אם יש 2 מחלקות או יותר - פלוגתי (צהוב)
+    if (mahalkotSet.size >= 2) {
+      return '#FBBF24'; // צהוב זהב
+    }
+
+    // אם יש מחלקה אחת - צבע המחלקה
+    if (mahalkotSet.size === 1) {
+      const mahlakaId = Array.from(mahalkotSet)[0];
+      return getMahlakaColor(mahlakaId);
+    }
+
+    // ברירת מחדל
+    return '#9CA3AF';
+  };
+
   const getDayName = (date) => {
     const days = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
     return days[date.getDay()];
@@ -481,9 +511,8 @@ const SmartSchedule = () => {
                               const startHour = assignment.start_hour || 0;
                               const lengthInHours = assignment.length_in_hours || 1;
                               const endHour = startHour + lengthInHours;
-                              const mahlakaColor = assignment.assigned_mahlaka_id
-                                ? getMahlakaColor(assignment.assigned_mahlaka_id)
-                                : '#9CA3AF';
+                              // שימוש בלוגיקה החדשה - פלוגתי (צהוב) או מחלקתי (צבע מחלקה)
+                              const assignmentColor = getAssignmentColor(assignment);
 
                               const topPosition = (startHour / 24) * 100;
                               const height = (lengthInHours / 24) * 100;
@@ -497,8 +526,8 @@ const SmartSchedule = () => {
                                     height: `calc(${height}% - 4px)`,
                                     left: '6px',
                                     right: '6px',
-                                    background: `linear-gradient(135deg, ${mahlakaColor} 0%, ${mahlakaColor}dd 100%)`,
-                                    borderColor: mahlakaColor,
+                                    background: `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
+                                    borderColor: assignmentColor,
                                   }}
                                 >
                                   {/* Assignment Content */}

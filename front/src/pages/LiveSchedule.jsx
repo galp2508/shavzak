@@ -108,9 +108,14 @@ const LiveSchedule = () => {
     const soldiers = assignment.soldiers || [];
     if (soldiers.length === 0) return '#9CA3AF'; // אפור אם אין חיילים
 
-    // בדוק כמה מחלקות שונות יש במשימה
+    // סנן נהגים - רק חיילים רגילים נספרים לבדיקת מחלקות
+    const nonDriverSoldiers = soldiers.filter(s =>
+      s.role !== 'נהג' && s.role !== 'driver'
+    );
+
+    // בדוק כמה מחלקות שונות יש במשימה (ללא נהגים)
     const mahalkotSet = new Set(
-      soldiers.map(s => s.mahlaka_id).filter(id => id != null)
+      nonDriverSoldiers.map(s => s.mahlaka_id).filter(id => id != null)
     );
 
     // אם יש 2+ מחלקות = פלוגתי (צהוב)

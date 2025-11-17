@@ -186,9 +186,14 @@ const SmartSchedule = () => {
       return '#9CA3AF'; // אפור למשימות ללא חיילים
     }
 
-    // מצא את כל המחלקות השונות
+    // סנן נהגים - רק חיילים רגילים נספרים לבדיקת מחלקות
+    const nonDriverSoldiers = soldiers.filter(s =>
+      s.role !== 'נהג' && s.role !== 'driver'
+    );
+
+    // מצא את כל המחלקות השונות (ללא נהגים)
     const mahalkotSet = new Set(
-      soldiers
+      nonDriverSoldiers
         .map(s => s.mahlaka_id)
         .filter(id => id != null)
     );

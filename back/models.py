@@ -338,6 +338,31 @@ class FeedbackHistory(Base):
     user = relationship("User")
 
 
+class ConstraintFeedback(Base):
+    """פידבק על אילוצים שלא התקיימו"""
+    __tablename__ = 'constraint_feedbacks'
+
+    id = Column(Integer, primary_key=True)
+    constraint_id = Column(Integer, ForeignKey('scheduling_constraints.id'), nullable=False)
+    violated_assignment_id = Column(Integer, ForeignKey('assignments.id'), nullable=False)
+    good_example_assignment_id = Column(Integer, ForeignKey('assignments.id'), nullable=True)
+
+    # מי דיווח
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+
+    # הערות
+    notes = Column(Text, nullable=True)
+
+    # מתי
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # קישורים
+    constraint = relationship("SchedulingConstraint")
+    violated_assignment = relationship("Assignment", foreign_keys=[violated_assignment_id])
+    good_example_assignment = relationship("Assignment", foreign_keys=[good_example_assignment_id])
+    user = relationship("User")
+
+
 def init_db(db_path='shavzak.db'):
     """אתחול מסד הנתונים"""
     engine = create_engine(f'sqlite:///{db_path}', echo=False)

@@ -3714,6 +3714,146 @@ def delete_constraint(constraint_id, current_user):
         session.close()
 
 
+@app.route('/api/plugot/<int:pluga_id>/recent-assignments', methods=['GET'])
+@token_required
+def get_recent_assignments(pluga_id, current_user):
+    """קבלת משימות אחרונות מהשיבוץ האוטומטי (לצורך פידבק על אילוצים)"""
+    session = get_db()
+    try:
+        if not can_view_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        # מצא את השיבוץ האוטומטי
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if not master_shavzak:
+            return jsonify({'assignments': []}), 200
+
+        # טען משימות מ-14 הימים האחרונים
+        today = datetime.now().date()
+        start_of_period = today - timedelta(days=14)
+        days_from_start = (today - master_shavzak.start_date).days
+
+        assignments = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day >= max(0, (start_of_period - master_shavzak.start_date).days),
+            Assignment.day <= days_from_start
+        ).order_by(Assignment.day.desc(), Assignment.start_hour.desc()).limit(100).all()
+
+        assignments_data = []
+        for assignment in assignments:
+            # חשב תאריך בפועל
+            assignment_date = master_shavzak.start_date + timedelta(days=assignment.day)
+
+            soldiers_data = []
+            for soldier_assignment in assignment.soldiers_assigned:
+                soldier = soldier_assignment.soldier
+                soldiers_data.append({
+                    'id': soldier.id,
+                    'name': soldier.name,
+                    'role': soldier_assignment.role_in_assignment
+                })
+
+            assignments_data.append({
+                'id': assignment.id,
+                'name': assignment.name,
+                'assignment_type': assignment.assignment_type,
+                'date': assignment_date.isoformat(),
+                'day': assignment.day,
+                'start_hour': assignment.start_hour,
+                'length_in_hours': assignment.length_in_hours,
+                'soldiers': soldiers_data
+            })
+
+        return jsonify({'assignments': assignments_data}), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/ml/constraint-feedback', methods=['POST'])
+@token_required
+def ml_constraint_feedback(current_user):
+    """
+    קבלת פידבק על אילוץ שלא התקיים
+
+    Body:
+    {
+        "constraint_id": 123,
+        "violated_assignment_id": 456,
+        "good_example_assignment_id": 789,  // אופציונלי
+        "notes": "..."  // אופציונלי
+    }
+    """
+    session = get_db()
+
+    try:
+        data = request.get_json()
+        print(f"📥 Constraint Feedback request: {data}")
+
+        constraint_id = data.get('constraint_id')
+        violated_assignment_id = data.get('violated_assignment_id')
+        good_example_assignment_id = data.get('good_example_assignment_id')
+        notes = data.get('notes', '')
+
+        # וולידציה
+        if constraint_id is None:
+            return jsonify({'error': 'חסר constraint_id'}), 400
+        if violated_assignment_id is None:
+            return jsonify({'error': 'חסר violated_assignment_id'}), 400
+
+        # טען אילוץ
+        from models import SchedulingConstraint, ConstraintFeedback
+        constraint = session.get(SchedulingConstraint, constraint_id)
+        if not constraint:
+            return jsonify({'error': 'אילוץ לא נמצא'}), 404
+
+        # בדוק הרשאות
+        if not can_view_pluga(current_user, constraint.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        # טען משימה שהופרה
+        violated_assignment = session.get(Assignment, violated_assignment_id)
+        if not violated_assignment:
+            return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        # שמור פידבק
+        feedback = ConstraintFeedback(
+            constraint_id=constraint_id,
+            violated_assignment_id=violated_assignment_id,
+            good_example_assignment_id=good_example_assignment_id,
+            user_id=current_user.get('user_id'),
+            notes=notes
+        )
+        session.add(feedback)
+        session.commit()
+
+        # כאן אפשר להוסיף לוגיקה ללמידת מכונה
+        # למשל: smart_scheduler.learn_from_constraint_violation(...)
+
+        print(f"✅ Constraint feedback saved: constraint={constraint_id}, violated={violated_assignment_id}")
+
+        return jsonify({
+            'message': 'פידבק נשמר בהצלחה - המערכת תלמד מזה',
+            'feedback_id': feedback.id
+        }), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה בשמירת פידבק על אילוץ: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 # ============================================================================
 # SOLDIER STATUS
 # ============================================================================

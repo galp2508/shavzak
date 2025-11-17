@@ -128,7 +128,7 @@ const Login = () => {
 
         {/* Footer */}
         <div className="text-center mt-8 text-military-200 text-sm">
-          <p>נבנה בגאווה לצה"ל 🇮🇱</p>
+          <p>נבנה על ידי גל פחימה מפלוגה ב האגדית</p>
         </div>
       </div>
     </div>

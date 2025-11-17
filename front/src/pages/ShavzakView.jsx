@@ -176,9 +176,9 @@ const ShavzakView = () => {
                       toast.warning('השיבוץ בוצע אך לא נוצרו משימות. ייתכן שחסרות תבניות משימות או חיילים');
                     }
 
-                    if (response.data.warnings && response.data.warnings.length > 0) {
-                      toast.warning(`${response.data.warnings.length} אזהרות בשיבוץ`);
-                    }
+                    // if (response.data.warnings && response.data.warnings.length > 0) {
+                    //   toast.warning(`${response.data.warnings.length} אזהרות בשיבוץ`);
+                    // }
 
                     // המתן רגע לפני טעינה מחדש כדי לתת ל-DB להתעדכן
                     await new Promise(resolve => setTimeout(resolve, 500));

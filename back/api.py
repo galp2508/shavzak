@@ -3981,7 +3981,7 @@ def ml_smart_schedule(current_user):
         "days_count": 7
     }
     """
-    session = get_session()
+    session = get_session(engine)
 
     try:
         data = request.get_json()
@@ -4181,7 +4181,7 @@ def ml_feedback(current_user):
         "changes": {...}  // אופציונלי
     }
     """
-    session = get_session()
+    session = get_session(engine)
 
     try:
         data = request.get_json()

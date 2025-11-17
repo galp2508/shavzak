@@ -257,7 +257,7 @@ const LiveSchedule = () => {
         /* Assignments List */
         <>
           {/* Warnings Section */}
-          {scheduleData?.warnings && scheduleData.warnings.length > 0 && (
+          {/* {scheduleData?.warnings && scheduleData.warnings.length > 0 && (
             <div className="card bg-yellow-50 border-r-4 border-yellow-500">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-1" />
@@ -315,7 +315,7 @@ const LiveSchedule = () => {
                 </div>
               </div>
             </div>
-          )}
+          )} */}
 
           <div className="card">
             <div className="flex items-center justify-between mb-6">

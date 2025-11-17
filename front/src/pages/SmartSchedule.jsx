@@ -191,9 +191,12 @@ const SmartSchedule = () => {
       s.role !== 'נהג' && s.role !== 'driver'
     );
 
-    // מצא את כל המחלקות השונות (ללא נהגים)
+    // אם אין חיילים רגילים, כלול גם נהגים בחישוב (כדי שנהגים יקבלו צבע)
+    const soldiersForColor = nonDriverSoldiers.length > 0 ? nonDriverSoldiers : soldiers;
+
+    // מצא את כל המחלקות השונות
     const mahalkotSet = new Set(
-      nonDriverSoldiers
+      soldiersForColor
         .map(s => s.mahlaka_id)
         .filter(id => id != null)
     );

@@ -311,6 +311,115 @@ class SmartScheduler:
         # למד מהפידבק!
         self._learn_from_feedback(feedback_entry)
 
+    def add_feedback_with_learning_loop(self, shavzak_id: int, assignment: Dict,
+                                       rating: str, changes: Optional[Dict] = None,
+                                       iteration_id: Optional[int] = None) -> Dict:
+        """
+        הוסף פידבק עם לולאת למידה אוטומטית
+
+        אם הפידבק שלילי - המערכת תיצור שיבוץ חדש אוטומטית
+        אם חיובי - המערכת תלמד מהשיבוץ הטוב
+
+        Returns:
+            dict: {
+                'needs_regeneration': bool,  # האם צריך ליצור שיבוץ חדש
+                'feedback_saved': bool,      # האם הפידבק נשמר
+                'message': str,              # הודעה למשתמש
+                'iteration_status': str      # מצב האיטרציה
+            }
+        """
+        # שמור את הפידבק הרגיל
+        self.add_feedback(assignment, rating, changes)
+
+        result = {
+            'needs_regeneration': False,
+            'feedback_saved': True,
+            'iteration_status': 'pending'
+        }
+
+        if rating == 'approved':
+            # פידבק חיובי - המודל למד!
+            result['message'] = '✅ תודה! המודל למד מהשיבוץ הטוב הזה'
+            result['iteration_status'] = 'approved'
+            result['needs_regeneration'] = False
+
+        elif rating == 'rejected':
+            # פידבק שלילי - המודל צריך לנסות שוב
+            result['message'] = '🔄 השיבוץ נדחה. המערכת תיצור שיבוץ חדש אוטומטית'
+            result['iteration_status'] = 'rejected'
+            result['needs_regeneration'] = True
+
+            # למד מהטעויות - הורד את הציון של השיבוץ הזה
+            self._penalize_rejected_assignment(assignment, changes)
+
+        elif rating == 'modified':
+            # השתמש שינה משהו - למד מהשינויים
+            result['message'] = '📝 תודה על השינויים! המודל ילמד מהעדכון'
+            result['iteration_status'] = 'modified'
+            result['needs_regeneration'] = False
+
+            # למד מהשינויים שהמשתמש עשה
+            if changes:
+                self._learn_from_modifications(assignment, changes)
+
+        return result
+
+    def _penalize_rejected_assignment(self, assignment: Dict, changes: Optional[Dict] = None):
+        """
+        הורד ציון לשיבוץ שנדחה
+        למד מה לא עבד כדי להימנע מזה בעתיד
+        """
+        task_type = assignment['type']
+        soldiers = assignment.get('soldiers', [])
+
+        # הורד את הציון של כל החיילים בשיבוץ הזה למשימה הזו
+        for soldier_id in soldiers:
+            key = f"{soldier_id}_{task_type}"
+            if key not in self.learned_patterns:
+                self.learned_patterns[key] = {'count': 0, 'success_rate': 0.5}
+
+            # הורד את הציון משמעותית
+            self.learned_patterns[key]['success_rate'] = max(0.0,
+                self.learned_patterns[key]['success_rate'] - 0.3)
+            self.learned_patterns[key]['count'] += 1
+
+        # אם יש שינויים ספציפיים שהמשתמש רצה, למד מהם
+        if changes:
+            # למשל: אם המשתמש רצה חיילים שונים
+            if 'preferred_soldiers' in changes:
+                for soldier_id in changes['preferred_soldiers']:
+                    key = f"{soldier_id}_{task_type}"
+                    if key not in self.learned_patterns:
+                        self.learned_patterns[key] = {'count': 0, 'success_rate': 0.5}
+                    # העלה את הציון של החיילים שהמשתמש רצה
+                    self.learned_patterns[key]['success_rate'] = min(1.0,
+                        self.learned_patterns[key]['success_rate'] + 0.2)
+
+    def _learn_from_modifications(self, original_assignment: Dict, changes: Dict):
+        """
+        למד מהשינויים שהמשתמש עשה בשיבוץ
+        זה מלמד את המודל מה המשתמש באמת רוצה
+        """
+        task_type = original_assignment['type']
+
+        # אם המשתמש החליף חיילים
+        if 'new_soldiers' in changes and 'old_soldiers' in changes:
+            # הורד ציון לחיילים הישנים
+            for soldier_id in changes['old_soldiers']:
+                key = f"{soldier_id}_{task_type}"
+                if key not in self.learned_patterns:
+                    self.learned_patterns[key] = {'count': 0, 'success_rate': 0.5}
+                self.learned_patterns[key]['success_rate'] = max(0.0,
+                    self.learned_patterns[key]['success_rate'] - 0.15)
+
+            # העלה ציון לחיילים החדשים
+            for soldier_id in changes['new_soldiers']:
+                key = f"{soldier_id}_{task_type}"
+                if key not in self.learned_patterns:
+                    self.learned_patterns[key] = {'count': 0, 'success_rate': 0.5}
+                self.learned_patterns[key]['success_rate'] = min(1.0,
+                    self.learned_patterns[key]['success_rate'] + 0.15)
+
     def _learn_from_feedback(self, feedback: Dict):
         """למד מפידבק בודד"""
         task_type = feedback['task_type']

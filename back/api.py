@@ -4263,7 +4263,7 @@ def ml_feedback(current_user):
                 iteration_number=iteration_number,
                 is_active=True,
                 status='pending',
-                created_by=current_user.id
+                created_by=current_user.get('id')
             )
             session.add(iteration)
             session.commit()
@@ -4276,7 +4276,7 @@ def ml_feedback(current_user):
             rating=rating,
             feedback_text=changes.get('feedback_text') if changes else None,
             changes=json.dumps(changes) if changes else None,
-            user_id=current_user.id,
+            user_id=current_user.get('id'),
             triggered_new_iteration=result['needs_regeneration']
         )
         session.add(feedback)
@@ -4358,7 +4358,7 @@ def ml_regenerate_schedule(current_user):
             iteration_number=new_iteration_number,
             is_active=True,
             status='pending',
-            created_by=current_user.id
+            created_by=current_user.get('id')
         )
         session.add(new_iteration)
 

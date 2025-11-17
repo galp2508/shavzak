@@ -13,7 +13,7 @@ from models import (
     init_db, get_session, User, Pluga, Mahlaka, Soldier,
     Certification, UnavailableDate, AssignmentTemplate,
     Shavzak, Assignment, AssignmentSoldier, JoinRequest,
-    SchedulingConstraint, SoldierStatus
+    SchedulingConstraint, SoldierStatus, AVAILABLE_ROLES_CERTIFICATIONS
 )
 from auth import (
     create_token, token_required, role_required,
@@ -1218,23 +1218,53 @@ def list_soldiers_by_mahlaka(mahlaka_id, current_user):
 @app.route('/api/soldiers/<int:soldier_id>/certifications', methods=['POST'])
 @token_required
 def add_certification(soldier_id, current_user):
-    """הוספת הסמכה"""
+    """
+    הוספת הסמכה (תפקיד נוסף) לחייל
+
+    הסמכה = תפקיד נוסף שחייל יכול למלא במשימות
+    לדוגמה: לוחם עם הסמכת "נהג" יכול לשמש כנהג במשימות
+    """
     try:
         session = get_db()
-        
+
         if not can_edit_soldier(current_user, soldier_id, session):
             return jsonify({'error': 'אין לך הרשאה'}), 403
-        
+
         data = request.json
+        cert_name = data.get('certification_name', '').strip()
+
+        # ולידציה: ודא שההסמכה היא מהרשימה המאושרת
+        from models import AVAILABLE_ROLES_CERTIFICATIONS
+        if cert_name not in AVAILABLE_ROLES_CERTIFICATIONS:
+            return jsonify({
+                'error': f'הסמכה לא תקינה. בחר מהרשימה: {", ".join(AVAILABLE_ROLES_CERTIFICATIONS)}'
+            }), 400
+
+        # בדוק אם כבר יש הסמכה כזו לחייל
+        existing = session.query(Certification).filter(
+            Certification.soldier_id == soldier_id,
+            Certification.certification_name == cert_name
+        ).first()
+
+        if existing:
+            return jsonify({'error': f'לחייל כבר יש הסמכת "{cert_name}"'}), 400
+
         cert = Certification(
             soldier_id=soldier_id,
-            certification_name=data['certification_name']
+            certification_name=cert_name
         )
-        
+
         session.add(cert)
         session.commit()
-        
-        return jsonify({'message': 'הסמכה נוספה בהצלחה'}), 201
+
+        return jsonify({
+            'message': f'הסמכת "{cert_name}" נוספה בהצלחה',
+            'certification': {
+                'id': cert.id,
+                'name': cert.certification_name,
+                'date_acquired': cert.date_acquired.isoformat()
+            }
+        }), 201
     except Exception as e:
         print(f"🔴 שגיאה: {str(e)}")
         traceback.print_exc()
@@ -1242,6 +1272,19 @@ def add_certification(soldier_id, current_user):
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
+
+
+@app.route('/api/available-roles-certifications', methods=['GET'])
+def get_available_roles_certifications():
+    """
+    קבלת רשימת התפקידים/הסמכות הזמינים במערכת
+
+    הסמכה = תפקיד נוסף שחייל יכול למלא במשימות
+    """
+    return jsonify({
+        'roles_certifications': AVAILABLE_ROLES_CERTIFICATIONS,
+        'description': 'הסמכה = תפקיד נוסף שחייל יכול למלא במשימות'
+    }), 200
 
 
 @app.route('/api/soldiers/<int:soldier_id>/unavailable', methods=['POST'])

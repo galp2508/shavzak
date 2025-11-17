@@ -9,6 +9,25 @@ import bcrypt
 
 Base = declarative_base()
 
+# תפקידים/הסמכות זמינים במערכת
+# הסמכה = תפקיד נוסף שחייל יכול למלא
+AVAILABLE_ROLES_CERTIFICATIONS = [
+    'מפ',      # מפקד פלוגה
+    'ממ',      # מפקד מחלקה
+    'מכ',      # מפקד כיתה
+    'סמ"פ',    # סגן מפקד פלוגה
+    'סמ"מ',    # סגן מפקד מחלקה
+    'נהג',     # נהג
+    'חמל',     # חייל מיומן חמל (מטה)
+    'קצין תורן',  # קצין תורן
+    'תורן',    # תורן כללי
+    'מדריך',   # מדריך
+    'רפא',     # רפא (חובש)
+    'אחמש',    # אחמש (אחראי חומרים)
+    'תחמוש',   # תחמושן
+    'קשר',     # קשר
+]
+
 class User(Base):
     """משתמש במערכת"""
     __tablename__ = 'users'
@@ -104,14 +123,24 @@ class Soldier(Base):
 
 
 class Certification(Base):
-    """הסמכות חייל"""
+    """
+    הסמכות/תפקידים נוספים של חייל
+
+    הסמכה = תפקיד נוסף שחייל יכול למלא במשימות
+    לדוגמה:
+    - חייל עם תפקיד "לוחם" יכול לקבל הסמכה "נהג" ולשמש כנהג במשימות
+    - חייל עם תפקיד "מכ" יכול לקבל הסמכה "חמל" ולשמש בחמל
+    - חייל עם תפקיד "לוחם" יכול לקבל הסמכה "מכ" ולפקד על כיתה
+
+    רשימת התפקידים/הסמכות זמינה ב-AVAILABLE_ROLES_CERTIFICATIONS
+    """
     __tablename__ = 'certifications'
-    
+
     id = Column(Integer, primary_key=True)
     soldier_id = Column(Integer, ForeignKey('soldiers.id'), nullable=False)
-    certification_name = Column(String(100), nullable=False)
+    certification_name = Column(String(100), nullable=False)  # תפקיד נוסף מתוך AVAILABLE_ROLES_CERTIFICATIONS
     date_acquired = Column(Date, default=datetime.utcnow)
-    
+
     soldier = relationship("Soldier", back_populates="certifications")
 
 

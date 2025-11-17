@@ -191,6 +191,22 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
     reuse_soldiers_for_standby: template?.reuse_soldiers_for_standby || false,
   });
   const [loading, setLoading] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState([]);
+
+  // טען את רשימת התפקידים/הסמכות הזמינים
+  useEffect(() => {
+    const loadAvailableRoles = async () => {
+      try {
+        const response = await api.get('/available-roles-certifications');
+        setAvailableRoles(response.data.roles_certifications || []);
+      } catch (error) {
+        console.error('Error loading available roles:', error);
+        // אם יש שגיאה, השתמש ברשימה ברירת מחדל
+        setAvailableRoles(['מפ', 'ממ', 'מכ', 'נהג', 'חמל', 'קצין תורן']);
+      }
+    };
+    loadAvailableRoles();
+  }, []);
 
   // תבניות מוכנות מראש
   const presetTemplates = {
@@ -216,7 +232,7 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
       drivers_needed: 0,
       soldiers_needed: 1,
       same_mahlaka_required: false,
-      requires_certification: 'חמליסט',
+      requires_certification: 'חמל',
     },
   };
 
@@ -381,14 +397,20 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
             </div>
 
             <div>
-              <label className="label">הסמכה נדרשת</label>
-              <input
-                type="text"
+              <label className="label">
+                הסמכה/תפקיד נדרש
+                <span className="text-xs text-gray-500 mr-2">(תפקיד נוסף שחייל צריך בשביל המשימה)</span>
+              </label>
+              <select
                 value={formData.requires_certification}
                 onChange={(e) => setFormData({ ...formData, requires_certification: e.target.value })}
                 className="input-field"
-                placeholder="למשל: חמל"
-              />
+              >
+                <option value="">ללא הסמכה נדרשת</option>
+                {availableRoles.map(role => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
             </div>
           </div>
 

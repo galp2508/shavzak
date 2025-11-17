@@ -756,10 +756,15 @@ class SmartScheduler:
 
     def _assign_operations(self, task: Dict, all_soldiers: List[Dict],
                           schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
-        """חמל - דורש הסמכה (אילוץ קשיח מהתבנית)"""
+        """
+        חמל - דורש הסמכה/תפקיד נוסף (אילוץ קשיח מהתבנית)
+
+        הסמכה = תפקיד נוסף שחייל יכול למלא במשימות
+        לדוגמה: חייל עם הסמכת "חמל" יכול לשמש בחמל
+        """
         cert_name = task.get('requires_certification')
 
-        # אם התבנית לא מציינת הסמכה - כל אחד יכול
+        # אם התבנית לא מציינת הסמכה/תפקיד - כל אחד יכול
         if not cert_name:
             available = [s for s in all_soldiers
                         if not self.is_commander(s) and

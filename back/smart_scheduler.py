@@ -107,7 +107,8 @@ class SmartScheduler:
     # ============================================
 
     def calculate_soldier_score(self, soldier: Dict, task: Dict,
-                                schedules: Dict, mahlaka_workload: Dict) -> float:
+                                schedules: Dict, mahlaka_workload: Dict,
+                                all_soldiers: List[Dict] = None) -> float:
         """
         חישוב ציון לחייל למשימה מסוימת
         גבוה יותר = מתאים יותר
@@ -118,6 +119,7 @@ class SmartScheduler:
         3. דפוסים שנלמדו (האם עשה משימה כזו בעבר)
         4. העדפות מחלקה
         5. פידבק מהמשתמש
+        6. עקביות לבנה (מחלקה תופסת לבנה שלמה)
         """
         score = 0.0
         soldier_id = soldier['id']
@@ -144,6 +146,10 @@ class SmartScheduler:
         # 5. פידבק מהמשתמש
         feedback_score = self._get_feedback_score(soldier, task)
         score += feedback_score * 4.0  # משקל גבוה לפידבק!
+
+        # 6. עקביות לבנה - מחלקה תופסת לבנה שלמה (8 שעות)
+        block_consistency_score = self._get_block_consistency_score(soldier, task, schedules, all_soldiers)
+        score += block_consistency_score * 10.0  # משקל מאוד גבוה ללבנה!
 
         return score
 
@@ -221,6 +227,69 @@ class SmartScheduler:
 
         # ציון = (חיובי - שלילי)
         return positive_feedback - negative_feedback
+
+    def _get_block_consistency_score(self, soldier: Dict, task: Dict,
+                                    schedules: Dict, all_soldiers: List[Dict] = None) -> float:
+        """
+        ציון עקביות לבנה - שאיפה שמחלקה תופסת לבנה שלמה של 8 שעות
+
+        לבנה = בלוק של 8 שעות (0-8, 8-16, 16-24)
+        אם מחלקה כבר עולה למשימות בלבנה זו (שמירות/סיורים),
+        נעדיף להמשיך עם אותה מחלקה.
+
+        זה מבטיח רציפות ועקביות בשיבוץ.
+        """
+        soldier_mahlaka = soldier.get('mahlaka_id')
+        if not soldier_mahlaka:
+            return 0.0
+
+        task_day = task['day']
+        task_start = task['start_hour']
+        task_type = task['type']
+
+        # זיהוי הלבנה (0-8, 8-16, 16-24)
+        block = task_start // 8  # 0, 1, או 2
+        block_start = block * 8
+        block_end = block_start + 8
+
+        # רק משימות שמירה וסיור רלוונטיות ללבנה
+        relevant_task_types = ['שמירה', 'סיור']
+        if task_type not in relevant_task_types:
+            return 0.0
+
+        # בנה מיפוי soldier_id -> mahlaka_id
+        soldier_to_mahlaka = {}
+        if all_soldiers:
+            for s in all_soldiers:
+                soldier_to_mahlaka[s['id']] = s.get('mahlaka_id')
+
+        # בדוק אילו מחלקות כבר עלו ללבנה זו ביום הזה
+        mahalkot_in_block = defaultdict(int)  # מחלקה -> מספר משימות
+
+        for soldier_id, schedule in schedules.items():
+            for assign_day, assign_start, assign_end, assign_name, assign_type in schedule:
+                # רק אותו יום, אותה לבנה, ומשימות רלוונטיות
+                if (assign_day == task_day and
+                    assign_type in relevant_task_types and
+                    assign_start >= block_start and
+                    assign_start < block_end):
+
+                    # מצא את המחלקה של החייל הזה
+                    soldier_mahlaka_id = soldier_to_mahlaka.get(soldier_id)
+                    if soldier_mahlaka_id:
+                        mahalkot_in_block[soldier_mahlaka_id] += 1
+
+        # אם אין עדיין משימות בלבנה - אין העדפה מיוחדת
+        if not mahalkot_in_block:
+            return 0.0
+
+        # אם המחלקה שלנו כבר בלבנה - בונוס גדול!
+        if soldier_mahlaka in mahalkot_in_block:
+            # ככל שיותר משימות למחלקה זו בלבנה, יותר בונוס
+            return 20.0 * mahalkot_in_block[soldier_mahlaka]
+
+        # אם יש מחלקה אחרת בלבנה - עונש על ערבוב מחלקות
+        return -15.0
 
     # ============================================
     # LEARNING - למידה מדוגמאות
@@ -515,12 +584,12 @@ class SmartScheduler:
             print(f"❌ סיור יום {task['day']}: חסרים - {', '.join(missing)}")
             return None
 
-        # ניקוד וסידור לפי ML
-        scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload))
+        # ניקוד וסידור לפי ML (כולל all_soldiers לחישוב לבנה)
+        scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
                             for c in available_commanders]
-        scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))
+        scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
                           for s in available_soldiers]
-        scored_drivers = [(d, self.calculate_soldier_score(d, task, schedules, mahlaka_workload))
+        scored_drivers = [(d, self.calculate_soldier_score(d, task, schedules, mahlaka_workload, all_soldiers))
                          for d in available_drivers]
 
         # מיון לפי ציון (גבוה לנמוך)
@@ -563,8 +632,8 @@ class SmartScheduler:
         if not available:
             return None
 
-        # ניקוד וסידור
-        scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))
+        # ניקוד וסידור (כולל all_soldiers לחישוב לבנה)
+        scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
                  for s in available]
         scored.sort(key=lambda x: x[1], reverse=True)
 
@@ -611,12 +680,12 @@ class SmartScheduler:
             print(f"❌ כוננות א' יום {task['day']}: חסרים - {', '.join(missing)}")
             return None
 
-        # ניקוד
-        scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload))
+        # ניקוד (כולל all_soldiers לחישוב לבנה)
+        scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
                             for c in available_commanders]
-        scored_drivers = [(d, self.calculate_soldier_score(d, task, schedules, mahlaka_workload))
+        scored_drivers = [(d, self.calculate_soldier_score(d, task, schedules, mahlaka_workload, all_soldiers))
                          for d in available_drivers]
-        scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))
+        scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
                           for s in available_soldiers]
 
         scored_commanders.sort(key=lambda x: x[1], reverse=True)
@@ -655,9 +724,9 @@ class SmartScheduler:
             print(f"⚠️  כוננות ב' יום {task['day']}: חסרים - מפקדים: {len(available_commanders)}, חיילים: {len(available_soldiers)}/{soldiers_needed}")
             return None
 
-        scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload))
+        scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
                             for c in available_commanders]
-        scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))
+        scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
                           for s in available_soldiers]
 
         scored_commanders.sort(key=lambda x: x[1], reverse=True)
@@ -683,7 +752,7 @@ class SmartScheduler:
             if not available:
                 return None
 
-            scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))
+            scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
                      for s in available]
             scored.sort(key=lambda x: x[1], reverse=True)
             selected = scored[0][0]
@@ -702,7 +771,7 @@ class SmartScheduler:
             print(f"❌ {task['name']} יום {task['day']}: אין חייל מוסמך '{cert_name}' (אילוץ קשיח)")
             return None
 
-        scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))
+        scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
                  for s in certified]
         scored.sort(key=lambda x: x[1], reverse=True)
 
@@ -727,7 +796,7 @@ class SmartScheduler:
             print(f"⚠️  תורן מטבח יום {task['day']}: חסרים חיילים (צריך {num_needed}, זמינים {len(available)})")
             return None
 
-        scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))
+        scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
                  for s in available]
         scored.sort(key=lambda x: x[1], reverse=True)
 

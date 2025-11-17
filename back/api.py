@@ -2125,7 +2125,8 @@ def get_shavzak(shavzak_id, current_user):
             soldiers_list = [{
                 'id': s.Soldier.id,
                 'name': s.Soldier.name,
-                'role': s.AssignmentSoldier.role_in_assignment
+                'role': s.AssignmentSoldier.role_in_assignment,
+                'mahlaka_id': s.Soldier.mahlaka_id
             } for s in soldiers]
             
             assignments_data.append({
@@ -2354,7 +2355,8 @@ def duplicate_assignment(assignment_id, current_user):
                     soldiers.append({
                         'id': soldier.id,
                         'name': soldier.name,
-                        'role': sa.role_in_assignment
+                        'role': sa.role_in_assignment,
+                        'mahlaka_id': soldier.mahlaka_id
                     })
 
         return jsonify({
@@ -2435,7 +2437,8 @@ def create_manual_assignment(shavzak_id, current_user):
                     'id': soldier.id,
                     'name': soldier.name,
                     'role': soldier.role,
-                    'role_in_assignment': sa.role_in_assignment
+                    'role_in_assignment': sa.role_in_assignment,
+                    'mahlaka_id': soldier.mahlaka_id
                 })
 
         return jsonify({
@@ -2506,7 +2509,8 @@ def update_assignment(assignment_id, current_user):
                     'id': soldier.id,
                     'name': soldier.name,
                     'role': soldier.role,
-                    'role_in_assignment': sa.role_in_assignment
+                    'role_in_assignment': sa.role_in_assignment,
+                    'mahlaka_id': soldier.mahlaka_id
                 })
 
         return jsonify({
@@ -2576,7 +2580,8 @@ def update_assignment_soldiers(assignment_id, current_user):
                     'id': soldier.id,
                     'name': soldier.name,
                     'role': soldier.role,
-                    'role_in_assignment': sa.role_in_assignment
+                    'role_in_assignment': sa.role_in_assignment,
+                    'mahlaka_id': soldier.mahlaka_id
                 })
 
         return jsonify({
@@ -3255,7 +3260,8 @@ def get_live_schedule(pluga_id, current_user):
                         'id': soldier.id,
                         'name': soldier.name,
                         'role': soldier.role,
-                        'role_in_assignment': as_soldier.role_in_assignment
+                        'role_in_assignment': as_soldier.role_in_assignment,
+                        'mahlaka_id': soldier.mahlaka_id
                     })
 
                     # ספור לפי תפקיד
@@ -4217,6 +4223,14 @@ def ml_feedback(current_user):
         changes = data.get('changes')
         enable_auto_regeneration = data.get('enable_auto_regeneration', True)
 
+        # בדיקת שדות חובה
+        if not assignment_id:
+            return jsonify({'error': 'חסר assignment_id'}), 400
+        if not shavzak_id:
+            return jsonify({'error': 'חסר shavzak_id'}), 400
+        if not rating or rating not in ['approved', 'rejected', 'modified']:
+            return jsonify({'error': 'rating לא תקין'}), 400
+
         # טען משימה
         assignment = session.get(Assignment, assignment_id)
         if not assignment:
@@ -4263,7 +4277,7 @@ def ml_feedback(current_user):
                 iteration_number=iteration_number,
                 is_active=True,
                 status='pending',
-                created_by=current_user.get('id')
+                created_by=current_user.get('user_id')
             )
             session.add(iteration)
             session.commit()
@@ -4276,7 +4290,7 @@ def ml_feedback(current_user):
             rating=rating,
             feedback_text=changes.get('feedback_text') if changes else None,
             changes=json.dumps(changes) if changes else None,
-            user_id=current_user.get('id'),
+            user_id=current_user.get('user_id'),
             triggered_new_iteration=result['needs_regeneration']
         )
         session.add(feedback)
@@ -4358,7 +4372,7 @@ def ml_regenerate_schedule(current_user):
             iteration_number=new_iteration_number,
             is_active=True,
             status='pending',
-            created_by=current_user.get('id')
+            created_by=current_user.get('user_id')
         )
         session.add(new_iteration)
 

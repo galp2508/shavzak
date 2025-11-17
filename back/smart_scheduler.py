@@ -477,11 +477,15 @@ class SmartScheduler:
     def _assign_patrol(self, task: Dict, all_soldiers: List[Dict],
                       schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
         """
-        שיבוץ סיור - SMART!
+        שיבוץ סיור - קורא דרישות מהתבנית
 
-        דרישות: מפקד + 2 לוחמים + נהג (אופציונלי)
-        העדפה: מאותה מחלקה
+        דרישות מהתבנית: commanders_needed, soldiers_needed, drivers_needed
         """
+        # קריאת דרישות מהתבנית
+        commanders_needed = task.get('commanders_needed', 1)
+        soldiers_needed = task.get('soldiers_needed', 2)
+        drivers_needed = task.get('drivers_needed', 0)
+
         # הפרד לפי תפקידים
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         drivers = [s for s in all_soldiers if self.is_driver(s)]
@@ -498,9 +502,18 @@ class SmartScheduler:
                             if self.check_availability(s, task['day'], task['start_hour'],
                                                      task['length_in_hours'], schedules)]
 
-        # חייב מפקד + 2 לוחמים
-        if not available_commanders or len(available_soldiers) < 2:
-            return None  # אי אפשר לשבץ
+        # בדיקת אילוצים קשיחים מהתבנית
+        missing = []
+        if len(available_commanders) < commanders_needed:
+            missing.append(f"מפקדים ({len(available_commanders)}/{commanders_needed})")
+        if drivers_needed > 0 and len(available_drivers) < drivers_needed:
+            missing.append(f"נהגים ({len(available_drivers)}/{drivers_needed})")
+        if len(available_soldiers) < soldiers_needed:
+            missing.append(f"חיילים ({len(available_soldiers)}/{soldiers_needed})")
+
+        if missing:
+            print(f"❌ סיור יום {task['day']}: חסרים - {', '.join(missing)}")
+            return None
 
         # ניקוד וסידור לפי ML
         scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload))
@@ -515,24 +528,25 @@ class SmartScheduler:
         scored_soldiers.sort(key=lambda x: x[1], reverse=True)
         scored_drivers.sort(key=lambda x: x[1], reverse=True)
 
-        # בחר הטובים ביותר
-        selected_commander = scored_commanders[0][0]
-        selected_soldiers = [s[0] for s in scored_soldiers[:2]]
-        selected_driver = scored_drivers[0][0] if scored_drivers else None
+        # בחר הטובים ביותר - לפי הדרישות מהתבנית
+        selected_commanders = [c[0] for c in scored_commanders[:commanders_needed]]
+        selected_soldiers = [s[0] for s in scored_soldiers[:soldiers_needed]]
 
         # עדכן עומס מחלקה
-        mahlaka_id = selected_commander.get('mahlaka_id')
+        mahlaka_id = selected_commanders[0].get('mahlaka_id') if selected_commanders else None
         if mahlaka_id:
             mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
 
         result = {
-            'commanders': [selected_commander['id']],
+            'commanders': [c['id'] for c in selected_commanders],
             'soldiers': [s['id'] for s in selected_soldiers],
             'mahlaka_id': mahlaka_id
         }
 
-        if selected_driver:
-            result['drivers'] = [selected_driver['id']]
+        # נהגים - לפי הדרישה בתבנית
+        if drivers_needed > 0:
+            selected_drivers = [d[0] for d in scored_drivers[:drivers_needed]]
+            result['drivers'] = [d['id'] for d in selected_drivers]
 
         return result
 
@@ -564,9 +578,10 @@ class SmartScheduler:
 
     def _assign_standby_a(self, task: Dict, all_soldiers: List[Dict],
                          schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
-        """כוננות א' - מפקד + נהג (אופציונלי) + חיילים (גמיש)"""
-        # תיקון: השתמש במספר החיילים מהתבנית, לא ערך קבוע
+        """כוננות א' - מפקד + נהג (אם נדרש) + חיילים"""
+        # קריאת דרישות מהתבנית
         soldiers_needed = task.get('soldiers_needed', 7)
+        drivers_needed = task.get('drivers_needed', 0)  # כמה נהגים נדרשים
 
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         drivers = [s for s in all_soldiers if self.is_driver(s)]
@@ -583,9 +598,17 @@ class SmartScheduler:
                             if self.check_availability(s, task['day'], task['start_hour'],
                                                      task['length_in_hours'], schedules)]
 
-        # תיקון: נהג לא חובה! אם אין - זה בסדר
-        if not available_commanders or len(available_soldiers) < soldiers_needed:
-            print(f"⚠️  כוננות א' יום {task['day']}: חסרים - מפקדים: {len(available_commanders)}, נהגים: {len(available_drivers)}, חיילים: {len(available_soldiers)}/{soldiers_needed}")
+        # בדיקת אילוצים קשיחים מהתבנית
+        missing = []
+        if not available_commanders:
+            missing.append(f"מפקדים (0 זמינים)")
+        if drivers_needed > 0 and len(available_drivers) < drivers_needed:
+            missing.append(f"נהגים ({len(available_drivers)}/{drivers_needed})")
+        if len(available_soldiers) < soldiers_needed:
+            missing.append(f"חיילים ({len(available_soldiers)}/{soldiers_needed})")
+
+        if missing:
+            print(f"❌ כוננות א' יום {task['day']}: חסרים - {', '.join(missing)}")
             return None
 
         # ניקוד
@@ -606,9 +629,9 @@ class SmartScheduler:
             'mahlaka_id': 'pluga'  # פלוגתי
         }
 
-        # נהג אופציונלי - רק אם יש
-        if scored_drivers:
-            result['drivers'] = [scored_drivers[0][0]['id']]
+        # נהגים - לפי הדרישה בתבנית
+        if drivers_needed > 0:
+            result['drivers'] = [d[0]['id'] for d in scored_drivers[:drivers_needed]]
 
         return result
 
@@ -648,25 +671,36 @@ class SmartScheduler:
 
     def _assign_operations(self, task: Dict, all_soldiers: List[Dict],
                           schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
-        """חמל - מעדיף מוסמך, אבל לא חובה"""
-        cert_name = task.get('requires_certification', 'חמל')
+        """חמל - דורש הסמכה (אילוץ קשיח מהתבנית)"""
+        cert_name = task.get('requires_certification')
 
-        # נסה למצוא מוסמך
-        certified = [s for s in all_soldiers
-                    if self.has_certification(s, cert_name) and
-                       self.check_availability(s, task['day'], task['start_hour'],
-                                             task['length_in_hours'], schedules)]
-
-        # אם אין מוסמך - קח מי שזמין (לא מפקד)
-        if not certified:
-            print(f"⚠️  חמל יום {task['day']}: אין חייל מוסמך '{cert_name}', משבץ חייל רגיל")
+        # אם התבנית לא מציינת הסמכה - כל אחד יכול
+        if not cert_name:
             available = [s for s in all_soldiers
                         if not self.is_commander(s) and
                            self.check_availability(s, task['day'], task['start_hour'],
                                                  task['length_in_hours'], schedules)]
             if not available:
                 return None
-            certified = available
+
+            scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))
+                     for s in available]
+            scored.sort(key=lambda x: x[1], reverse=True)
+            selected = scored[0][0]
+            return {
+                'soldiers': [selected['id']],
+                'mahlaka_id': selected.get('mahlaka_id')
+            }
+
+        # התבנית דורשת הסמכה - חובה!
+        certified = [s for s in all_soldiers
+                    if self.has_certification(s, cert_name) and
+                       self.check_availability(s, task['day'], task['start_hour'],
+                                             task['length_in_hours'], schedules)]
+
+        if not certified:
+            print(f"❌ {task['name']} יום {task['day']}: אין חייל מוסמך '{cert_name}' (אילוץ קשיח)")
+            return None
 
         scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))
                  for s in certified]

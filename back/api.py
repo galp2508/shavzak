@@ -1169,7 +1169,7 @@ def list_soldiers_by_mahlaka(mahlaka_id, current_user):
         result = []
         for soldier in soldiers:
             certifications = session.query(Certification).filter_by(soldier_id=soldier.id).all()
-            cert_list = [cert.certification_name for cert in certifications]
+            cert_list = [{'id': cert.id, 'name': cert.certification_name} for cert in certifications]
 
             # קבל סטטוס נוכחי
             status = session.query(SoldierStatus).filter_by(soldier_id=soldier.id).first()
@@ -1285,6 +1285,36 @@ def get_available_roles_certifications():
         'roles_certifications': AVAILABLE_ROLES_CERTIFICATIONS,
         'description': 'הסמכה = תפקיד נוסף שחייל יכול למלא במשימות'
     }), 200
+
+
+@app.route('/api/certifications/<int:certification_id>', methods=['DELETE'])
+@token_required
+def delete_certification(certification_id, current_user):
+    """מחיקת הסמכה"""
+    try:
+        session = get_db()
+
+        # מצא את ההסמכה
+        cert = session.get(Certification, certification_id)
+        if not cert:
+            return jsonify({'error': 'הסמכה לא נמצאה'}), 404
+
+        # בדוק הרשאות - רק מפקדים יכולים למחוק הסמכות
+        if not can_edit_soldier(current_user, cert.soldier_id, session):
+            return jsonify({'error': 'אין לך הרשאה למחוק הסמכה זו'}), 403
+
+        cert_name = cert.certification_name
+        session.delete(cert)
+        session.commit()
+
+        return jsonify({'message': f'הסמכת "{cert_name}" נמחקה בהצלחה'}), 200
+    except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
 
 
 @app.route('/api/soldiers/<int:soldier_id>/unavailable', methods=['POST'])

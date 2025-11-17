@@ -139,6 +139,7 @@ const SmartSchedule = () => {
           try {
             const regenerateResponse = await api.post('/ml/regenerate-schedule', {
               shavzak_id: currentShavzakId,
+              assignment_id: assignmentId,
               reason: 'פידבק שלילי - יצירת שיבוץ משופר'
             });
 

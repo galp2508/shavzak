@@ -12,7 +12,7 @@ import Mahalkot from './pages/Mahalkot';
 import Templates from './pages/Templates';
 import Shavzakim from './pages/Shavzakim';
 import ShavzakView from './pages/ShavzakView';
-import LiveSchedule from './pages/LiveSchedule';
+import SmartSchedule from './pages/SmartSchedule';
 import Profile from './pages/Profile';
 import JoinRequests from './pages/JoinRequests';
 import Loading from './components/Loading';
@@ -104,7 +104,7 @@ function App() {
           <Route path="plugot" element={<Plugot />} />
           <Route path="mahalkot" element={<Mahalkot />} />
           <Route path="templates" element={<Templates />} />
-          <Route path="live-schedule" element={<LiveSchedule />} />
+          <Route path="live-schedule" element={<SmartSchedule />} />
           <Route path="shavzakim" element={<Shavzakim />} />
           <Route path="shavzakim/:id" element={<ShavzakView />} />
           <Route path="join-requests" element={<JoinRequests />} />

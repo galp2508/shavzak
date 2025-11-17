@@ -3907,6 +3907,368 @@ def update_soldier_exit_date(soldier_id, current_user):
 
 
 # ============================================================================
+# SMART SCHEDULING (ML)
+# ============================================================================
+
+from smart_scheduler import SmartScheduler
+import base64
+from io import BytesIO
+
+# אתחול המודל
+ML_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'ml_model.pkl')
+smart_scheduler = SmartScheduler()
+
+# נסה לטעון מודל קיים
+if os.path.exists(ML_MODEL_PATH):
+    smart_scheduler.load_model(ML_MODEL_PATH)
+    print("✅ Smart Scheduler: מודל נטען מ-ml_model.pkl")
+else:
+    print("⚠️ Smart Scheduler: אין מודל קיים - יש לאמן תחילה")
+
+
+@app.route('/api/ml/train', methods=['POST'])
+@token_required
+def ml_train(current_user):
+    """
+    אימון המודל ML מדוגמאות
+
+    Body:
+    {
+        "examples": [
+            {
+                "assignments": [...],
+                "rating": "excellent" | "good" | "bad"
+            }
+        ]
+    }
+    """
+    try:
+        data = request.get_json()
+        examples = data.get('examples', [])
+
+        if not examples:
+            return jsonify({'error': 'לא סופקו דוגמאות לאימון'}), 400
+
+        # אמן את המודל
+        smart_scheduler.train_from_examples(examples)
+
+        # שמור את המודל
+        smart_scheduler.save_model(ML_MODEL_PATH)
+
+        stats = smart_scheduler.get_stats()
+
+        return jsonify({
+            'message': f'המודל אומן בהצלחה מ-{len(examples)} דוגמאות',
+            'stats': stats
+        }), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה באימון ML: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/ml/smart-schedule', methods=['POST'])
+@token_required
+def ml_smart_schedule(current_user):
+    """
+    יצירת שיבוץ חכם עם ML
+
+    Body:
+    {
+        "pluga_id": 1,
+        "start_date": "2025-01-01",
+        "days_count": 7
+    }
+    """
+    session = get_session()
+
+    try:
+        data = request.get_json()
+        pluga_id = data.get('pluga_id')
+        start_date_str = data.get('start_date')
+        days_count = data.get('days_count', 7)
+
+        # בדיקות
+        if not can_view_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לפלוגה זו'}), 403
+
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+
+        # טען נתונים
+        mahalkot = session.query(Mahlaka).filter_by(pluga_id=pluga_id).all()
+        templates = session.query(AssignmentTemplate).filter_by(pluga_id=pluga_id).all()
+
+        if not templates:
+            return jsonify({'error': 'אין תבניות משימות במערכת'}), 400
+
+        # בנה מבנה נתונים
+        mahalkot_data = []
+        for mahlaka in mahalkot:
+            soldiers = session.query(Soldier).filter_by(mahlaka_id=mahlaka.id).all()
+
+            commanders = []
+            drivers = []
+            regular_soldiers = []
+
+            for soldier in soldiers:
+                unavailable = session.query(UnavailableDate).filter(
+                    UnavailableDate.soldier_id == soldier.id,
+                    UnavailableDate.date >= start_date,
+                    UnavailableDate.date < start_date + timedelta(days=days_count)
+                ).all()
+
+                unavailable_dates = [u.date for u in unavailable]
+
+                certifications = session.query(Certification).filter_by(soldier_id=soldier.id).all()
+                cert_list = [c.certification_name for c in certifications]
+
+                status = session.query(SoldierStatus).filter_by(soldier_id=soldier.id).first()
+
+                soldier_data = {
+                    'id': soldier.id,
+                    'name': soldier.name,
+                    'role': soldier.role,
+                    'kita': soldier.kita,
+                    'certifications': cert_list,
+                    'unavailable_dates': unavailable_dates,
+                    'hatash_2_days': soldier.hatash_2_days,
+                    'status_type': status.status_type if status else 'בבסיס',
+                    'mahlaka_id': mahlaka.id
+                }
+
+                if soldier.role in ['ממ', 'מכ', 'סמל']:
+                    commanders.append(soldier_data)
+                if soldier.role == 'נהג' or 'נהג' in cert_list:
+                    drivers.append(soldier_data)
+                if soldier.role not in ['ממ', 'מכ', 'סמל']:
+                    regular_soldiers.append(soldier_data)
+
+            mahalkot_data.append({
+                'id': mahlaka.id,
+                'number': mahlaka.number,
+                'commanders': commanders,
+                'drivers': drivers,
+                'soldiers': regular_soldiers
+            })
+
+        # פונקציה לבדיקת זמינות
+        def is_soldier_available(soldier_data, check_date):
+            if soldier_data.get('status_type') == 'ריתוק':
+                return False
+
+            if check_date in soldier_data.get('unavailable_dates', []):
+                return False
+
+            hatash_2_days = soldier_data.get('hatash_2_days')
+            if hatash_2_days:
+                day_of_week = check_date.weekday()
+                day_of_week = (day_of_week + 1) % 7
+                hatash_days_list = hatash_2_days.split(',')
+                if str(day_of_week) in hatash_days_list:
+                    return False
+
+            return True
+
+        # יצירת משימות
+        all_assignments = []
+        for day in range(days_count):
+            current_date = start_date + timedelta(days=day)
+
+            for template in templates:
+                for slot in range(template.times_per_day):
+                    if template.start_hour is not None:
+                        start_hour = template.start_hour + (slot * template.length_in_hours)
+                    else:
+                        start_hour = slot * template.length_in_hours
+
+                    assign_data = {
+                        'name': template.name,
+                        'type': template.assignment_type,
+                        'day': day,
+                        'start_hour': start_hour,
+                        'length_in_hours': template.length_in_hours,
+                        'commanders_needed': template.commanders_needed,
+                        'drivers_needed': template.drivers_needed,
+                        'soldiers_needed': template.soldiers_needed,
+                        'same_mahlaka_required': template.same_mahlaka_required,
+                        'requires_certification': template.requires_certification,
+                        'date': current_date
+                    }
+
+                    all_assignments.append(assign_data)
+
+        # מיון
+        def assignment_priority(assign):
+            is_standby = assign['type'] in ['כוננות א', 'כוננות ב']
+            priority = 1 if is_standby else 0
+            return (assign['day'], assign['start_hour'], priority)
+
+        all_assignments.sort(key=assignment_priority)
+
+        # הרצת ML
+        schedules = {}
+        mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
+
+        all_commanders = [c for m in mahalkot_data for c in m['commanders']]
+        all_drivers = [d for m in mahalkot_data for d in m['drivers']]
+        all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]
+
+        created_assignments = []
+
+        for assign_data in all_assignments:
+            current_date = assign_data['date']
+
+            # סינון לפי זמינות
+            available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
+            available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
+            available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
+
+            all_available = available_commanders + available_drivers + available_soldiers
+
+            # הרץ ML
+            result = smart_scheduler.assign_task(assign_data, all_available, schedules, mahlaka_workload)
+
+            if result:
+                # עדכן schedules
+                for role_key in ['commanders', 'drivers', 'soldiers']:
+                    if role_key in result:
+                        for soldier_id in result[role_key]:
+                            if soldier_id not in schedules:
+                                schedules[soldier_id] = []
+                            schedules[soldier_id].append((
+                                assign_data['day'],
+                                assign_data['start_hour'],
+                                assign_data['start_hour'] + assign_data['length_in_hours'],
+                                assign_data['name'],
+                                assign_data['type']
+                            ))
+
+                created_assignments.append({
+                    **assign_data,
+                    'result': result
+                })
+
+        smart_scheduler.stats['total_assignments'] += len(created_assignments)
+        smart_scheduler.stats['successful_assignments'] += len(created_assignments)
+        smart_scheduler.save_model(ML_MODEL_PATH)
+
+        return jsonify({
+            'message': f'נוצרו {len(created_assignments)} משימות בהצלחה',
+            'assignments': created_assignments,
+            'stats': smart_scheduler.get_stats()
+        }), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה ביצירת שיבוץ חכם: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/ml/feedback', methods=['POST'])
+@token_required
+def ml_feedback(current_user):
+    """
+    הוספת פידבק על שיבוץ
+
+    Body:
+    {
+        "assignment_id": 123,
+        "rating": "approved" | "rejected" | "modified",
+        "changes": {...}  // אופציונלי
+    }
+    """
+    session = get_session()
+
+    try:
+        data = request.get_json()
+        assignment_id = data.get('assignment_id')
+        rating = data.get('rating')
+        changes = data.get('changes')
+
+        # טען משימה
+        assignment = session.get(Assignment, assignment_id)
+        if not assignment:
+            return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        # הוסף פידבק
+        assignment_data = {
+            'id': assignment.id,
+            'type': assignment.assignment_type,
+            'name': assignment.name,
+            'day': assignment.day,
+            'start_hour': assignment.start_hour,
+            'length_in_hours': assignment.length_in_hours
+        }
+
+        smart_scheduler.add_feedback(assignment_data, rating, changes)
+        smart_scheduler.save_model(ML_MODEL_PATH)
+
+        return jsonify({
+            'message': 'פידבק נוסף בהצלחה',
+            'stats': smart_scheduler.get_stats()
+        }), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה בהוספת פידבק: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/ml/stats', methods=['GET'])
+@token_required
+def ml_stats(current_user):
+    """קבלת סטטיסטיקות ML"""
+    try:
+        stats = smart_scheduler.get_stats()
+        return jsonify({
+            'stats': stats,
+            'model_loaded': os.path.exists(ML_MODEL_PATH)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/ml/upload-example', methods=['POST'])
+@token_required
+def ml_upload_example(current_user):
+    """
+    העלאת דוגמת שיבוץ מתמונה
+
+    Body:
+    {
+        "image": "base64_encoded_image",
+        "rating": "excellent" | "good" | "bad"
+    }
+    """
+    try:
+        data = request.get_json()
+        image_b64 = data.get('image')
+        rating = data.get('rating', 'good')
+
+        if not image_b64:
+            return jsonify({'error': 'לא סופקה תמונה'}), 400
+
+        # TODO: נוסיף OCR/ניתוח תמונה בעתיד
+        # כרגע נחזיר הודעה שהתמונה נשמרה
+
+        return jsonify({
+            'message': 'תמונה התקבלה - ניתוח ידני נדרש כרגע',
+            'note': 'בעתיד נוסיף OCR אוטומטי'
+        }), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה בהעלאת דוגמה: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
 # UTILITY
 # ============================================================================
 

@@ -71,9 +71,12 @@ const ShavzakView = () => {
       s.role !== 'נהג' && s.role !== 'driver'
     );
 
-    // בדוק כמה מחלקות שונות יש במשימה (ללא נהגים)
+    // אם אין חיילים רגילים, כלול גם נהגים בחישוב (כדי שנהגים יקבלו צבע)
+    const soldiersForColor = nonDriverSoldiers.length > 0 ? nonDriverSoldiers : soldiers;
+
+    // בדוק כמה מחלקות שונות יש במשימה
     const mahalkotSet = new Set(
-      nonDriverSoldiers.map(s => s.mahlaka_id).filter(id => id != null)
+      soldiersForColor.map(s => s.mahlaka_id).filter(id => id != null)
     );
 
     // אם יש 2+ מחלקות = פלוגתי (צהוב)

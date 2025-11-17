@@ -98,6 +98,37 @@ const LiveSchedule = () => {
     setCurrentDate(newDate);
   };
 
+  const handleFeedback = async (assignmentId, rating) => {
+    try {
+      // מצא את ה-shavzak_id (שיבוץ אוטומטי)
+      const shavzakId = scheduleData?.shavzak_id;
+      if (!shavzakId) {
+        toast.error('לא נמצא מזהה שיבוץ');
+        return;
+      }
+
+      const response = await api.post('/ml/feedback', {
+        assignment_id: assignmentId,
+        shavzak_id: shavzakId,
+        rating: rating,
+        enable_auto_regeneration: false  // לא לרענן אוטומטית בשיבוץ חי
+      });
+
+      // הצג הודעה מהשרת
+      if (rating === 'approved') {
+        toast.success('✅ פידבק חיובי נשמר - המודל לומד מזה!');
+      } else if (rating === 'rejected') {
+        toast.info('❌ פידבק שלילי נשמר - המודל ישתפר!');
+      }
+
+      // אין רענון אוטומטי בשיבוץ חי
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'שגיאה בשמירת פידבק';
+      toast.error(errorMsg);
+      console.error('Feedback error:', error);
+    }
+  };
+
   const getMahlakaColor = (mahlakaId) => {
     const mahlaka = mahalkot.find(m => m.id === mahlakaId);
     return mahlaka?.color || '#6B7280';
@@ -113,9 +144,12 @@ const LiveSchedule = () => {
       s.role !== 'נהג' && s.role !== 'driver'
     );
 
-    // בדוק כמה מחלקות שונות יש במשימה (ללא נהגים)
+    // אם אין חיילים רגילים, כלול גם נהגים בחישוב (כדי שנהגים יקבלו צבע)
+    const soldiersForColor = nonDriverSoldiers.length > 0 ? nonDriverSoldiers : soldiers;
+
+    // בדוק כמה מחלקות שונות יש במשימה
     const mahalkotSet = new Set(
-      nonDriverSoldiers.map(s => s.mahlaka_id).filter(id => id != null)
+      soldiersForColor.map(s => s.mahlaka_id).filter(id => id != null)
     );
 
     // אם יש 2+ מחלקות = פלוגתי (צהוב)
@@ -492,6 +526,29 @@ const LiveSchedule = () => {
                                     {(!assignment.soldiers || assignment.soldiers.length === 0) && (
                                       <div className="text-xs opacity-80 italic bg-red-500/30 px-2 py-1 rounded border border-red-400/50">
                                         אין חיילים משובצים
+                                      </div>
+                                    )}
+
+                                    {/* Feedback Buttons - Only for commanders */}
+                                    {(user.role === 'מפ' || user.role === 'ממ') && (
+                                      <div
+                                        className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <button
+                                          onClick={() => handleFeedback(assignment.id, 'approved')}
+                                          className="flex-1 bg-green-500/80 hover:bg-green-600 text-white text-[10px] font-bold py-1 px-2 rounded shadow-sm transition-all hover:scale-105"
+                                          title="אישור - המודל ילמד מזה"
+                                        >
+                                          ✓
+                                        </button>
+                                        <button
+                                          onClick={() => handleFeedback(assignment.id, 'rejected')}
+                                          className="flex-1 bg-red-500/80 hover:bg-red-600 text-white text-[10px] font-bold py-1 px-2 rounded shadow-sm transition-all hover:scale-105"
+                                          title="דחייה - המודל ישתפר"
+                                        >
+                                          ✗
+                                        </button>
                                       </div>
                                     )}
                                   </div>

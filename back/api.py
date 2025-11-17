@@ -4230,19 +4230,26 @@ def ml_feedback(current_user):
 
     try:
         data = request.get_json()
+
+        # הדפס את הבקשה לדיבאג
+        print(f"📥 ML Feedback request: {data}")
+
         assignment_id = data.get('assignment_id')
         shavzak_id = data.get('shavzak_id')
         rating = data.get('rating')
         changes = data.get('changes')
         enable_auto_regeneration = data.get('enable_auto_regeneration', True)
 
-        # בדיקת שדות חובה
-        if not assignment_id:
-            return jsonify({'error': 'חסר assignment_id'}), 400
-        if not shavzak_id:
-            return jsonify({'error': 'חסר shavzak_id'}), 400
+        # בדיקת שדות חובה - שימוש ב-is None במקום not כדי לאפשר 0
+        if assignment_id is None:
+            print(f"❌ חסר assignment_id: {data}")
+            return jsonify({'error': 'חסר assignment_id', 'received_data': data}), 400
+        if shavzak_id is None:
+            print(f"❌ חסר shavzak_id: {data}")
+            return jsonify({'error': 'חסר shavzak_id', 'received_data': data}), 400
         if not rating or rating not in ['approved', 'rejected', 'modified']:
-            return jsonify({'error': 'rating לא תקין'}), 400
+            print(f"❌ rating לא תקין: {rating}, data: {data}")
+            return jsonify({'error': 'rating לא תקין', 'received_rating': rating, 'expected': ['approved', 'rejected', 'modified']}), 400
 
         # טען משימה
         assignment = session.get(Assignment, assignment_id)

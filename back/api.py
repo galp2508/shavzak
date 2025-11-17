@@ -4244,9 +4244,6 @@ def ml_feedback(current_user):
         if assignment_id is None:
             print(f"❌ חסר assignment_id: {data}")
             return jsonify({'error': 'חסר assignment_id', 'received_data': data}), 400
-        if shavzak_id is None:
-            print(f"❌ חסר shavzak_id: {data}")
-            return jsonify({'error': 'חסר shavzak_id', 'received_data': data}), 400
         if not rating or rating not in ['approved', 'rejected', 'modified']:
             print(f"❌ rating לא תקין: {rating}, data: {data}")
             return jsonify({'error': 'rating לא תקין', 'received_rating': rating, 'expected': ['approved', 'rejected', 'modified']}), 400
@@ -4255,6 +4252,16 @@ def ml_feedback(current_user):
         assignment = session.get(Assignment, assignment_id)
         if not assignment:
             return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        # אם shavzak_id לא סופק, נסה למצוא אותו דרך המשימה
+        if shavzak_id is None:
+            shavzak_id = assignment.shavzak_id
+            print(f"ℹ️ shavzak_id לא סופק, נמצא דרך assignment: {shavzak_id}")
+
+        # וודא ש-shavzak_id קיים
+        if shavzak_id is None:
+            print(f"❌ לא ניתן למצוא shavzak_id: {data}")
+            return jsonify({'error': 'חסר shavzak_id ולא ניתן למצוא אותו דרך המשימה', 'received_data': data}), 400
 
         # הוסף פידבק
         assignment_data = {

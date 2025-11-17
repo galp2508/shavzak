@@ -61,6 +61,30 @@ const ShavzakView = () => {
     return mahlaka?.color || '#6B7280'; // gray-500 as default
   };
 
+  // קבע צבע לפי פלוגתי/מחלקתי
+  const getAssignmentColor = (assignment) => {
+    const soldiers = assignment.soldiers || [];
+    if (soldiers.length === 0) return '#9CA3AF'; // אפור אם אין חיילים
+
+    // בדוק כמה מחלקות שונות יש במשימה
+    const mahalkotSet = new Set(
+      soldiers.map(s => s.mahlaka_id).filter(id => id != null)
+    );
+
+    // אם יש 2+ מחלקות = פלוגתי (צהוב)
+    if (mahalkotSet.size >= 2) {
+      return '#FBBF24'; // צהוב זהב לפלוגתי
+    }
+
+    // אם יש מחלקה אחת = צבע המחלקה
+    if (mahalkotSet.size === 1) {
+      const mahlakaId = Array.from(mahalkotSet)[0];
+      return getMahlakaColor(mahlakaId);
+    }
+
+    return '#9CA3AF'; // אפור כברירת מחדל
+  };
+
   const handleDeleteAssignment = async (assignmentId) => {
     if (!window.confirm('האם אתה בטוח שברצונך למחוק את המשימה?')) {
       return;
@@ -213,6 +237,7 @@ const ShavzakView = () => {
           assignments={assignments}
           sortedDays={sortedDays}
           getMahlakaColor={getMahlakaColor}
+          getAssignmentColor={getAssignmentColor}
           handleDuplicateAssignment={handleDuplicateAssignment}
           handleDeleteAssignment={handleDeleteAssignment}
           userRole={user.role}
@@ -241,18 +266,16 @@ const ShavzakView = () => {
                     const lengthInHours = assignment.length_in_hours || 1;
                     const endHour = startHour + lengthInHours;
                     const soldiers = assignment.soldiers || [];
-                    // משימות מעורבבות (לא מחלקתיות) מקבלות צבע נטרלי אפור
-                    const mahlakaColor = assignment.assigned_mahlaka_id
-                      ? getMahlakaColor(assignment.assigned_mahlaka_id)
-                      : '#9CA3AF'; // צבע אפור נטרלי למשימות מעורבבות
+                    // צבע לפי פלוגתי (2+ מחלקות = צהוב) או מחלקתי (צבע המחלקה)
+                    const assignmentColor = getAssignmentColor(assignment);
 
                     return (
                       <div
                         key={assignment.id}
                         className="p-4 rounded-lg hover:shadow-md transition-all"
                         style={{
-                          backgroundColor: `${mahlakaColor}15`,
-                          borderRight: `4px solid ${mahlakaColor}`
+                          backgroundColor: `${assignmentColor}15`,
+                          borderRight: `4px solid ${assignmentColor}`
                         }}
                       >
                         <div className="flex items-center justify-between mb-3">
@@ -261,7 +284,7 @@ const ShavzakView = () => {
                               <h3 className="font-bold text-gray-900">{assignment.name || 'משימה'}</h3>
                               <span
                                 className="text-xs px-2 py-1 rounded-full text-white font-medium"
-                                style={{ backgroundColor: mahlakaColor }}
+                                style={{ backgroundColor: assignmentColor }}
                               >
                                 {assignment.type || 'כללי'}
                               </span>
@@ -359,7 +382,7 @@ const ShavzakView = () => {
 };
 
 // Timeline View Component
-const TimelineView = ({ assignments, sortedDays, getMahlakaColor, handleDuplicateAssignment, handleDeleteAssignment, userRole, openDropdown, setOpenDropdown }) => {
+const TimelineView = ({ assignments, sortedDays, getMahlakaColor, getAssignmentColor, handleDuplicateAssignment, handleDeleteAssignment, userRole, openDropdown, setOpenDropdown }) => {
   // מציאת טווח השעות
   const hours = [];
   let minHour = 24;
@@ -421,9 +444,8 @@ const TimelineView = ({ assignments, sortedDays, getMahlakaColor, handleDuplicat
                   <div key={`${day}-${hour}`} className="relative min-h-[60px] border border-gray-200 rounded p-1">
                     {assignmentsInHour.map((assignment, idx) => {
                       const startHour = assignment.start_hour || 0;
-                      const mahlakaColor = assignment.assigned_mahlaka_id
-                        ? getMahlakaColor(assignment.assigned_mahlaka_id)
-                        : '#6B7280';
+                      // צבע לפי פלוגתי (2+ מחלקות = צהוב) או מחלקתי (צבע המחלקה)
+                      const assignmentColor = getAssignmentColor(assignment);
 
                       // הצג את המשימה רק בשעת ההתחלה שלה
                       if (startHour === hour) {
@@ -433,8 +455,8 @@ const TimelineView = ({ assignments, sortedDays, getMahlakaColor, handleDuplicat
                             key={assignment.id}
                             className="p-2 rounded text-xs mb-1 relative group"
                             style={{
-                              backgroundColor: `${mahlakaColor}30`,
-                              borderRight: `3px solid ${mahlakaColor}`,
+                              backgroundColor: `${assignmentColor}30`,
+                              borderRight: `3px solid ${assignmentColor}`,
                               minHeight: `${(assignment.length_in_hours || 1) * 50}px`
                             }}
                           >

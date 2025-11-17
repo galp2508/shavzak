@@ -1782,7 +1782,8 @@ def generate_shavzak(shavzak_id, current_user):
                     'certifications': cert_list,
                     'unavailable_dates': unavailable_dates,
                     'hatash_2_days': soldier.hatash_2_days,
-                    'status_type': status.status_type if status else 'בבסיס'
+                    'status_type': status.status_type if status else 'בבסיס',
+                    'mahlaka_id': mahlaka.id  # חשוב ל-ML!
                 }
 
                 if soldier.role in ['ממ', 'מכ', 'סמל']:
@@ -1913,31 +1914,36 @@ def generate_shavzak(shavzak_id, current_user):
                 available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
                 available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
                 available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
-                
-                # בחירת פונקציית שיבוץ
-                result = None
-                if assign_data['type'] == 'סיור':
-                    result = logic.assign_patrol(assign_data, available_mahalkot, schedules, mahlaka_workload)
-                elif assign_data['type'] == 'שמירה':
-                    result = logic.assign_guard(assign_data, available_soldiers, schedules)
-                elif assign_data['type'] == 'כוננות א':
-                    result = logic.assign_standby_a(assign_data, available_commanders, available_drivers, 
-                                                    available_soldiers, schedules)
-                elif assign_data['type'] == 'כוננות ב':
-                    result = logic.assign_standby_b(assign_data, available_commanders, available_soldiers, schedules)
-                elif assign_data['type'] == 'חמל':
-                    result = logic.assign_operations(assign_data, available_commanders + available_soldiers, schedules)
-                elif assign_data['type'] == 'תורן מטבח':
-                    result = logic.assign_kitchen(assign_data, available_soldiers, schedules)
-                elif assign_data['type'] == 'חפק גשש':
-                    result = logic.assign_hafak_gashash(assign_data, available_soldiers, schedules)
-                elif assign_data['type'] == 'שלז':
-                    result = logic.assign_shalaz(assign_data, available_soldiers, schedules)
-                elif assign_data['type'] == 'קצין תורן':
-                    result = logic.assign_duty_officer(assign_data, available_commanders, schedules)
-                else:
-                    # ברירת מחדל - שמירה
-                    result = logic.assign_guard(assign_data, available_soldiers, schedules)
+
+                # שימוש ב-SmartScheduler (ML) - מערכת חכמה שלומדת מפידבק!
+                all_available = available_commanders + available_drivers + available_soldiers
+                result = smart_scheduler.assign_task(assign_data, all_available, schedules, mahlaka_workload)
+
+                # אם ML נכשל - נסה עם AssignmentLogic הישן (גיבוי)
+                if not result:
+                    print(f"🔄 ML נכשל ל-{assign_data['name']}, מנסה עם AssignmentLogic...")
+                    if assign_data['type'] == 'סיור':
+                        result = logic.assign_patrol(assign_data, available_mahalkot, schedules, mahlaka_workload)
+                    elif assign_data['type'] == 'שמירה':
+                        result = logic.assign_guard(assign_data, available_soldiers, schedules)
+                    elif assign_data['type'] == 'כוננות א':
+                        result = logic.assign_standby_a(assign_data, available_commanders, available_drivers,
+                                                        available_soldiers, schedules)
+                    elif assign_data['type'] == 'כוננות ב':
+                        result = logic.assign_standby_b(assign_data, available_commanders, available_soldiers, schedules)
+                    elif assign_data['type'] == 'חמל':
+                        result = logic.assign_operations(assign_data, available_commanders + available_soldiers, schedules)
+                    elif assign_data['type'] == 'תורן מטבח':
+                        result = logic.assign_kitchen(assign_data, available_soldiers, schedules)
+                    elif assign_data['type'] == 'חפק גשש':
+                        result = logic.assign_hafak_gashash(assign_data, available_soldiers, schedules)
+                    elif assign_data['type'] == 'שלז':
+                        result = logic.assign_shalaz(assign_data, available_soldiers, schedules)
+                    elif assign_data['type'] == 'קצין תורן':
+                        result = logic.assign_duty_officer(assign_data, available_commanders, schedules)
+                    else:
+                        # ברירת מחדל - שמירה
+                        result = logic.assign_guard(assign_data, available_soldiers, schedules)
                 
                 if result:
                     # שמירת משימה ב-DB
@@ -2059,16 +2065,23 @@ def generate_shavzak(shavzak_id, current_user):
                     pass
         
         session.commit()
-        
+
         # חישוב סטטיסטיקות
         total_assignments = session.query(Assignment).filter_by(shavzak_id=shavzak_id).count()
-        
+
+        # עדכון וושמירת מודל ML
+        smart_scheduler.stats['total_assignments'] += total_assignments
+        smart_scheduler.stats['successful_assignments'] += total_assignments
+        smart_scheduler.save_model(ML_MODEL_PATH)
+        print(f"✅ מודל ML נשמר עם {total_assignments} משימות חדשות")
+
         return jsonify({
-            'message': 'שיבוץ בוצע בהצלחה',
+            'message': 'שיבוץ בוצע בהצלחה (ML חכם!)',
             'warnings': logic.warnings,
             'stats': {
                 'total_assignments': total_assignments,
-                'emergency_assignments': len(logic.warnings)
+                'emergency_assignments': len(logic.warnings),
+                'ml_stats': smart_scheduler.get_stats()
             }
         }), 200
         

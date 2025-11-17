@@ -17,6 +17,8 @@ const SmartSchedule = () => {
   const [mlStats, setMlStats] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [currentShavzakId, setCurrentShavzakId] = useState(null);
+  const [iterationInfo, setIterationInfo] = useState(null);
 
   useEffect(() => {
     const tomorrow = new Date();
@@ -70,6 +72,11 @@ const SmartSchedule = () => {
       const dateStr = date.toISOString().split('T')[0];
       const response = await api.get(`/plugot/${user.pluga_id}/live-schedule?date=${dateStr}`);
       setScheduleData(response.data);
+
+      // נסה למצוא את שיבוץ ה-ID אם יש
+      if (response.data.schedules && response.data.schedules.length > 0) {
+        setCurrentShavzakId(response.data.schedules[0].id);
+      }
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה בטעינת שיבוץ');
       console.error('Load schedule error:', error);
@@ -94,7 +101,13 @@ const SmartSchedule = () => {
         days_count: 7
       });
 
-      toast.success(`🤖 ${response.data.message}`);
+      // הצג מידע על משימות שלא הצליחו
+      if (response.data.failed_assignments && response.data.failed_assignments.length > 0) {
+        toast.warning(`⚠️ ${response.data.message} - ${response.data.success_rate} הצליחו`);
+      } else {
+        toast.success(`🤖 ${response.data.message}`);
+      }
+
       loadSchedule(currentDate);
       loadMLStats();
     } catch (error) {
@@ -107,13 +120,47 @@ const SmartSchedule = () => {
 
   const handleFeedback = async (assignmentId, rating) => {
     try {
-      await api.post('/ml/feedback', {
+      const response = await api.post('/ml/feedback', {
         assignment_id: assignmentId,
-        rating: rating
+        shavzak_id: currentShavzakId,
+        rating: rating,
+        enable_auto_regeneration: true
       });
 
-      toast.success(rating === 'approved' ? '✅ תודה על הפידבק!' : '❌ הפידבק נשמר - נשתפר!');
-      loadMLStats();
+      // הצג הודעה מהשרת
+      toast.success(response.data.message);
+
+      // בדוק אם צריך ליצור שיבוץ חדש
+      if (response.data.needs_regeneration && rating === 'rejected') {
+        toast.info('🔄 יוצר שיבוץ חדש משופר...', { autoClose: 3000 });
+
+        // המתן קצר ואז צור שיבוץ חדש
+        setTimeout(async () => {
+          try {
+            const regenerateResponse = await api.post('/ml/regenerate-schedule', {
+              shavzak_id: currentShavzakId,
+              reason: 'פידבק שלילי - יצירת שיבוץ משופר'
+            });
+
+            toast.success(regenerateResponse.data.message);
+
+            // הצג מידע על איטרציה
+            setIterationInfo({
+              number: regenerateResponse.data.iteration_number,
+              successRate: regenerateResponse.data.success_rate
+            });
+
+            // רענן את השיבוץ
+            loadSchedule(currentDate);
+            loadMLStats();
+          } catch (error) {
+            toast.error('שגיאה ביצירת שיבוץ חדש');
+            console.error('Regenerate error:', error);
+          }
+        }, 1500);
+      } else {
+        loadMLStats();
+      }
     } catch (error) {
       toast.error('שגיאה בשמירת פידבק');
       console.error('Feedback error:', error);
@@ -129,6 +176,36 @@ const SmartSchedule = () => {
   const getMahlakaColor = (mahlakaId) => {
     const mahlaka = mahalkot.find(m => m.id === mahlakaId);
     return mahlaka?.color || '#6B7280';
+  };
+
+  // פונקציה לקביעת צבע משימה - פלוגתי או מחלקתי
+  const getAssignmentColor = (assignment) => {
+    const soldiers = assignment.soldiers || [];
+
+    if (soldiers.length === 0) {
+      return '#9CA3AF'; // אפור למשימות ללא חיילים
+    }
+
+    // מצא את כל המחלקות השונות
+    const mahalkotSet = new Set(
+      soldiers
+        .map(s => s.mahlaka_id)
+        .filter(id => id != null)
+    );
+
+    // אם יש 2 מחלקות או יותר - פלוגתי (צהוב)
+    if (mahalkotSet.size >= 2) {
+      return '#FBBF24'; // צהוב זהב
+    }
+
+    // אם יש מחלקה אחת - צבע המחלקה
+    if (mahalkotSet.size === 1) {
+      const mahlakaId = Array.from(mahalkotSet)[0];
+      return getMahlakaColor(mahlakaId);
+    }
+
+    // ברירת מחדל
+    return '#9CA3AF';
   };
 
   const getDayName = (date) => {
@@ -274,6 +351,33 @@ const SmartSchedule = () => {
         </div>
       )}
 
+      {/* Iteration Info */}
+      {iterationInfo && (
+        <div className="card bg-gradient-to-r from-green-50 to-emerald-50 border-l-4 border-green-500">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-green-500 bg-opacity-20 p-2 rounded-full">
+                <RefreshCw className="w-5 h-5 text-green-600 animate-spin" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-green-800">
+                  איטרציה #{iterationInfo.number} - השיבוץ שופר!
+                </div>
+                <div className="text-xs text-green-600">
+                  אחוז הצלחה: {iterationInfo.successRate}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setIterationInfo(null)}
+              className="text-green-600 hover:text-green-800 text-sm"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Keyboard Shortcuts Help */}
       <div className="card bg-blue-50 border-l-4 border-blue-500">
         <div className="flex items-center gap-2 text-blue-700">
@@ -407,9 +511,8 @@ const SmartSchedule = () => {
                               const startHour = assignment.start_hour || 0;
                               const lengthInHours = assignment.length_in_hours || 1;
                               const endHour = startHour + lengthInHours;
-                              const mahlakaColor = assignment.assigned_mahlaka_id
-                                ? getMahlakaColor(assignment.assigned_mahlaka_id)
-                                : '#9CA3AF';
+                              // שימוש בלוגיקה החדשה - פלוגתי (צהוב) או מחלקתי (צבע מחלקה)
+                              const assignmentColor = getAssignmentColor(assignment);
 
                               const topPosition = (startHour / 24) * 100;
                               const height = (lengthInHours / 24) * 100;
@@ -423,8 +526,8 @@ const SmartSchedule = () => {
                                     height: `calc(${height}% - 4px)`,
                                     left: '6px',
                                     right: '6px',
-                                    background: `linear-gradient(135deg, ${mahlakaColor} 0%, ${mahlakaColor}dd 100%)`,
-                                    borderColor: mahlakaColor,
+                                    background: `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
+                                    borderColor: assignmentColor,
                                   }}
                                 >
                                   {/* Assignment Content */}

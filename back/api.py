@@ -4116,6 +4116,8 @@ def ml_smart_schedule(current_user):
 
         created_assignments = []
 
+        failed_assignments = []  # עקוב אחר משימות שלא השתבצו
+
         for assign_data in all_assignments:
             current_date = assign_data['date']
 
@@ -4148,15 +4150,37 @@ def ml_smart_schedule(current_user):
                     **assign_data,
                     'result': result
                 })
+            else:
+                # משימה לא השתבצה - שמור לדיווח
+                failed_assignments.append(assign_data)
+                print(f"❌ לא הצלחתי לשבץ: {assign_data['name']} ({assign_data['type']}) יום {assign_data['day']} שעה {assign_data['start_hour']}")
 
         smart_scheduler.stats['total_assignments'] += len(created_assignments)
         smart_scheduler.stats['successful_assignments'] += len(created_assignments)
         smart_scheduler.save_model(ML_MODEL_PATH)
 
+        # הכן הודעה עם סטטוס
+        total_attempted = len(all_assignments)
+        success_count = len(created_assignments)
+        failed_count = len(failed_assignments)
+
+        message = f'נוצרו {success_count} משימות בהצלחה'
+        if failed_count > 0:
+            message += f' ({failed_count} משימות לא הצליחו להישבץ)'
+            print(f"\n📊 סיכום: {success_count}/{total_attempted} משימות שובצו בהצלחה")
+            print(f"⚠️  משימות שלא השתבצו:")
+            for failed in failed_assignments:
+                print(f"   - {failed['name']} ({failed['type']}) יום {failed['day']}")
+
         return jsonify({
-            'message': f'נוצרו {len(created_assignments)} משימות בהצלחה',
+            'message': message,
             'assignments': created_assignments,
-            'stats': smart_scheduler.get_stats()
+            'stats': smart_scheduler.get_stats(),
+            'failed_assignments': [
+                {'name': f['name'], 'type': f['type'], 'day': f['day'], 'start_hour': f['start_hour']}
+                for f in failed_assignments
+            ],
+            'success_rate': f"{(success_count / total_attempted * 100):.1f}%" if total_attempted > 0 else "0%"
         }), 200
 
     except Exception as e:
@@ -4172,13 +4196,15 @@ def ml_smart_schedule(current_user):
 @token_required
 def ml_feedback(current_user):
     """
-    הוספת פידבק על שיבוץ
+    הוספת פידבק על שיבוץ עם לולאת למידה אוטומטית
 
     Body:
     {
         "assignment_id": 123,
+        "shavzak_id": 456,
         "rating": "approved" | "rejected" | "modified",
-        "changes": {...}  // אופציונלי
+        "changes": {...},  // אופציונלי
+        "enable_auto_regeneration": true  // האם להפעיל יצירה אוטומטית
     }
     """
     session = get_session(engine)
@@ -4186,8 +4212,10 @@ def ml_feedback(current_user):
     try:
         data = request.get_json()
         assignment_id = data.get('assignment_id')
+        shavzak_id = data.get('shavzak_id')
         rating = data.get('rating')
         changes = data.get('changes')
+        enable_auto_regeneration = data.get('enable_auto_regeneration', True)
 
         # טען משימה
         assignment = session.get(Assignment, assignment_id)
@@ -4201,19 +4229,474 @@ def ml_feedback(current_user):
             'name': assignment.name,
             'day': assignment.day,
             'start_hour': assignment.start_hour,
-            'length_in_hours': assignment.length_in_hours
+            'length_in_hours': assignment.length_in_hours,
+            'soldiers': [s.soldier_id for s in assignment.soldiers_assigned]
         }
 
-        smart_scheduler.add_feedback(assignment_data, rating, changes)
+        # שימוש בלולאת למידה
+        result = smart_scheduler.add_feedback_with_learning_loop(
+            shavzak_id=shavzak_id,
+            assignment=assignment_data,
+            rating=rating,
+            changes=changes
+        )
+
+        # שמור את הפידבק במסד הנתונים
+        from models import FeedbackHistory, ScheduleIteration
+
+        # מצא או צור איטרציה
+        iteration = session.query(ScheduleIteration).filter_by(
+            shavzak_id=shavzak_id,
+            is_active=True
+        ).first()
+
+        if not iteration:
+            # צור איטרציה ראשונה
+            last_iteration = session.query(ScheduleIteration).filter_by(
+                shavzak_id=shavzak_id
+            ).order_by(ScheduleIteration.iteration_number.desc()).first()
+
+            iteration_number = last_iteration.iteration_number + 1 if last_iteration else 1
+
+            iteration = ScheduleIteration(
+                shavzak_id=shavzak_id,
+                iteration_number=iteration_number,
+                is_active=True,
+                status='pending',
+                created_by=current_user.id
+            )
+            session.add(iteration)
+            session.commit()
+
+        # שמור את הפידבק
+        feedback = FeedbackHistory(
+            shavzak_id=shavzak_id,
+            iteration_id=iteration.id,
+            assignment_id=assignment_id,
+            rating=rating,
+            feedback_text=changes.get('feedback_text') if changes else None,
+            changes=json.dumps(changes) if changes else None,
+            user_id=current_user.id,
+            triggered_new_iteration=result['needs_regeneration']
+        )
+        session.add(feedback)
+
+        # עדכן מצב האיטרציה
+        if rating == 'approved':
+            iteration.status = 'approved'
+        elif rating == 'rejected':
+            iteration.status = 'rejected'
+            if result['needs_regeneration'] and enable_auto_regeneration:
+                # הפוך את האיטרציה הנוכחית ללא פעילה
+                iteration.is_active = False
+                iteration.status = 'superseded'
+        elif rating == 'modified':
+            iteration.status = 'modified'
+
+        session.commit()
         smart_scheduler.save_model(ML_MODEL_PATH)
 
-        return jsonify({
-            'message': 'פידבק נוסף בהצלחה',
-            'stats': smart_scheduler.get_stats()
-        }), 200
+        response = {
+            'message': result['message'],
+            'stats': smart_scheduler.get_stats(),
+            'needs_regeneration': result['needs_regeneration'],
+            'iteration_status': result['iteration_status'],
+            'feedback_id': feedback.id,
+            'iteration_id': iteration.id
+        }
+
+        return jsonify(response), 200
 
     except Exception as e:
         print(f"🔴 שגיאה בהוספת פידבק: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/ml/regenerate-schedule', methods=['POST'])
+@token_required
+def ml_regenerate_schedule(current_user):
+    """
+    יצירת איטרציה חדשה של שיבוץ אחרי פידבק שלילי
+
+    Body:
+    {
+        "shavzak_id": 123,
+        "reason": "פידבק שלילי - יצירת שיבוץ משופר"
+    }
+    """
+    session = get_session(engine)
+
+    try:
+        data = request.get_json()
+        shavzak_id = data.get('shavzak_id')
+        reason = data.get('reason', 'יצירת איטרציה חדשה')
+
+        # טען שיבוץ
+        from models import Shavzak, ScheduleIteration, Assignment, AssignmentSoldier
+        shavzak = session.get(Shavzak, shavzak_id)
+        if not shavzak:
+            return jsonify({'error': 'שיבוץ לא נמצא'}), 404
+
+        # בדוק הרשאות
+        if not can_view_pluga(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לשיבוץ זה'}), 403
+
+        # מצא את האיטרציה האחרונה
+        last_iteration = session.query(ScheduleIteration).filter_by(
+            shavzak_id=shavzak_id
+        ).order_by(ScheduleIteration.iteration_number.desc()).first()
+
+        new_iteration_number = last_iteration.iteration_number + 1 if last_iteration else 1
+
+        # צור איטרציה חדשה
+        new_iteration = ScheduleIteration(
+            shavzak_id=shavzak_id,
+            iteration_number=new_iteration_number,
+            is_active=True,
+            status='pending',
+            created_by=current_user.id
+        )
+        session.add(new_iteration)
+
+        # מחק את השיבוצים הישנים
+        old_assignments = session.query(Assignment).filter_by(shavzak_id=shavzak_id).all()
+        for assignment in old_assignments:
+            # מחק קודם את AssignmentSoldier
+            session.query(AssignmentSoldier).filter_by(assignment_id=assignment.id).delete()
+            session.delete(assignment)
+
+        session.commit()
+
+        # כעת צור שיבוץ חדש עם ה-ML המשופר
+        # השתמש באותו קוד של ml_smart_schedule
+        from datetime import timedelta
+        from models import Mahlaka, AssignmentTemplate, Soldier, UnavailableDate, Certification, SoldierStatus
+
+        pluga_id = shavzak.pluga_id
+        start_date = shavzak.start_date
+        days_count = shavzak.days_count
+
+        # טען נתונים
+        mahalkot = session.query(Mahlaka).filter_by(pluga_id=pluga_id).all()
+        templates = session.query(AssignmentTemplate).filter_by(pluga_id=pluga_id).all()
+
+        if not templates:
+            return jsonify({'error': 'אין תבניות משימות במערכת'}), 400
+
+        # בנה מבנה נתונים
+        mahalkot_data = []
+        for mahlaka in mahalkot:
+            soldiers = session.query(Soldier).filter_by(mahlaka_id=mahlaka.id).all()
+
+            commanders = []
+            drivers = []
+            regular_soldiers = []
+
+            for soldier in soldiers:
+                unavailable = session.query(UnavailableDate).filter(
+                    UnavailableDate.soldier_id == soldier.id,
+                    UnavailableDate.date >= start_date,
+                    UnavailableDate.date < start_date + timedelta(days=days_count)
+                ).all()
+
+                unavailable_dates = [u.date for u in unavailable]
+
+                certifications = session.query(Certification).filter_by(soldier_id=soldier.id).all()
+                cert_list = [c.certification_name for c in certifications]
+
+                status = session.query(SoldierStatus).filter_by(soldier_id=soldier.id).first()
+
+                soldier_data = {
+                    'id': soldier.id,
+                    'name': soldier.name,
+                    'role': soldier.role,
+                    'kita': soldier.kita,
+                    'certifications': cert_list,
+                    'unavailable_dates': unavailable_dates,
+                    'hatash_2_days': soldier.hatash_2_days,
+                    'status_type': status.status_type if status else 'בבסיס',
+                    'mahlaka_id': mahlaka.id
+                }
+
+                if soldier.role in ['ממ', 'מכ', 'סמל']:
+                    commanders.append(soldier_data)
+                if soldier.role == 'נהג' or 'נהג' in cert_list:
+                    drivers.append(soldier_data)
+                if soldier.role not in ['ממ', 'מכ', 'סמל']:
+                    regular_soldiers.append(soldier_data)
+
+            mahalkot_data.append({
+                'id': mahlaka.id,
+                'number': mahlaka.number,
+                'commanders': commanders,
+                'drivers': drivers,
+                'soldiers': regular_soldiers
+            })
+
+        # פונקציה לבדיקת זמינות
+        def is_soldier_available(soldier_data, check_date):
+            if soldier_data.get('status_type') == 'ריתוק':
+                return False
+
+            if check_date in soldier_data.get('unavailable_dates', []):
+                return False
+
+            hatash_2_days = soldier_data.get('hatash_2_days')
+            if hatash_2_days:
+                day_of_week = check_date.weekday()
+                day_of_week = (day_of_week + 1) % 7
+                hatash_days_list = hatash_2_days.split(',')
+                if str(day_of_week) in hatash_days_list:
+                    return False
+
+            return True
+
+        # יצירת משימות
+        all_assignments = []
+        for day in range(days_count):
+            current_date = start_date + timedelta(days=day)
+
+            for template in templates:
+                for slot in range(template.times_per_day):
+                    if template.start_hour is not None:
+                        start_hour = template.start_hour + (slot * template.length_in_hours)
+                    else:
+                        start_hour = slot * template.length_in_hours
+
+                    assign_data = {
+                        'name': template.name,
+                        'type': template.assignment_type,
+                        'day': day,
+                        'start_hour': start_hour,
+                        'length_in_hours': template.length_in_hours,
+                        'commanders_needed': template.commanders_needed,
+                        'drivers_needed': template.drivers_needed,
+                        'soldiers_needed': template.soldiers_needed,
+                        'same_mahlaka_required': template.same_mahlaka_required,
+                        'requires_certification': template.requires_certification,
+                        'date': current_date
+                    }
+
+                    all_assignments.append(assign_data)
+
+        # מיון
+        def assignment_priority(assign):
+            is_standby = assign['type'] in ['כוננות א', 'כוננות ב']
+            priority = 1 if is_standby else 0
+            return (assign['day'], assign['start_hour'], priority)
+
+        all_assignments.sort(key=assignment_priority)
+
+        # הרצת ML (המודל למד מהפידבקים!)
+        schedules = {}
+        mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
+
+        all_commanders = [c for m in mahalkot_data for c in m['commanders']]
+        all_drivers = [d for m in mahalkot_data for d in m['drivers']]
+        all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]
+
+        created_assignments = []
+        failed_assignments = []  # עקוב אחר משימות שלא השתבצו
+
+        for assign_data in all_assignments:
+            current_date = assign_data['date']
+
+            # סינון לפי זמינות
+            available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
+            available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
+            available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
+
+            all_available = available_commanders + available_drivers + available_soldiers
+
+            # הרץ ML (עם הלמידה החדשה!)
+            result = smart_scheduler.assign_task(assign_data, all_available, schedules, mahlaka_workload)
+
+            if result:
+                # עדכן schedules
+                for role_key in ['commanders', 'drivers', 'soldiers']:
+                    if role_key in result:
+                        for soldier_id in result[role_key]:
+                            if soldier_id not in schedules:
+                                schedules[soldier_id] = []
+                            schedules[soldier_id].append((
+                                assign_data['day'],
+                                assign_data['start_hour'],
+                                assign_data['start_hour'] + assign_data['length_in_hours'],
+                                assign_data['name'],
+                                assign_data['type']
+                            ))
+
+                # שמור את המשימה החדשה במסד הנתונים
+                new_assignment = Assignment(
+                    shavzak_id=shavzak_id,
+                    name=assign_data['name'],
+                    assignment_type=assign_data['type'],
+                    day=assign_data['day'],
+                    start_hour=assign_data['start_hour'],
+                    length_in_hours=assign_data['length_in_hours'],
+                    assigned_mahlaka_id=result.get('mahlaka_id')
+                )
+                session.add(new_assignment)
+                session.flush()  # כדי לקבל את ה-ID
+
+                # הוסף חיילים למשימה
+                for role_key in ['commanders', 'drivers', 'soldiers']:
+                    if role_key in result:
+                        for soldier_id in result[role_key]:
+                            role_name = 'מפקד' if role_key == 'commanders' else ('נהג' if role_key == 'drivers' else 'לוחם')
+                            assignment_soldier = AssignmentSoldier(
+                                assignment_id=new_assignment.id,
+                                soldier_id=soldier_id,
+                                role_in_assignment=role_name
+                            )
+                            session.add(assignment_soldier)
+
+                created_assignments.append({
+                    **assign_data,
+                    'result': result
+                })
+            else:
+                # משימה לא השתבצה - שמור לדיווח
+                failed_assignments.append(assign_data)
+                print(f"❌ לא הצלחתי לשבץ: {assign_data['name']} ({assign_data['type']}) יום {assign_data['day']} שעה {assign_data['start_hour']}")
+
+        session.commit()
+
+        smart_scheduler.stats['total_assignments'] += len(created_assignments)
+        smart_scheduler.stats['successful_assignments'] += len(created_assignments)
+        smart_scheduler.save_model(ML_MODEL_PATH)
+
+        # הכן הודעה עם סטטוס
+        total_attempted = len(all_assignments)
+        success_count = len(created_assignments)
+        failed_count = len(failed_assignments)
+
+        message = f'✅ נוצרה איטרציה חדשה ({new_iteration_number}) עם {success_count} משימות'
+        if failed_count > 0:
+            message += f' ({failed_count} משימות לא הצליחו להישבץ)'
+            print(f"\n📊 סיכום איטרציה {new_iteration_number}: {success_count}/{total_attempted} משימות שובצו")
+            print(f"⚠️  משימות שלא השתבצו:")
+            for failed in failed_assignments:
+                print(f"   - {failed['name']} ({failed['type']}) יום {failed['day']}")
+
+        return jsonify({
+            'message': message,
+            'iteration_id': new_iteration.id,
+            'iteration_number': new_iteration_number,
+            'assignments_count': success_count,
+            'stats': smart_scheduler.get_stats(),
+            'reason': reason,
+            'failed_assignments': [
+                {'name': f['name'], 'type': f['type'], 'day': f['day'], 'start_hour': f['start_hour']}
+                for f in failed_assignments
+            ],
+            'success_rate': f"{(success_count / total_attempted * 100):.1f}%" if total_attempted > 0 else "0%"
+        }), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה ביצירת איטרציה חדשה: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route('/api/ml/feedback-history/<int:shavzak_id>', methods=['GET'])
+@token_required
+def ml_feedback_history(current_user, shavzak_id):
+    """
+    קבלת היסטוריית פידבקים ואיטרציות לשיבוץ
+
+    Returns:
+    {
+        "iterations": [
+            {
+                "id": 1,
+                "iteration_number": 1,
+                "status": "approved",
+                "is_active": false,
+                "created_at": "2025-01-01T10:00:00",
+                "feedbacks": [...]
+            }
+        ],
+        "current_iteration": {...},
+        "total_feedbacks": 5
+    }
+    """
+    session = get_session(engine)
+
+    try:
+        from models import Shavzak, ScheduleIteration, FeedbackHistory
+
+        # טען שיבוץ
+        shavzak = session.get(Shavzak, shavzak_id)
+        if not shavzak:
+            return jsonify({'error': 'שיבוץ לא נמצא'}), 404
+
+        # בדוק הרשאות
+        if not can_view_pluga(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לשיבוץ זה'}), 403
+
+        # טען את כל האיטרציות
+        iterations = session.query(ScheduleIteration).filter_by(
+            shavzak_id=shavzak_id
+        ).order_by(ScheduleIteration.iteration_number).all()
+
+        iterations_data = []
+        current_iteration = None
+
+        for iteration in iterations:
+            # טען פידבקים לאיטרציה
+            feedbacks = session.query(FeedbackHistory).filter_by(
+                iteration_id=iteration.id
+            ).order_by(FeedbackHistory.created_at).all()
+
+            feedbacks_data = []
+            for feedback in feedbacks:
+                feedbacks_data.append({
+                    'id': feedback.id,
+                    'rating': feedback.rating,
+                    'feedback_text': feedback.feedback_text,
+                    'changes': json.loads(feedback.changes) if feedback.changes else None,
+                    'user_id': feedback.user_id,
+                    'created_at': feedback.created_at.isoformat(),
+                    'triggered_new_iteration': feedback.triggered_new_iteration
+                })
+
+            iteration_data = {
+                'id': iteration.id,
+                'iteration_number': iteration.iteration_number,
+                'status': iteration.status,
+                'is_active': iteration.is_active,
+                'created_at': iteration.created_at.isoformat(),
+                'feedbacks': feedbacks_data,
+                'feedbacks_count': len(feedbacks_data)
+            }
+
+            iterations_data.append(iteration_data)
+
+            if iteration.is_active:
+                current_iteration = iteration_data
+
+        # סך כל הפידבקים
+        total_feedbacks = session.query(FeedbackHistory).filter_by(
+            shavzak_id=shavzak_id
+        ).count()
+
+        return jsonify({
+            'iterations': iterations_data,
+            'current_iteration': current_iteration,
+            'total_iterations': len(iterations_data),
+            'total_feedbacks': total_feedbacks
+        }), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה בקבלת היסטוריית פידבקים: {str(e)}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:

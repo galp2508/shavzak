@@ -282,6 +282,62 @@ class SchedulingConstraint(Base):
     mahlaka = relationship("Mahlaka", foreign_keys=[mahlaka_id])
 
 
+class ScheduleIteration(Base):
+    """איטרציה של שיבוץ - כל ניסיון ליצור שיבוץ"""
+    __tablename__ = 'schedule_iterations'
+
+    id = Column(Integer, primary_key=True)
+    shavzak_id = Column(Integer, ForeignKey('shavzakim.id'), nullable=False)
+    iteration_number = Column(Integer, nullable=False)  # מספר הניסיון (1, 2, 3...)
+
+    # האם זו האיטרציה הפעילה הנוכחית
+    is_active = Column(Boolean, default=True)
+
+    # מצב האיטרציה
+    status = Column(String(20), default='pending')  # 'pending', 'approved', 'rejected', 'superseded'
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+
+    # קישור לשיבוץ המקורי
+    shavzak = relationship("Shavzak")
+
+    # היסטוריית הפידבקים על האיטרציה הזו
+    feedbacks = relationship("FeedbackHistory", back_populates="iteration", cascade="all, delete-orphan")
+
+
+class FeedbackHistory(Base):
+    """היסטוריית פידבק על שיבוצים"""
+    __tablename__ = 'feedback_history'
+
+    id = Column(Integer, primary_key=True)
+    shavzak_id = Column(Integer, ForeignKey('shavzakim.id'), nullable=False)
+    iteration_id = Column(Integer, ForeignKey('schedule_iterations.id'), nullable=True)
+    assignment_id = Column(Integer, ForeignKey('assignments.id'), nullable=True)
+
+    # פרטי הפידבק
+    rating = Column(String(20), nullable=False)  # 'approved', 'rejected', 'modified'
+    feedback_text = Column(Text, nullable=True)  # הסבר מילולי
+
+    # שינויים שבוצעו (JSON)
+    changes = Column(Text, nullable=True)  # JSON של השינויים שהמשתמש ביקש
+
+    # מי נתן את הפידבק
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+
+    # מתי
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # האם הפידבק הזה גרם ליצירת איטרציה חדשה
+    triggered_new_iteration = Column(Boolean, default=False)
+
+    # קישורים
+    shavzak = relationship("Shavzak")
+    iteration = relationship("ScheduleIteration", back_populates="feedbacks")
+    assignment = relationship("Assignment")
+    user = relationship("User")
+
+
 def init_db(db_path='shavzak.db'):
     """אתחול מסד הנתונים"""
     engine = create_engine(f'sqlite:///{db_path}', echo=False)

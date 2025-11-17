@@ -106,11 +106,16 @@ const LiveSchedule = () => {
   // קבע צבע לפי פלוגתי/מחלקתי
   const getAssignmentColor = (assignment) => {
     const soldiers = assignment.soldiers || [];
-    if (soldiers.length === 0) return '#9CA3AF'; // אפור אם אין חיילים
+    if (soldiers.length === 0) return '#FBBF24'; // צהוב כברירת מחדל אם אין חיילים
 
-    // בדוק כמה מחלקות שונות יש במשימה
+    // סנן נהגים - רק חיילים רגילים נספרים לבדיקת מחלקות
+    const nonDriverSoldiers = soldiers.filter(s =>
+      s.role !== 'נהג' && s.role !== 'driver'
+    );
+
+    // בדוק כמה מחלקות שונות יש במשימה (ללא נהגים)
     const mahalkotSet = new Set(
-      soldiers.map(s => s.mahlaka_id).filter(id => id != null)
+      nonDriverSoldiers.map(s => s.mahlaka_id).filter(id => id != null)
     );
 
     // אם יש 2+ מחלקות = פלוגתי (צהוב)
@@ -124,7 +129,7 @@ const LiveSchedule = () => {
       return getMahlakaColor(mahlakaId);
     }
 
-    return '#9CA3AF'; // אפור כברירת מחדל
+    return '#FBBF24'; // צהוב כברירת מחדל
   };
 
   const getDayName = (date) => {

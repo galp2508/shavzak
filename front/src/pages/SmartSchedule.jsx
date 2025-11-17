@@ -183,12 +183,17 @@ const SmartSchedule = () => {
     const soldiers = assignment.soldiers || [];
 
     if (soldiers.length === 0) {
-      return '#9CA3AF'; // אפור למשימות ללא חיילים
+      return '#FBBF24'; // צהוב כברירת מחדל למשימות ללא חיילים
     }
 
-    // מצא את כל המחלקות השונות
+    // סנן נהגים - רק חיילים רגילים נספרים לבדיקת מחלקות
+    const nonDriverSoldiers = soldiers.filter(s =>
+      s.role !== 'נהג' && s.role !== 'driver'
+    );
+
+    // מצא את כל המחלקות השונות (ללא נהגים)
     const mahalkotSet = new Set(
-      soldiers
+      nonDriverSoldiers
         .map(s => s.mahlaka_id)
         .filter(id => id != null)
     );
@@ -204,8 +209,8 @@ const SmartSchedule = () => {
       return getMahlakaColor(mahlakaId);
     }
 
-    // ברירת מחדל
-    return '#9CA3AF';
+    // ברירת מחדל - צהוב
+    return '#FBBF24';
   };
 
   const getDayName = (date) => {

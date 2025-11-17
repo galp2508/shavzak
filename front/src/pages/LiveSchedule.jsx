@@ -106,7 +106,7 @@ const LiveSchedule = () => {
   // קבע צבע לפי פלוגתי/מחלקתי
   const getAssignmentColor = (assignment) => {
     const soldiers = assignment.soldiers || [];
-    if (soldiers.length === 0) return '#9CA3AF'; // אפור אם אין חיילים
+    if (soldiers.length === 0) return '#FBBF24'; // צהוב כברירת מחדל אם אין חיילים
 
     // סנן נהגים - רק חיילים רגילים נספרים לבדיקת מחלקות
     const nonDriverSoldiers = soldiers.filter(s =>
@@ -129,7 +129,7 @@ const LiveSchedule = () => {
       return getMahlakaColor(mahlakaId);
     }
 
-    return '#9CA3AF'; // אפור כברירת מחדל
+    return '#FBBF24'; // צהוב כברירת מחדל
   };
 
   const getDayName = (date) => {

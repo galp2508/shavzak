@@ -183,7 +183,7 @@ const SmartSchedule = () => {
     const soldiers = assignment.soldiers || [];
 
     if (soldiers.length === 0) {
-      return '#9CA3AF'; // אפור למשימות ללא חיילים
+      return '#FBBF24'; // צהוב כברירת מחדל למשימות ללא חיילים
     }
 
     // סנן נהגים - רק חיילים רגילים נספרים לבדיקת מחלקות
@@ -209,8 +209,8 @@ const SmartSchedule = () => {
       return getMahlakaColor(mahlakaId);
     }
 
-    // ברירת מחדל
-    return '#9CA3AF';
+    // ברירת מחדל - צהוב
+    return '#FBBF24';
   };
 
   const getDayName = (date) => {

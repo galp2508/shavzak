@@ -560,23 +560,22 @@ class AssignmentLogic:
                 else:
                     soldiers_from_patrols.append(participant)
 
-        # מצא מפקד בכיר (מפקד מחלקה = מ"כ)
+        # מצא מפקד בכיר - רק מכ או ממ (לא סמל!)
+        # עדיפות: 1. מכ (מפקד מחלקה), 2. ממ
         senior_commander = None
+
+        # קודם כולם - מכ (מפקד מחלקה)
         for cmd in commanders_from_patrols:
-            if cmd['role'] == 'מכ':  # מפקד מחלקה
+            if cmd['role'] == 'מכ':
                 senior_commander = cmd
                 break
 
-        # אם אין מ"כ, קח סמל
+        # אם אין מכ, קח ממ
         if not senior_commander:
             for cmd in commanders_from_patrols:
-                if cmd['role'] == 'סמל':
+                if cmd['role'] == 'ממ':
                     senior_commander = cmd
                     break
-
-        # אם אין סמל, קח ממ"ד
-        if not senior_commander and commanders_from_patrols:
-            senior_commander = commanders_from_patrols[0]
 
         # בדוק שיש מספיק לוחמים (צריך 7)
         if len(soldiers_from_patrols) < 7:
@@ -919,10 +918,12 @@ class AssignmentLogic:
         # קבל את שם ההסמכה הנדרשת מהתבנית (או ברירת מחדל 'חמל')
         required_cert = assign_data.get('requires_certification', 'חמל')
 
+        # חשוב: רק חיילים רגילים (לא מפקדים) יכולים לשמש בחמ"ל
         certified = [
             p for p in all_people
-            if required_cert in p.get('certifications', [])
-            and self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
+            if p.get('role') not in ['ממ', 'מכ', 'סמל', 'מפ'] and
+               required_cert in p.get('certifications', []) and
+               self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
                                   assign_data['start_hour'], assign_data['length_in_hours'],
                                   self.min_rest_hours)
         ]
@@ -945,10 +946,12 @@ class AssignmentLogic:
 
         if self.emergency_mode:
             reduced_rest = self.min_rest_hours // 2
+            # גם במצב חירום - רק חיילים רגילים (לא מפקדים) בחמ"ל
             certified = [
                 p for p in all_people
-                if required_cert in p.get('certifications', [])
-                and self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
+                if p.get('role') not in ['ממ', 'מכ', 'סמל', 'מפ'] and
+                   required_cert in p.get('certifications', []) and
+                   self.can_assign_at(schedules.get(p['id'], []), assign_data['day'],
                                       assign_data['start_hour'], assign_data['length_in_hours'],
                                       reduced_rest)
             ]
@@ -1167,25 +1170,29 @@ class AssignmentLogic:
     
     def assign_duty_officer(self, assign_data: Dict, all_commanders: List[Dict],
                            schedules: Dict) -> Dict:
-        """קצין תורן - מפקד בכיר, עם מקסימום שעות מנוחה"""
+        """קצין תורן - מפקד בכיר (רק מכ או ממ), עם מקסימום שעות מנוחה"""
+        # סינון: רק מכ או ממ (לא סמל!)
         senior = [
             c for c in all_commanders
-            if c['role'] in ['ממ', 'סמל', 'מכ'] or c.get('is_platoon_commander', False)
-            and self.can_assign_at(schedules.get(c['id'], []), assign_data['day'],
+            if c['role'] in ['ממ', 'מכ'] and
+               self.can_assign_at(schedules.get(c['id'], []), assign_data['day'],
                                   assign_data['start_hour'], assign_data['length_in_hours'],
                                   self.min_rest_hours)
         ]
 
         if senior:
-            # מיון לפי שעות מנוחה - מי שנח יותר קודם
-            senior.sort(
-                key=lambda x: self.calculate_rest_hours(
-                    schedules.get(x['id'], []),
+            # מיון: עדיפות למכים, אחר כך לפי מנוחה
+            def priority_key(commander):
+                # מכ מקבל בונוס גבוה
+                role_priority = 10000 if commander['role'] == 'מכ' else 0
+                rest_hours = self.calculate_rest_hours(
+                    schedules.get(commander['id'], []),
                     assign_data['day'],
                     assign_data['start_hour']
-                ),
-                reverse=True
-            )
+                )
+                return role_priority + rest_hours
+
+            senior.sort(key=priority_key, reverse=True)
             return {'commanders': [senior[0]['id']]}
 
         if self.emergency_mode:

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Shield, Plus, Trash2, X, AlertCircle } from 'lucide-react';
+import { Shield, Plus, Trash2, X, AlertCircle, MessageSquare } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const Constraints = ({ onClose, onUpdate }) => {
@@ -10,6 +10,7 @@ const Constraints = ({ onClose, onUpdate }) => {
   const [mahalkot, setMahalkot] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [feedbackConstraint, setFeedbackConstraint] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -159,15 +160,26 @@ const Constraints = ({ onClose, onUpdate }) => {
                         )}
                       </div>
                     </div>
-                    {(user.role === 'מפ' || user.role === 'ממ') && (
+                    <div className="flex gap-2">
+                      {/* כפתור פידבק */}
                       <button
-                        onClick={() => handleDelete(constraint.id)}
-                        className="text-red-600 hover:text-red-800 p-2"
-                        title="מחק"
+                        onClick={() => setFeedbackConstraint(constraint)}
+                        className="text-orange-600 hover:text-orange-800 p-2"
+                        title="דווח שהאילוץ לא התקיים"
                       >
-                        <Trash2 size={18} />
+                        <MessageSquare size={18} />
                       </button>
-                    )}
+                      {/* כפתור מחיקה */}
+                      {(user.role === 'מפ' || user.role === 'ממ') && (
+                        <button
+                          onClick={() => handleDelete(constraint.id)}
+                          className="text-red-600 hover:text-red-800 p-2"
+                          title="מחק"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -193,6 +205,15 @@ const Constraints = ({ onClose, onUpdate }) => {
             loadData();
             if (onUpdate) onUpdate();
           }}
+        />
+      )}
+
+      {/* Constraint Feedback Modal */}
+      {feedbackConstraint && (
+        <ConstraintFeedbackModal
+          constraint={feedbackConstraint}
+          plugaId={user.pluga_id}
+          onClose={() => setFeedbackConstraint(null)}
         />
       )}
     </div>
@@ -383,6 +404,173 @@ const ConstraintModal = ({ mahalkot, plugaId, onClose, onSave }) => {
               className="flex-1 btn-primary"
             >
               {loading ? 'שומר...' : 'הוסף אילוץ'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 btn-secondary"
+            >
+              ביטול
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Constraint Feedback Modal Component
+const ConstraintFeedbackModal = ({ constraint, plugaId, onClose }) => {
+  const [assignments, setAssignments] = useState([]);
+  const [formData, setFormData] = useState({
+    violated_assignment_id: '',
+    good_example_assignment_id: '',
+    notes: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [loadingAssignments, setLoadingAssignments] = useState(true);
+
+  useEffect(() => {
+    loadRecentAssignments();
+  }, []);
+
+  const loadRecentAssignments = async () => {
+    try {
+      setLoadingAssignments(true);
+      // טען משימות מהשבוע האחרון מהשיבוץ האוטומטי
+      const response = await api.get(`/plugot/${plugaId}/recent-assignments`);
+      setAssignments(response.data.assignments || []);
+    } catch (error) {
+      console.error('Error loading assignments:', error);
+      toast.error('שגיאה בטעינת משימות');
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!formData.violated_assignment_id) {
+      toast.error('יש לבחור משימה שבה האילוץ לא התקיים');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await api.post('/ml/constraint-feedback', {
+        constraint_id: constraint.id,
+        violated_assignment_id: parseInt(formData.violated_assignment_id),
+        good_example_assignment_id: formData.good_example_assignment_id ? parseInt(formData.good_example_assignment_id) : null,
+        notes: formData.notes
+      });
+
+      toast.success('✅ פידבק נשמר בהצלחה - המערכת תלמד מזה!');
+      onClose();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה בשמירת פידבק');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAssignmentLabel = (assignment) => {
+    const date = new Date(assignment.date).toLocaleDateString('he-IL');
+    const soldiers = assignment.soldiers?.map(s => s.name).join(', ') || 'אין חיילים';
+    return `${assignment.name} - ${date} ${assignment.start_hour}:00 (${soldiers})`;
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[70] p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-4 flex items-center justify-between rounded-t-xl sticky top-0 z-10">
+          <div className="flex items-center gap-3">
+            <MessageSquare size={24} />
+            <h2 className="text-xl font-bold">דיווח על אילוץ שלא התקיים</h2>
+          </div>
+          <button onClick={onClose} className="text-white hover:text-gray-200">
+            <X size={24} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* פרטי האילוץ */}
+          <div className="bg-blue-50 border-l-4 border-blue-500 p-4">
+            <p className="font-medium text-blue-900 mb-1">האילוץ:</p>
+            <p className="text-blue-800">{constraint.mahlaka_name || 'כל הפלוגה'} - {constraint.constraint_type}</p>
+            {constraint.assignment_type && (
+              <p className="text-sm text-blue-700 mt-1">משימה: {constraint.assignment_type}</p>
+            )}
+          </div>
+
+          {loadingAssignments ? (
+            <div className="flex justify-center py-8">
+              <div className="spinner"></div>
+            </div>
+          ) : (
+            <>
+              {/* משימה שבה האילוץ הופר */}
+              <div>
+                <label className="label">באיזו משימה האילוץ לא התקיים? *</label>
+                <select
+                  value={formData.violated_assignment_id}
+                  onChange={(e) => setFormData({ ...formData, violated_assignment_id: e.target.value })}
+                  className="input-field"
+                  required
+                >
+                  <option value="">בחר משימה...</option>
+                  {assignments.map(assignment => (
+                    <option key={assignment.id} value={assignment.id}>
+                      {getAssignmentLabel(assignment)}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  בחר את המשימה שבה המערכת לא כיבדה את האילוץ
+                </p>
+              </div>
+
+              {/* דוגמה טובה (אופציונלי) */}
+              <div>
+                <label className="label">דוגמה למשימה שכן התאימה (אופציונלי)</label>
+                <select
+                  value={formData.good_example_assignment_id}
+                  onChange={(e) => setFormData({ ...formData, good_example_assignment_id: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">בחר דוגמה טובה (לא חובה)...</option>
+                  {assignments.map(assignment => (
+                    <option key={assignment.id} value={assignment.id}>
+                      {getAssignmentLabel(assignment)}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  אם יש משימה שכן כיבדה את האילוץ, זה יעזור למערכת ללמוד
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* הערות */}
+          <div>
+            <label className="label">הערות נוספות (אופציונלי)</label>
+            <textarea
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="input-field"
+              rows="3"
+              placeholder="הסבר מה הייתה הבעיה והאם יש דפוס מסוים..."
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="submit"
+              disabled={loading || loadingAssignments}
+              className="flex-1 btn-primary bg-orange-600 hover:bg-orange-700"
+            >
+              {loading ? 'שומר...' : 'שלח פידבק'}
             </button>
             <button
               type="button"

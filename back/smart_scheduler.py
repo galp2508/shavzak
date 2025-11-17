@@ -125,6 +125,7 @@ class SmartScheduler:
         גבוה יותר = מתאים יותר
 
         מבוסס על:
+        0. עדיפות תפקיד (מכ קודם!)
         1. מנוחה (כמה נח)
         2. עומס עבודה (כמה עבד השבוע)
         3. דפוסים שנלמדו (האם עשה משימה כזו בעבר)
@@ -134,6 +135,10 @@ class SmartScheduler:
         """
         score = 0.0
         soldier_id = soldier['id']
+
+        # 0. עדיפות למכ - מכ מקבל בונוס גדול!
+        if soldier.get('role') == 'מכ':
+            score += 1000.0  # בונוס גדול למכים כדי שיבחרו קודם
 
         # 1. מנוחה - ככל שנח יותר, ציון גבוה יותר
         rest_hours = self._calculate_rest_hours(schedules.get(soldier_id, []),

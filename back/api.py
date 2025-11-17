@@ -4217,6 +4217,14 @@ def ml_feedback(current_user):
         changes = data.get('changes')
         enable_auto_regeneration = data.get('enable_auto_regeneration', True)
 
+        # בדיקת שדות חובה
+        if not assignment_id:
+            return jsonify({'error': 'חסר assignment_id'}), 400
+        if not shavzak_id:
+            return jsonify({'error': 'חסר shavzak_id'}), 400
+        if not rating or rating not in ['approved', 'rejected', 'modified']:
+            return jsonify({'error': 'rating לא תקין'}), 400
+
         # טען משימה
         assignment = session.get(Assignment, assignment_id)
         if not assignment:
@@ -4263,7 +4271,7 @@ def ml_feedback(current_user):
                 iteration_number=iteration_number,
                 is_active=True,
                 status='pending',
-                created_by=current_user.get('id')
+                created_by=current_user.get('user_id')
             )
             session.add(iteration)
             session.commit()
@@ -4276,7 +4284,7 @@ def ml_feedback(current_user):
             rating=rating,
             feedback_text=changes.get('feedback_text') if changes else None,
             changes=json.dumps(changes) if changes else None,
-            user_id=current_user.get('id'),
+            user_id=current_user.get('user_id'),
             triggered_new_iteration=result['needs_regeneration']
         )
         session.add(feedback)
@@ -4358,7 +4366,7 @@ def ml_regenerate_schedule(current_user):
             iteration_number=new_iteration_number,
             is_active=True,
             status='pending',
-            created_by=current_user.get('id')
+            created_by=current_user.get('user_id')
         )
         session.add(new_iteration)
 

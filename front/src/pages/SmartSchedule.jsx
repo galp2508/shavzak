@@ -4,9 +4,11 @@ import api from '../services/api';
 import {
   Calendar, ChevronLeft, ChevronRight, Clock, Users,
   RefreshCw, Brain, ThumbsUp, ThumbsDown, Upload,
-  AlertTriangle, TrendingUp, Award, Zap
+  AlertTriangle, TrendingUp, Award, Zap, Shield, Edit
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import Constraints from './Constraints';
+import AssignmentModal from '../components/AssignmentModal';
 
 const SmartSchedule = () => {
   const { user } = useAuth();
@@ -19,6 +21,9 @@ const SmartSchedule = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentShavzakId, setCurrentShavzakId] = useState(null);
   const [iterationInfo, setIterationInfo] = useState(null);
+  const [showConstraints, setShowConstraints] = useState(false);
+  const [showManualAssignModal, setShowManualAssignModal] = useState(false);
+  const [rejectedAssignment, setRejectedAssignment] = useState(null);
 
   useEffect(() => {
     const tomorrow = new Date();
@@ -124,47 +129,57 @@ const SmartSchedule = () => {
         assignment_id: assignmentId,
         shavzak_id: currentShavzakId,
         rating: rating,
-        enable_auto_regeneration: true
+        enable_auto_regeneration: false  // לא יוצר אוטומטית - נותן אופציה לשבץ ידנית
       });
 
       // הצג הודעה מהשרת
       toast.success(response.data.message);
 
-      // בדוק אם צריך ליצור שיבוץ חדש
-      if (response.data.needs_regeneration && rating === 'rejected') {
-        toast.info('🔄 יוצר שיבוץ חדש משופר...', { autoClose: 3000 });
+      // אם הפידבק שלילי - הצע לשבץ ידנית
+      if (rating === 'rejected') {
+        // מצא את המשימה ששלילית
+        const assignment = scheduleData?.schedules
+          ?.flatMap(s => s.assignments || [])
+          .find(a => a.id === assignmentId);
 
-        // המתן קצר ואז צור שיבוץ חדש
-        setTimeout(async () => {
-          try {
-            const regenerateResponse = await api.post('/ml/regenerate-schedule', {
-              shavzak_id: currentShavzakId,
-              assignment_id: assignmentId,
-              reason: 'פידבק שלילי - יצירת שיבוץ משופר'
-            });
-
-            toast.success(regenerateResponse.data.message);
-
-            // הצג מידע על איטרציה
-            setIterationInfo({
-              number: regenerateResponse.data.iteration_number,
-              successRate: regenerateResponse.data.success_rate
-            });
-
-            // רענן את השיבוץ
-            loadSchedule(currentDate);
-            loadMLStats();
-          } catch (error) {
-            toast.error('שגיאה ביצירת שיבוץ חדש');
-            console.error('Regenerate error:', error);
-          }
-        }, 1500);
-      } else {
-        loadMLStats();
+        if (assignment) {
+          setRejectedAssignment(assignment);
+          toast.info('💡 רוצה לשבץ ידנית? זה יעזור למערכת ללמוד!', {
+            autoClose: 5000,
+            onClick: () => setShowManualAssignModal(true)
+          });
+        }
       }
+
+      loadMLStats();
+      loadSchedule(currentDate);
     } catch (error) {
       toast.error('שגיאה בשמירת פידבק');
       console.error('Feedback error:', error);
+    }
+  };
+
+  const handleManualAssignmentSave = async () => {
+    try {
+      // המשימה כבר נשמרה ע"י AssignmentModal
+      // עכשיו נשלח פידבק ל-ML שהמשתמש ערך אותה ידנית
+      await api.post('/ml/feedback', {
+        assignment_id: rejectedAssignment.id,
+        shavzak_id: currentShavzakId,
+        rating: 'modified',
+        changes: {
+          feedback_text: 'המשתמש דחה את השיבוץ ואז ערך אותו ידנית - לימוד מהעריכה'
+        }
+      });
+
+      toast.success('✅ שיבוץ ידני נשמר וישמש כדוגמה למערכת!');
+      setShowManualAssignModal(false);
+      setRejectedAssignment(null);
+      loadSchedule(currentDate);
+      loadMLStats();
+    } catch (error) {
+      toast.error('שגיאה בשליחת פידבק');
+      console.error('Manual assignment error:', error);
     }
   };
 
@@ -311,6 +326,13 @@ const SmartSchedule = () => {
               </>
             )}
             <button
+              onClick={() => setShowConstraints(true)}
+              className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+              title="אילוצים ופידבק"
+            >
+              <Shield size={24} />
+            </button>
+            <button
               onClick={() => loadSchedule(currentDate)}
               className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
               title="רענן"
@@ -355,6 +377,36 @@ const SmartSchedule = () => {
               <span className="text-sm font-semibold text-gray-700">
                 נדחו: {mlStats.user_rejections}
               </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Assignment Suggestion - after rejected feedback */}
+      {rejectedAssignment && (
+        <div className="card bg-gradient-to-r from-orange-50 to-yellow-50 border-l-4 border-orange-500">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Edit className="w-6 h-6 text-orange-600" />
+              <div>
+                <p className="font-semibold text-gray-800">משימה נדחתה - רוצה לשבץ ידנית?</p>
+                <p className="text-sm text-gray-600">שיבוץ ידני ישמש כדוגמה למערכת וישפר את הלמידה</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowManualAssignModal(true)}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Edit size={18} />
+                <span>שבץ ידנית</span>
+              </button>
+              <button
+                onClick={() => setRejectedAssignment(null)}
+                className="text-gray-600 hover:text-gray-800 px-3"
+              >
+                ✕
+              </button>
             </div>
           </div>
         </div>
@@ -628,6 +680,33 @@ const SmartSchedule = () => {
             loadMLStats();
             toast.success('✅ דוגמאות הועלו בהצלחה - המודל משתפר!');
           }}
+        />
+      )}
+
+      {/* Constraints Modal */}
+      {showConstraints && (
+        <Constraints
+          onClose={() => setShowConstraints(false)}
+          onUpdate={() => {
+            loadSchedule(currentDate);
+            loadMLStats();
+          }}
+        />
+      )}
+
+      {/* Manual Assignment Modal - after rejected feedback */}
+      {showManualAssignModal && rejectedAssignment && (
+        <AssignmentModal
+          assignment={rejectedAssignment}
+          date={currentDate}
+          dayIndex={rejectedAssignment.day}
+          shavzakId={currentShavzakId}
+          plugaId={user.pluga_id}
+          onClose={() => {
+            setShowManualAssignModal(false);
+            setRejectedAssignment(null);
+          }}
+          onSave={handleManualAssignmentSave}
         />
       )}
     </div>

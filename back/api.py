@@ -2125,7 +2125,8 @@ def get_shavzak(shavzak_id, current_user):
             soldiers_list = [{
                 'id': s.Soldier.id,
                 'name': s.Soldier.name,
-                'role': s.AssignmentSoldier.role_in_assignment
+                'role': s.AssignmentSoldier.role_in_assignment,
+                'mahlaka_id': s.Soldier.mahlaka_id
             } for s in soldiers]
             
             assignments_data.append({
@@ -2354,7 +2355,8 @@ def duplicate_assignment(assignment_id, current_user):
                     soldiers.append({
                         'id': soldier.id,
                         'name': soldier.name,
-                        'role': sa.role_in_assignment
+                        'role': sa.role_in_assignment,
+                        'mahlaka_id': soldier.mahlaka_id
                     })
 
         return jsonify({
@@ -2435,7 +2437,8 @@ def create_manual_assignment(shavzak_id, current_user):
                     'id': soldier.id,
                     'name': soldier.name,
                     'role': soldier.role,
-                    'role_in_assignment': sa.role_in_assignment
+                    'role_in_assignment': sa.role_in_assignment,
+                    'mahlaka_id': soldier.mahlaka_id
                 })
 
         return jsonify({
@@ -2506,7 +2509,8 @@ def update_assignment(assignment_id, current_user):
                     'id': soldier.id,
                     'name': soldier.name,
                     'role': soldier.role,
-                    'role_in_assignment': sa.role_in_assignment
+                    'role_in_assignment': sa.role_in_assignment,
+                    'mahlaka_id': soldier.mahlaka_id
                 })
 
         return jsonify({
@@ -2576,7 +2580,8 @@ def update_assignment_soldiers(assignment_id, current_user):
                     'id': soldier.id,
                     'name': soldier.name,
                     'role': soldier.role,
-                    'role_in_assignment': sa.role_in_assignment
+                    'role_in_assignment': sa.role_in_assignment,
+                    'mahlaka_id': soldier.mahlaka_id
                 })
 
         return jsonify({
@@ -3255,7 +3260,8 @@ def get_live_schedule(pluga_id, current_user):
                         'id': soldier.id,
                         'name': soldier.name,
                         'role': soldier.role,
-                        'role_in_assignment': as_soldier.role_in_assignment
+                        'role_in_assignment': as_soldier.role_in_assignment,
+                        'mahlaka_id': soldier.mahlaka_id
                     })
 
                     # ספור לפי תפקיד

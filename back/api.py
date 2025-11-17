@@ -4116,6 +4116,8 @@ def ml_smart_schedule(current_user):
 
         created_assignments = []
 
+        failed_assignments = []  # עקוב אחר משימות שלא השתבצו
+
         for assign_data in all_assignments:
             current_date = assign_data['date']
 
@@ -4148,15 +4150,37 @@ def ml_smart_schedule(current_user):
                     **assign_data,
                     'result': result
                 })
+            else:
+                # משימה לא השתבצה - שמור לדיווח
+                failed_assignments.append(assign_data)
+                print(f"❌ לא הצלחתי לשבץ: {assign_data['name']} ({assign_data['type']}) יום {assign_data['day']} שעה {assign_data['start_hour']}")
 
         smart_scheduler.stats['total_assignments'] += len(created_assignments)
         smart_scheduler.stats['successful_assignments'] += len(created_assignments)
         smart_scheduler.save_model(ML_MODEL_PATH)
 
+        # הכן הודעה עם סטטוס
+        total_attempted = len(all_assignments)
+        success_count = len(created_assignments)
+        failed_count = len(failed_assignments)
+
+        message = f'נוצרו {success_count} משימות בהצלחה'
+        if failed_count > 0:
+            message += f' ({failed_count} משימות לא הצליחו להישבץ)'
+            print(f"\n📊 סיכום: {success_count}/{total_attempted} משימות שובצו בהצלחה")
+            print(f"⚠️  משימות שלא השתבצו:")
+            for failed in failed_assignments:
+                print(f"   - {failed['name']} ({failed['type']}) יום {failed['day']}")
+
         return jsonify({
-            'message': f'נוצרו {len(created_assignments)} משימות בהצלחה',
+            'message': message,
             'assignments': created_assignments,
-            'stats': smart_scheduler.get_stats()
+            'stats': smart_scheduler.get_stats(),
+            'failed_assignments': [
+                {'name': f['name'], 'type': f['type'], 'day': f['day'], 'start_hour': f['start_hour']}
+                for f in failed_assignments
+            ],
+            'success_rate': f"{(success_count / total_attempted * 100):.1f}%" if total_attempted > 0 else "0%"
         }), 200
 
     except Exception as e:
@@ -4476,6 +4500,7 @@ def ml_regenerate_schedule(current_user):
         all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]
 
         created_assignments = []
+        failed_assignments = []  # עקוב אחר משימות שלא השתבצו
 
         for assign_data in all_assignments:
             current_date = assign_data['date']
@@ -4534,6 +4559,10 @@ def ml_regenerate_schedule(current_user):
                     **assign_data,
                     'result': result
                 })
+            else:
+                # משימה לא השתבצה - שמור לדיווח
+                failed_assignments.append(assign_data)
+                print(f"❌ לא הצלחתי לשבץ: {assign_data['name']} ({assign_data['type']}) יום {assign_data['day']} שעה {assign_data['start_hour']}")
 
         session.commit()
 
@@ -4541,13 +4570,31 @@ def ml_regenerate_schedule(current_user):
         smart_scheduler.stats['successful_assignments'] += len(created_assignments)
         smart_scheduler.save_model(ML_MODEL_PATH)
 
+        # הכן הודעה עם סטטוס
+        total_attempted = len(all_assignments)
+        success_count = len(created_assignments)
+        failed_count = len(failed_assignments)
+
+        message = f'✅ נוצרה איטרציה חדשה ({new_iteration_number}) עם {success_count} משימות'
+        if failed_count > 0:
+            message += f' ({failed_count} משימות לא הצליחו להישבץ)'
+            print(f"\n📊 סיכום איטרציה {new_iteration_number}: {success_count}/{total_attempted} משימות שובצו")
+            print(f"⚠️  משימות שלא השתבצו:")
+            for failed in failed_assignments:
+                print(f"   - {failed['name']} ({failed['type']}) יום {failed['day']}")
+
         return jsonify({
-            'message': f'✅ נוצרה איטרציה חדשה ({new_iteration_number}) עם {len(created_assignments)} משימות',
+            'message': message,
             'iteration_id': new_iteration.id,
             'iteration_number': new_iteration_number,
-            'assignments_count': len(created_assignments),
+            'assignments_count': success_count,
             'stats': smart_scheduler.get_stats(),
-            'reason': reason
+            'reason': reason,
+            'failed_assignments': [
+                {'name': f['name'], 'type': f['type'], 'day': f['day'], 'start_hour': f['start_hour']}
+                for f in failed_assignments
+            ],
+            'success_rate': f"{(success_count / total_attempted * 100):.1f}%" if total_attempted > 0 else "0%"
         }), 200
 
     except Exception as e:

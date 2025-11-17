@@ -564,7 +564,10 @@ class SmartScheduler:
 
     def _assign_standby_a(self, task: Dict, all_soldiers: List[Dict],
                          schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
-        """כוננות א' - מפקד + נהג + 7 לוחמים"""
+        """כוננות א' - מפקד + נהג + חיילים (גמיש)"""
+        # תיקון: השתמש במספר החיילים מהתבנית, לא ערך קבוע
+        soldiers_needed = task.get('soldiers_needed', 7)
+
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         drivers = [s for s in all_soldiers if self.is_driver(s)]
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
@@ -580,7 +583,8 @@ class SmartScheduler:
                             if self.check_availability(s, task['day'], task['start_hour'],
                                                      task['length_in_hours'], schedules)]
 
-        if not available_commanders or not available_drivers or len(available_soldiers) < 7:
+        if not available_commanders or not available_drivers or len(available_soldiers) < soldiers_needed:
+            print(f"⚠️  כוננות א' יום {task['day']}: חסרים - מפקדים: {len(available_commanders)}, נהגים: {len(available_drivers)}, חיילים: {len(available_soldiers)}/{soldiers_needed}")
             return None
 
         # ניקוד
@@ -598,13 +602,16 @@ class SmartScheduler:
         return {
             'commanders': [scored_commanders[0][0]['id']],
             'drivers': [scored_drivers[0][0]['id']],
-            'soldiers': [s[0]['id'] for s in scored_soldiers[:7]],
+            'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
             'mahlaka_id': 'pluga'  # פלוגתי
         }
 
     def _assign_standby_b(self, task: Dict, all_soldiers: List[Dict],
                          schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
-        """כוננות ב' - מפקד + 3 לוחמים"""
+        """כוננות ב' - מפקד + חיילים (גמיש)"""
+        # תיקון: השתמש במספר החיילים מהתבנית
+        soldiers_needed = task.get('soldiers_needed', 3)
+
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
 
@@ -615,7 +622,8 @@ class SmartScheduler:
                             if self.check_availability(s, task['day'], task['start_hour'],
                                                      task['length_in_hours'], schedules)]
 
-        if not available_commanders or len(available_soldiers) < 3:
+        if not available_commanders or len(available_soldiers) < soldiers_needed:
+            print(f"⚠️  כוננות ב' יום {task['day']}: חסרים - מפקדים: {len(available_commanders)}, חיילים: {len(available_soldiers)}/{soldiers_needed}")
             return None
 
         scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload))
@@ -628,7 +636,7 @@ class SmartScheduler:
 
         return {
             'commanders': [scored_commanders[0][0]['id']],
-            'soldiers': [s[0]['id'] for s in scored_soldiers[:3]],
+            'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
             'mahlaka_id': 'pluga'
         }
 
@@ -658,7 +666,8 @@ class SmartScheduler:
     def _assign_kitchen(self, task: Dict, all_soldiers: List[Dict],
                        schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
         """תורן מטבח - מספר חיילים"""
-        num_needed = task.get('needs_soldiers', 1)
+        # תיקון: השתמש ב-soldiers_needed במקום needs_soldiers
+        num_needed = task.get('soldiers_needed', task.get('needs_soldiers', 1))
 
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
         available = [s for s in soldiers
@@ -666,6 +675,7 @@ class SmartScheduler:
                                              task['length_in_hours'], schedules)]
 
         if len(available) < num_needed:
+            print(f"⚠️  תורן מטבח יום {task['day']}: חסרים חיילים (צריך {num_needed}, זמינים {len(available)})")
             return None
 
         scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload))

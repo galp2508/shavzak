@@ -151,9 +151,9 @@ def generate_shavzak(shavzak_id, current_user):
 
                 if soldier.role in ['ממ', 'מכ', 'סמל']:
                     commanders.append(soldier_data)
-                elif soldier.role == 'נהג':
+                if 'נהג' in cert_list:
                     drivers.append(soldier_data)
-                else:
+                if soldier.role not in ['ממ', 'מכ', 'סמל']:
                     regular_soldiers.append(soldier_data)
 
             mahalkot_data.append({
@@ -994,10 +994,10 @@ def get_live_schedule(pluga_id, current_user):
                             # מפקדים
                             if soldier.role in ['ממ', 'מכ', 'סמל']:
                                 commanders.append(soldier_data)
-                            # נהגים - גם ברשימת נהגים וגם כחיילים רגילים
-                            if soldier.role == 'נהג':
+                            # נהגים - רק לפי הסמכה
+                            if 'נהג' in cert_list:
                                 drivers.append(soldier_data)
-                            # כל מי שלא מפקד (כולל נהגים) - חיילים רגילים
+                            # כל מי שלא מפקד - חיילים רגילים
                             if soldier.role not in ['ממ', 'מכ', 'סמל']:
                                 regular_soldiers.append(soldier_data)
 

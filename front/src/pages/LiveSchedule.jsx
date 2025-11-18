@@ -139,17 +139,9 @@ const LiveSchedule = () => {
     const soldiers = assignment.soldiers || [];
     if (soldiers.length === 0) return '#FBBF24'; // צהוב כברירת מחדל אם אין חיילים
 
-    // סנן נהגים - רק חיילים רגילים נספרים לבדיקת מחלקות
-    const nonDriverSoldiers = soldiers.filter(s =>
-      s.role !== 'נהג' && s.role !== 'driver'
-    );
-
-    // אם אין חיילים רגילים, כלול גם נהגים בחישוב (כדי שנהגים יקבלו צבע)
-    const soldiersForColor = nonDriverSoldiers.length > 0 ? nonDriverSoldiers : soldiers;
-
     // בדוק כמה מחלקות שונות יש במשימה
     const mahalkotSet = new Set(
-      soldiersForColor.map(s => s.mahlaka_id).filter(id => id != null)
+      soldiers.map(s => s.mahlaka_id).filter(id => id != null)
     );
 
     // אם יש 2+ מחלקות = פלוגתי (צהוב)

@@ -239,7 +239,8 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
       }
 
       // Check if this is a role line (תפקיד - שם - תאריך)
-      // Roles: מ"מ, סמל, מ"כ, נהג, etc.
+      // Roles: מ"מ, סמל, מ"כ (תפקידי פיקוד בלבד)
+      // הערה: נהג, חמליסט וכו' הם הסמכות ולא תפקידים - יש להוסיף אותם במערכת ההסמכות
       const roleMatch = line.match(/^([א-ת״ן\s"]+?)\s*-\s*(.+?)\s*(?:-\s*(.+))?$/);
       if (roleMatch) {
         const role = roleMatch[1].trim();
@@ -257,8 +258,6 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
           finalRole = 'מכ';
         } else if (normRole === 'סמל' || normRole.includes('סמל')) {
           finalRole = 'סמל';
-        } else if (normRole.includes('נהג')) {
-          finalRole = 'נהג';
         }
 
         if (finalRole !== 'לוחם') {
@@ -269,23 +268,12 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
 
       // Otherwise, it's a soldier name
       if (line && !line.match(/^שמות|^כיתה/i)) {
-        // Check if name has a role suffix (like "אביב גמזו - נהג")
-        const nameRoleMatch = line.match(/^(.+?)\s*-\s*(נהג)$/);
-        if (nameRoleMatch) {
-          soldiers.push({ 
-            name: nameRoleMatch[1].trim(), 
-            role: nameRoleMatch[2].trim(), 
-            kita: currentKita,
-            unavailable_date: currentKitaDate 
-          });
-        } else {
-          soldiers.push({ 
-            name: line, 
-            role: 'לוחם',
-            kita: currentKita,
-            unavailable_date: currentKitaDate 
-          });
-        }
+        soldiers.push({
+          name: line,
+          role: 'לוחם',
+          kita: currentKita,
+          unavailable_date: currentKitaDate
+        });
       }
     });
 
@@ -837,7 +825,6 @@ const SoldiersModal = ({ mahlaka, soldiers, onClose, onDelete, onRefresh }) => {
   const getRoleBadge = (role) => {
     const badges = {
       'לוחם': 'badge-green',
-      'נהג': 'badge-blue',
       'מ"מ': 'badge-purple',
       'מ"כ': 'badge-purple',
       'סמל': 'badge-yellow',

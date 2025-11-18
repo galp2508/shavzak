@@ -165,7 +165,11 @@ class SoldierStatus(Base):
     # סטטוס: בבסיס, בקשת יציאה, גימלים, ריתוק, בסבב קו
     status_type = Column(String(50), default='בבסיס', nullable=False)
 
-    # תאריך חזרה לבסיס (רק אם לא בבסיס)
+    # תאריך התחלה וסיום של הסטטוס
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+
+    # תאריך חזרה לבסיס (נשמר לתאימות לאחור)
     return_date = Column(Date, nullable=True)
 
     # הערות

@@ -214,17 +214,9 @@ const SmartSchedule = () => {
       return '#FBBF24'; // צהוב כברירת מחדל למשימות ללא חיילים
     }
 
-    // סנן נהגים - רק חיילים רגילים נספרים לבדיקת מחלקות
-    const nonDriverSoldiers = soldiers.filter(s =>
-      s.role !== 'נהג' && s.role !== 'driver'
-    );
-
-    // אם אין חיילים רגילים, כלול גם נהגים בחישוב (כדי שנהגים יקבלו צבע)
-    const soldiersForColor = nonDriverSoldiers.length > 0 ? nonDriverSoldiers : soldiers;
-
     // מצא את כל המחלקות השונות
     const mahalkotSet = new Set(
-      soldiersForColor
+      soldiers
         .map(s => s.mahlaka_id)
         .filter(id => id != null)
     );

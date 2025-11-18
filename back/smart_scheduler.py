@@ -110,7 +110,7 @@ class SmartScheduler:
         return soldier.get('role') in ['ממ', 'מכ', 'סמל']
 
     def is_driver(self, soldier: Dict) -> bool:
-        """בדיקה אם החייל נהג"""
+        """בדיקה אם החייל נהג - רק לפי הסמכה"""
         return 'נהג' in soldier.get('certifications', [])
 
     # ============================================

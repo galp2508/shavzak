@@ -154,7 +154,7 @@ def ml_smart_schedule(current_user):
 
                 if soldier.role in ['ממ', 'מכ', 'סמל']:
                     commanders.append(soldier_data)
-                if soldier.role == 'נהג' or 'נהג' in cert_list:
+                if 'נהג' in cert_list:
                     drivers.append(soldier_data)
                 if soldier.role not in ['ממ', 'מכ', 'סמל']:
                     regular_soldiers.append(soldier_data)
@@ -657,7 +657,7 @@ def ml_regenerate_schedule(current_user):
 
                 if soldier.role in ['ממ', 'מכ', 'סמל']:
                     commanders.append(soldier_data)
-                if soldier.role == 'נהג' or 'נהג' in cert_list:
+                if 'נהג' in cert_list:
                     drivers.append(soldier_data)
                 if soldier.role not in ['ממ', 'מכ', 'סמל']:
                     regular_soldiers.append(soldier_data)

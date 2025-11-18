@@ -1514,7 +1514,7 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
         setAvailableRoles(response.data.roles_certifications || []);
       } catch (error) {
         console.error('Error loading available roles:', error);
-        setAvailableRoles(['מפקד', 'נהג', 'חמל', 'קצין תורן']);
+        setAvailableRoles(['נהג', 'חמל']);
       }
     };
     loadAvailableRoles();

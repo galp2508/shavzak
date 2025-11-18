@@ -202,7 +202,7 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
       } catch (error) {
         console.error('Error loading available roles:', error);
         // אם יש שגיאה, השתמש ברשימה ברירת מחדל
-        setAvailableRoles(['מפ', 'ממ', 'מכ', 'נהג', 'חמל', 'קצין תורן']);
+        setAvailableRoles(['נהג', 'חמל']);
       }
     };
     loadAvailableRoles();

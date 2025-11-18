@@ -467,6 +467,7 @@ def add_certification(soldier_id, current_user):
         )
 
         session.add(cert)
+        session.flush()  # Ensure ID is populated before accessing
         session.commit()
 
         return jsonify({

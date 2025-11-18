@@ -519,7 +519,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
               <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                 <input
                   type="text"
-                  placeholder="שם ממ״ו"
+				  placeholder={'שם מ"מ'}
                   value={soldiersFormData.mm.name}
                   onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mm: { ...soldiersFormData.mm, name: e.target.value } })}
                   className="input-field"

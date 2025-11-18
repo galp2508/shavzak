@@ -811,6 +811,50 @@ def update_assignment(assignment_id, current_user):
         session.close()
 
 
+@schedule_bp.route('/api/assignments/<int:assignment_id>/time', methods=['PATCH'])
+@token_required
+def update_assignment_time(assignment_id, current_user):
+    """עדכון שעת התחלה של משימה (לדרג-אנד-דרופ)"""
+    try:
+        session = get_db()
+
+        assignment = session.query(Assignment).filter_by(id=assignment_id).first()
+        if not assignment:
+            return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        shavzak = session.query(Shavzak).filter_by(id=assignment.shavzak_id).first()
+        if not can_edit_pluga(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+        new_start_hour = data.get('start_hour')
+
+        if new_start_hour is None:
+            return jsonify({'error': 'חסר פרמטר start_hour'}), 400
+
+        if not (0 <= new_start_hour < 24):
+            return jsonify({'error': 'שעת התחלה לא חוקית (0-23)'}), 400
+
+        # עדכן את שעת ההתחלה
+        assignment.start_hour = new_start_hour
+        session.commit()
+
+        return jsonify({
+            'message': 'שעת המשימה עודכנה בהצלחה',
+            'assignment': {
+                'id': assignment.id,
+                'start_hour': assignment.start_hour
+            }
+        }), 200
+    except Exception as e:
+        print(f"🔴 שגיאה בעדכון שעת משימה: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @schedule_bp.route('/api/assignments/<int:assignment_id>/soldiers', methods=['PUT'])
 @token_required
 def update_assignment_soldiers(assignment_id, current_user):

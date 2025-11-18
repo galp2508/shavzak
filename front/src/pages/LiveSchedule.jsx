@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Move } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
 import AssignmentModal from '../components/AssignmentModal';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable, useDraggable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 
 const LiveSchedule = () => {
   const { user } = useAuth();
@@ -198,6 +200,57 @@ const LiveSchedule = () => {
     loadSchedule(currentDate);
   };
 
+  // Drag & Drop handlers
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // דרוש תזוזה של 8 פיקסלים כדי להתחיל גרירה
+      },
+    })
+  );
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    // מצא את המשימה שנגררה
+    const draggedAssignment = scheduleData?.assignments?.find(a => a.id === active.id);
+    if (!draggedAssignment) {
+      return;
+    }
+
+    // חלץ את השעה החדשה מה-over id (פורמט: "drop-zone-{name}-{hour}")
+    const overIdParts = over.id.toString().split('-');
+    const newStartHour = parseInt(overIdParts[overIdParts.length - 1]);
+
+    if (isNaN(newStartHour)) {
+      return;
+    }
+
+    // בדוק אם השעה באמת השתנתה
+    if (draggedAssignment.start_hour === newStartHour) {
+      return;
+    }
+
+    try {
+      // עדכן את השרת
+      await api.patch(`/assignments/${draggedAssignment.id}/time`, {
+        start_hour: newStartHour
+      });
+
+      toast.success(`המשימה הועברה לשעה ${newStartHour.toString().padStart(2, '0')}:00`);
+
+      // רענן את הנתונים
+      loadSchedule(currentDate);
+    } catch (error) {
+      console.error('Error updating assignment time:', error);
+      toast.error(error.response?.data?.error || 'שגיאה בהזזת המשימה');
+    }
+  };
+
   if (loading && !scheduleData) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -382,11 +435,16 @@ const LiveSchedule = () => {
               </span>
             </div>
 
-            {/* Time Grid Schedule */}
-            <div className="overflow-x-auto">
-              {(() => {
-                // קבל את כל שמות התבניות הייחודיים
-                const assignmentNames = [...new Set(scheduleData?.assignments?.map(a => a.name) || [])].sort();
+            {/* Time Grid Schedule with Drag & Drop */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="overflow-x-auto">
+                {(() => {
+                  // קבל את כל שמות התבניות הייחודיים
+                  const assignmentNames = [...new Set(scheduleData?.assignments?.map(a => a.name) || [])].sort();
 
                 // צור מפה של משימות לפי שם ושעה
                 const assignmentsByName = {};
@@ -438,16 +496,17 @@ const LiveSchedule = () => {
                       {/* Assignment Name Columns */}
                       {assignmentNames.map(name => (
                         <div key={name} className="flex-1 min-w-[200px] border-l border-gray-300 relative">
-                          {/* Hour Grid Lines */}
+                          {/* Hour Grid Lines with Drop Zones */}
                           {hours.map(hour => (
-                            <div
+                            <DropZone
                               key={hour}
-                              className="h-12 border-b border-gray-200"
+                              id={`drop-zone-${name}-${hour}`}
+                              hour={hour}
                             />
                           ))}
 
-                          {/* Assignment Blocks - Positioned Absolutely */}
-                          <div className="absolute inset-0">
+                          {/* Assignment Blocks - Positioned Absolutely with Drag */}
+                          <div className="absolute inset-0 pointer-events-none">
                             {assignmentsByName[name]?.map(assignment => {
                               const startHour = assignment.start_hour || 0;
                               const lengthInHours = assignment.length_in_hours || 1;
@@ -460,91 +519,18 @@ const LiveSchedule = () => {
                               const height = (lengthInHours / 24) * 100;
 
                               return (
-                                <div
+                                <DraggableAssignment
                                   key={assignment.id}
-                                  onClick={() => (user.role === 'מפ' || user.role === 'ממ') && openEditAssignmentModal(assignment)}
-                                  className="absolute rounded-lg shadow-md overflow-hidden group cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-[1.02] transform border"
-                                  style={{
-                                    top: `calc(${topPosition}% + 2px)`,
-                                    height: `calc(${height}% - 4px)`,
-                                    left: '6px',
-                                    right: '6px',
-                                    background: `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
-                                    borderColor: assignmentColor,
-                                  }}
-                                  title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00) - ${(user.role === 'מפ' || user.role === 'ממ') ? 'לחץ לעריכה' : ''}`}
+                                  assignment={assignment}
+                                  topPosition={topPosition}
+                                  height={height}
+                                  assignmentColor={assignmentColor}
+                                  startHour={startHour}
+                                  endHour={endHour}
+                                  onEdit={(user.role === 'מפ' || user.role === 'ממ') ? openEditAssignmentModal : null}
+                                  userRole={user.role}
                                 >
-                                  {/* Assignment Content */}
-                                  <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative">
-                                    {/* Edit Icon */}
-                                    {(user.role === 'מפ' || user.role === 'ממ') && (
-                                      <div className="absolute top-1 left-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                        <Edit className="w-3 h-3" />
-                                      </div>
-                                    )}
-
-                                    {/* Assignment Name & Time */}
-                                    <div className="font-bold text-sm mb-1 flex items-center gap-1.5">
-                                      <Clock className="w-3.5 h-3.5" />
-                                      {assignment.name}
-                                    </div>
-                                    <div className="text-xs opacity-95 mb-1.5 font-medium bg-black bg-opacity-20 rounded px-1.5 py-0.5 inline-block">
-                                      {startHour.toString().padStart(2, '0')}:00 - {endHour.toString().padStart(2, '0')}:00
-                                    </div>
-
-                                    {/* Soldiers List */}
-                                    {assignment.soldiers && assignment.soldiers.length > 0 && (
-                                      <div className="flex-1 overflow-y-auto">
-                                        <div className="space-y-1">
-                                          {assignment.soldiers.map((soldier) => (
-                                            <div
-                                              key={soldier.id}
-                                              className="text-xs bg-white/25 backdrop-blur-md px-2 py-1 rounded border border-white/30 shadow-sm hover:bg-white/35 transition-all duration-200"
-                                            >
-                                              <div className="font-semibold flex items-center gap-1">
-                                                <Users className="w-2.5 h-2.5" />
-                                                {soldier.name}
-                                              </div>
-                                              <div className="text-[10px] opacity-90 font-medium">
-                                                {soldier.role_in_assignment}
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* No soldiers indicator */}
-                                    {(!assignment.soldiers || assignment.soldiers.length === 0) && (
-                                      <div className="text-xs opacity-80 italic bg-red-500/30 px-2 py-1 rounded border border-red-400/50">
-                                        אין חיילים משובצים
-                                      </div>
-                                    )}
-
-                                    {/* Feedback Buttons - Only for commanders */}
-                                    {(user.role === 'מפ' || user.role === 'ממ') && (
-                                      <div
-                                        className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <button
-                                          onClick={() => handleFeedback(assignment.id, 'approved')}
-                                          className="flex-1 bg-green-500/80 hover:bg-green-600 text-white text-[10px] font-bold py-1 px-2 rounded shadow-sm transition-all hover:scale-105"
-                                          title="אישור - המודל ילמד מזה"
-                                        >
-                                          ✓
-                                        </button>
-                                        <button
-                                          onClick={() => handleFeedback(assignment.id, 'rejected')}
-                                          className="flex-1 bg-red-500/80 hover:bg-red-600 text-white text-[10px] font-bold py-1 px-2 rounded shadow-sm transition-all hover:scale-105"
-                                          title="דחייה - המודל ישתפר"
-                                        >
-                                          ✗
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
+                                </DraggableAssignment>
                               );
                             })}
                           </div>
@@ -552,9 +538,10 @@ const LiveSchedule = () => {
                       ))}
                     </div>
                   </div>
-                );
-              })()}
-            </div>
+                  );
+                })()}
+              </div>
+            </DndContext>
           </div>
         </>
       )}
@@ -584,6 +571,116 @@ const LiveSchedule = () => {
           onSave={handleAssignmentSave}
         />
       )}
+    </div>
+  );
+};
+
+// DropZone Component - אזור שאפשר לזרוק בו משימות
+const DropZone = ({ id, hour }) => {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`h-12 border-b border-gray-200 transition-colors ${
+        isOver ? 'bg-blue-100 border-blue-400' : ''
+      }`}
+      data-hour={hour}
+    />
+  );
+};
+
+// DraggableAssignment Component - משימה שאפשר לגרור
+const DraggableAssignment = ({
+  assignment,
+  topPosition,
+  height,
+  assignmentColor,
+  startHour,
+  endHour,
+  onEdit,
+  userRole
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: assignment.id,
+  });
+
+  const style = {
+    top: `calc(${topPosition}% + 2px)`,
+    height: `calc(${height}% - 4px)`,
+    left: '6px',
+    right: '6px',
+    background: `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
+    borderColor: assignmentColor,
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.5 : 1,
+    cursor: (userRole === 'מפ' || userRole === 'ממ') ? 'grab' : 'default',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className="absolute rounded-lg shadow-md overflow-hidden group hover:shadow-lg transition-all duration-200 hover:scale-[1.02] transform border pointer-events-auto"
+      onClick={() => onEdit && onEdit(assignment)}
+      title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00) - גרור להזזה`}
+    >
+      {/* Assignment Content */}
+      <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative">
+        {/* Drag Icon */}
+        {(userRole === 'מפ' || userRole === 'ממ') && (
+          <div className="absolute top-1 left-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <Move className="w-3 h-3" />
+          </div>
+        )}
+
+        {/* Edit Icon */}
+        {(userRole === 'מפ' || userRole === 'ממ') && onEdit && (
+          <div className="absolute top-1 right-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <Edit className="w-3 h-3" />
+          </div>
+        )}
+
+        {/* Assignment Name & Time */}
+        <div className="font-bold text-sm mb-1 flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5" />
+          {assignment.name}
+        </div>
+        <div className="text-xs opacity-95 mb-1.5 font-medium bg-black bg-opacity-20 rounded px-1.5 py-0.5 inline-block">
+          {startHour.toString().padStart(2, '0')}:00 - {endHour.toString().padStart(2, '0')}:00
+        </div>
+
+        {/* Soldiers List */}
+        {assignment.soldiers && assignment.soldiers.length > 0 && (
+          <div className="flex-1 overflow-y-auto">
+            <div className="space-y-1">
+              {assignment.soldiers.map((soldier) => (
+                <div
+                  key={soldier.id}
+                  className="text-xs bg-white/25 backdrop-blur-md px-2 py-1 rounded border border-white/30 shadow-sm hover:bg-white/35 transition-all duration-200"
+                >
+                  <div className="font-semibold flex items-center gap-1">
+                    <Users className="w-2.5 h-2.5" />
+                    {soldier.name}
+                  </div>
+                  <div className="text-[10px] opacity-90 font-medium">
+                    {soldier.role_in_assignment}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No soldiers indicator */}
+        {(!assignment.soldiers || assignment.soldiers.length === 0) && (
+          <div className="text-xs opacity-80 italic bg-red-500/30 px-2 py-1 rounded border border-red-400/50">
+            אין חיילים משובצים
+          </div>
+        )}
+      </div>
     </div>
   );
 };

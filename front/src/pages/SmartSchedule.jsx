@@ -79,9 +79,9 @@ const SmartSchedule = () => {
       const response = await api.get(`/plugot/${user.pluga_id}/live-schedule?date=${dateStr}`);
       setScheduleData(response.data);
 
-      // נסה למצוא את שיבוץ ה-ID אם יש
-      if (response.data.schedules && response.data.schedules.length > 0) {
-        setCurrentShavzakId(response.data.schedules[0].id);
+      // שמור את ה-shavzak_id אם קיים
+      if (response.data.shavzak_id) {
+        setCurrentShavzakId(response.data.shavzak_id);
       }
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה בטעינת שיבוץ');

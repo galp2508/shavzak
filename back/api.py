@@ -4338,13 +4338,66 @@ def ml_smart_schedule(current_user):
 
         all_assignments.sort(key=assignment_priority)
 
+        # חפש או צור Shavzak "מאסטר" לפלוגה
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if not master_shavzak:
+            # צור Shavzak מאסטר
+            master_shavzak = Shavzak(
+                name='שיבוץ אוטומטי',
+                pluga_id=pluga_id,
+                created_by=current_user.get('user_id'),
+                start_date=start_date,
+                days_count=days_count,
+                min_rest_hours=8,
+                emergency_mode=False,
+                created_at=datetime.now()
+            )
+            session.add(master_shavzak)
+            session.flush()
+        else:
+            # עדכן את טווח התאריכים אם נדרש
+            if start_date < master_shavzak.start_date:
+                master_shavzak.start_date = start_date
+
+            end_date_needed = start_date + timedelta(days=days_count)
+            current_end_date = master_shavzak.start_date + timedelta(days=master_shavzak.days_count)
+            if end_date_needed > current_end_date:
+                master_shavzak.days_count = (end_date_needed - master_shavzak.start_date).days
+
+            session.flush()
+
+        # מחק משימות קיימות בטווח התאריכים הנוכחי
+        day_start = (start_date - master_shavzak.start_date).days
+        days_to_delete = list(range(day_start, day_start + days_count))
+
+        # מחק גם את החיילים המשובצים למשימות האלה
+        assignments_to_delete = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day.in_(days_to_delete)
+        ).all()
+
+        for assignment in assignments_to_delete:
+            session.query(AssignmentSoldier).filter(
+                AssignmentSoldier.assignment_id == assignment.id
+            ).delete()
+
+        session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day.in_(days_to_delete)
+        ).delete(synchronize_session=False)
+        session.commit()
+
         # הרצת ML
         schedules = {}
         mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
 
         all_commanders = [c for m in mahalkot_data for c in m['commanders']]
         all_drivers = [d for m in mahalkot_data for d in m['drivers']]
-        all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]
+        all_soldiers = [s for s in mahalkot_data for s in m['soldiers']]
 
         created_assignments = []
 
@@ -4382,10 +4435,39 @@ def ml_smart_schedule(current_user):
                     **assign_data,
                     'result': result
                 })
+
+                # שמור את המשימה למסד הנתונים
+                assignment = Assignment(
+                    shavzak_id=master_shavzak.id,
+                    name=assign_data['name'],
+                    assignment_type=assign_data['type'],
+                    day=assign_data['day'],
+                    start_hour=assign_data['start_hour'],
+                    length_in_hours=assign_data['length_in_hours'],
+                    assigned_mahlaka_id=result.get('mahlaka_id')
+                )
+                session.add(assignment)
+                session.flush()
+
+                # הוסף חיילים למשימה
+                for role_key in ['commanders', 'drivers', 'soldiers']:
+                    if role_key in result:
+                        role_name = 'מפקד' if role_key == 'commanders' else ('נהג' if role_key == 'drivers' else 'חייל')
+                        for soldier_id in result[role_key]:
+                            assign_soldier = AssignmentSoldier(
+                                assignment_id=assignment.id,
+                                soldier_id=soldier_id,
+                                role_in_assignment=role_name
+                            )
+                            session.add(assign_soldier)
+
             else:
                 # משימה לא השתבצה - שמור לדיווח
                 failed_assignments.append(assign_data)
                 print(f"❌ לא הצלחתי לשבץ: {assign_data['name']} ({assign_data['type']}) יום {assign_data['day']} שעה {assign_data['start_hour']}")
+
+        # שמור הכל למסד הנתונים
+        session.commit()
 
         smart_scheduler.stats['total_assignments'] += len(created_assignments)
         smart_scheduler.stats['successful_assignments'] += len(created_assignments)

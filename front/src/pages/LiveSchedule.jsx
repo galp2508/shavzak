@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 import Constraints from './Constraints';
 import AssignmentModal from '../components/AssignmentModal';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable, useDraggable } from '@dnd-kit/core';
+import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 const LiveSchedule = () => {
@@ -17,6 +18,7 @@ const LiveSchedule = () => {
   const [showConstraints, setShowConstraints] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
+  const [columnOrder, setColumnOrder] = useState([]); // סדר העמודות
 
   useEffect(() => {
     // התחל עם מחר
@@ -73,6 +75,10 @@ const LiveSchedule = () => {
       const dateStr = date.toISOString().split('T')[0];
       const response = await api.get(`/plugot/${user.pluga_id}/live-schedule?date=${dateStr}`);
       setScheduleData(response.data);
+
+      // אתחל את סדר העמודות
+      const assignmentNames = [...new Set(response.data?.assignments?.map(a => a.name) || [])].sort();
+      setColumnOrder(assignmentNames);
     } catch (error) {
       const errorData = error.response?.data;
       let errorMessage = errorData?.error || error.message;
@@ -216,6 +222,21 @@ const LiveSchedule = () => {
       return;
     }
 
+    // בדוק אם זו גרירת עמודה (ID מתחיל ב-"column-")
+    if (active.id.toString().startsWith('column-')) {
+      // גרירת עמודה
+      const oldIndex = columnOrder.findIndex(name => `column-${name}` === active.id);
+      const newIndex = columnOrder.findIndex(name => `column-${name}` === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newColumnOrder = arrayMove(columnOrder, oldIndex, newIndex);
+        setColumnOrder(newColumnOrder);
+        toast.success('סדר העמודות עודכן');
+      }
+      return;
+    }
+
+    // אחרת, זו גרירת משימה (הקוד הקיים)
     // מצא את המשימה שנגררה
     const draggedAssignment = scheduleData?.assignments?.find(a => a.id === active.id);
     if (!draggedAssignment) {
@@ -465,41 +486,43 @@ const LiveSchedule = () => {
             >
               <div className="overflow-x-auto">
                 {(() => {
-                  // קבל את כל שמות התבניות הייחודיים
-                  const assignmentNames = [...new Set(scheduleData?.assignments?.map(a => a.name) || [])].sort();
+                  // צור מפה של משימות לפי שם ושעה
+                  const assignmentsByName = {};
+                  columnOrder.forEach(name => {
+                    assignmentsByName[name] = [];
+                  });
 
-                // צור מפה של משימות לפי שם ושעה
-                const assignmentsByName = {};
-                assignmentNames.forEach(name => {
-                  assignmentsByName[name] = [];
-                });
+                  scheduleData?.assignments?.forEach(assignment => {
+                    if (!assignmentsByName[assignment.name]) {
+                      assignmentsByName[assignment.name] = [];
+                    }
+                    assignmentsByName[assignment.name].push(assignment);
+                  });
 
-                scheduleData?.assignments?.forEach(assignment => {
-                  if (!assignmentsByName[assignment.name]) {
-                    assignmentsByName[assignment.name] = [];
-                  }
-                  assignmentsByName[assignment.name].push(assignment);
-                });
+                  // יצירת 24 שעות
+                  const hours = Array.from({ length: 24 }, (_, i) => i);
 
-                // יצירת 24 שעות
-                const hours = Array.from({ length: 24 }, (_, i) => i);
+                  // יצירת IDs לעמודות (עבור SortableContext)
+                  const columnIds = columnOrder.map(name => `column-${name}`);
 
                 return (
                   <div className="min-w-max">
                     {/* Header - שמות תבניות */}
-                    <div className="flex border-b-2 border-gray-300 mb-2">
-                      <div className="w-20 flex-shrink-0 font-bold text-gray-700 p-2">
-                        שעה
-                      </div>
-                      {assignmentNames.map(name => (
-                        <div
-                          key={name}
-                          className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300"
-                        >
-                          {name}
+                    <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
+                      <div className="flex border-b-2 border-gray-300 mb-2">
+                        <div className="w-20 flex-shrink-0 font-bold text-gray-700 p-2">
+                          שעה
                         </div>
-                      ))}
-                    </div>
+                        {columnOrder.map(name => (
+                          <SortableColumnHeader
+                            key={name}
+                            id={`column-${name}`}
+                            name={name}
+                            userRole={user.role}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
 
                     {/* Grid Container */}
                     <div className="flex">
@@ -516,7 +539,7 @@ const LiveSchedule = () => {
                       </div>
 
                       {/* Assignment Name Columns */}
-                      {assignmentNames.map(name => (
+                      {columnOrder.map(name => (
                         <div key={name} className="flex-1 min-w-[200px] border-l border-gray-300 relative">
                           {/* Hour Grid Lines with Drop Zones */}
                           {hours.map(hour => (
@@ -593,6 +616,45 @@ const LiveSchedule = () => {
           onSave={handleAssignmentSave}
         />
       )}
+    </div>
+  );
+};
+
+// SortableColumnHeader Component - כותרת עמודה שאפשר לגרור
+const SortableColumnHeader = ({ id, name, userRole }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    cursor: (userRole === 'מפ' || userRole === 'ממ') ? 'grab' : 'default',
+  };
+
+  const canDrag = userRole === 'מפ' || userRole === 'ממ';
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...(canDrag ? listeners : {})}
+      {...(canDrag ? attributes : {})}
+      className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300 hover:bg-gray-200 transition-colors group relative"
+      title={canDrag ? 'גרור כדי לשנות סדר העמודות' : name}
+    >
+      {canDrag && (
+        <div className="absolute top-1 right-1 bg-white/50 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <Move className="w-3 h-3 text-gray-600" />
+        </div>
+      )}
+      {name}
     </div>
   );
 };

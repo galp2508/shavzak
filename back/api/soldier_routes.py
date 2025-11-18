@@ -256,7 +256,7 @@ def get_soldier(soldier_id, current_user):
             return jsonify({'error': 'אין לך הרשאה'}), 403
 
         certifications = session.query(Certification).filter_by(soldier_id=soldier_id).all()
-        cert_list = [cert.certification_name for cert in certifications]
+        cert_list = [{'id': cert.id, 'name': cert.certification_name} for cert in certifications]
 
         unavailable = session.query(UnavailableDate).filter_by(soldier_id=soldier_id).all()
         unavailable_list = [{

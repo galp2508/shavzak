@@ -1564,6 +1564,11 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
 
   // מחק הסמכה
   const handleDeleteCertification = async (cert) => {
+    if (!cert.id) {
+      toast.error('לא ניתן למחוק הסמכה זו');
+      return;
+    }
+
     if (!window.confirm(`האם למחוק את הסמכת "${cert.name}"?`)) return;
 
     try {
@@ -1571,7 +1576,7 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
       setCertifications(certifications.filter(c => c.id !== cert.id));
       toast.success('ההסמכה נמחקה בהצלחה');
     } catch (error) {
-      toast.error('שגיאה במחיקת הסמכה');
+      toast.error(error.response?.data?.error || 'שגיאה במחיקת הסמכה');
     }
   };
 
@@ -1754,21 +1759,31 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
             </div>
             {certifications.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {certifications.map((cert) => (
-                  <span
-                    key={cert.id}
-                    className="badge badge-blue flex items-center gap-2 group"
-                  >
-                    {cert.name}
-                    <button
-                      onClick={() => handleDeleteCertification(cert)}
-                      className="opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity"
-                      title="מחק הסמכה"
+                {certifications.map((cert, index) => {
+                  const commanderRoles = ['ממ', 'מכ', 'סמל'];
+                  const isCommanderCert = cert.name === 'מפקד' && commanderRoles.includes(soldier.role);
+
+                  return (
+                    <span
+                      key={cert.id || `cert-${index}-${cert.name}`}
+                      className={`badge ${isCommanderCert ? 'badge-green' : 'badge-blue'} flex items-center gap-2 group`}
+                      title={isCommanderCert ? 'הסמכה אוטומטית למפקדים' : ''}
                     >
-                      <X size={14} />
-                    </button>
-                  </span>
-                ))}
+                      {cert.name}
+                      {isCommanderCert && <span className="text-xs">(אוטומטי)</span>}
+                      {!isCommanderCert && (
+                        <button
+                          onClick={() => handleDeleteCertification(cert)}
+                          className="opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity"
+                          title="מחק הסמכה"
+                          disabled={!cert.id}
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-gray-500 text-sm">אין הסמכות</p>

@@ -15,7 +15,7 @@ const AssignmentModal = ({
   const [formData, setFormData] = useState({
     name: '',
     assignment_type: 'שמירה',
-    day: dayIndex || 0,
+    day: dayIndex !== undefined && dayIndex !== null ? dayIndex : 0,
     start_hour: 8,
     length_in_hours: 2,
     assigned_mahlaka_id: null
@@ -25,6 +25,8 @@ const AssignmentModal = ({
   const [selectedSoldiers, setSelectedSoldiers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingSoldiers, setLoadingSoldiers] = useState(true);
+  const [soldierAssignmentCounts, setSoldierAssignmentCounts] = useState({});
+  const [mahalkot, setMahalkot] = useState([]);
 
   const assignmentTypes = [
     'שמירה', 'סיור', 'כוננות א', 'כוננות ב',
@@ -39,9 +41,9 @@ const AssignmentModal = ({
       setFormData({
         name: assignment.name || '',
         assignment_type: assignment.type || 'שמירה',
-        day: assignment.day || dayIndex || 0,
-        start_hour: assignment.start_hour || 8,
-        length_in_hours: assignment.length_in_hours || 2,
+        day: assignment.day !== undefined && assignment.day !== null ? assignment.day : (dayIndex !== undefined && dayIndex !== null ? dayIndex : 0),
+        start_hour: assignment.start_hour !== undefined && assignment.start_hour !== null ? assignment.start_hour : 8,
+        length_in_hours: assignment.length_in_hours !== undefined && assignment.length_in_hours !== null ? assignment.length_in_hours : 2,
         assigned_mahlaka_id: assignment.assigned_mahlaka_id || null
       });
 
@@ -61,12 +63,22 @@ const AssignmentModal = ({
     setLoadingSoldiers(true);
     try {
       const response = await api.get(`/plugot/${plugaId}/mahalkot`);
-      const mahalkot = response.data.mahalkot || [];
+      const mahalkotData = response.data.mahalkot || [];
+      setMahalkot(mahalkotData);
 
       // איסוף כל החיילים מכל המחלקות
-      const allSoldiersPromises = mahalkot.map(m =>
+      const allSoldiersPromises = mahalkotData.map(m =>
         api.get(`/mahalkot/${m.id}/soldiers`)
-          .then(res => res.data.soldiers || [])
+          .then(res => {
+            const soldiers = res.data.soldiers || [];
+            // הוסף מידע על מחלקה לכל חייל
+            return soldiers.map(s => ({
+              ...s,
+              mahlaka_id: m.id,
+              mahlaka_number: m.number,
+              mahlaka_color: m.color
+            }));
+          })
           .catch(() => [])
       );
 
@@ -74,6 +86,32 @@ const AssignmentModal = ({
       const allSoldiers = soldiersArrays.flat();
 
       setAvailableSoldiers(allSoldiers);
+
+      // טען את כל המשימות של היום הנוכחי כדי לספור כמה פעמים כל חייל משובץ
+      if (date && shavzakId) {
+        try {
+          const dateStr = date.toISOString().split('T')[0];
+          const scheduleResponse = await api.get(`/plugot/${plugaId}/live-schedule?date=${dateStr}`);
+
+          const assignments = scheduleResponse.data?.assignments || [];
+          const counts = {};
+
+          // ספור כמה פעמים כל חייל משובץ ביום הזה
+          assignments.forEach(assign => {
+            // דלג על המשימה הנוכחית שאנחנו עורכים
+            if (assignment && assign.id === assignment.id) return;
+
+            const soldiers = assign.soldiers || [];
+            soldiers.forEach(soldier => {
+              counts[soldier.id] = (counts[soldier.id] || 0) + 1;
+            });
+          });
+
+          setSoldierAssignmentCounts(counts);
+        } catch (error) {
+          console.error('Error loading assignment counts:', error);
+        }
+      }
     } catch (error) {
       console.error('Error loading soldiers:', error);
       toast.error('שגיאה בטעינת חיילים');
@@ -318,22 +356,90 @@ const AssignmentModal = ({
                 <div className="spinner"></div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                {availableSoldiers.map(soldier => (
-                  <button
-                    key={soldier.id}
-                    onClick={() => addSoldier(soldier)}
-                    disabled={selectedSoldiers.find(s => s.soldier_id === soldier.id)}
-                    className={`p-3 rounded-lg text-right transition-all ${
-                      selectedSoldiers.find(s => s.soldier_id === soldier.id)
-                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-50 hover:bg-military-50 hover:border-military-300 border-2 border-gray-200'
-                    }`}
-                  >
-                    <div className="font-medium">{soldier.name}</div>
-                    <div className="text-sm text-gray-600">{soldier.role}</div>
-                  </button>
-                ))}
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {mahalkot.map(mahlaka => {
+                  const mahlakaSoldiers = availableSoldiers.filter(s => s.mahlaka_id === mahlaka.id);
+                  if (mahlakaSoldiers.length === 0) return null;
+
+                  return (
+                    <div key={mahlaka.id} className="border-2 border-gray-200 rounded-xl p-3">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: mahlaka.color || '#6B7280' }}
+                        />
+                        <h4 className="font-bold text-gray-800">
+                          מחלקה {mahlaka.number}
+                        </h4>
+                        <span className="text-sm text-gray-500">({mahlakaSoldiers.length} חיילים)</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {mahlakaSoldiers.map(soldier => {
+                          const isSelected = selectedSoldiers.find(s => s.soldier_id === soldier.id);
+                          const assignmentCount = soldierAssignmentCounts[soldier.id] || 0;
+
+                          // קביעת צבע לפי סטטוס שיבוץ
+                          let bgColor, textColor, borderColor, hoverBg;
+                          if (assignmentCount >= 2) {
+                            // אדום - משובץ פעמיים או יותר
+                            bgColor = 'bg-red-100';
+                            textColor = 'text-red-900';
+                            borderColor = 'border-red-400';
+                            hoverBg = 'hover:bg-red-200';
+                          } else if (assignmentCount === 1) {
+                            // אפור - משובץ פעם אחת
+                            bgColor = 'bg-gray-200';
+                            textColor = 'text-gray-700';
+                            borderColor = 'border-gray-400';
+                            hoverBg = 'hover:bg-gray-300';
+                          } else {
+                            // צבע המחלקה - לא משובץ
+                            bgColor = '';
+                            textColor = 'text-gray-900';
+                            borderColor = 'border-gray-200';
+                            hoverBg = '';
+                          }
+
+                          return (
+                            <button
+                              key={soldier.id}
+                              onClick={() => addSoldier(soldier)}
+                              disabled={isSelected}
+                              className={`p-3 rounded-lg text-right transition-all border-2 ${
+                                isSelected
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
+                                  : `${bgColor} ${textColor} ${borderColor} ${hoverBg}`
+                              }`}
+                              style={
+                                !isSelected && assignmentCount === 0
+                                  ? {
+                                      backgroundColor: `${mahlaka.color || '#6B7280'}15`,
+                                      borderColor: mahlaka.color || '#6B7280'
+                                    }
+                                  : {}
+                              }
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="font-medium">{soldier.name}</div>
+                                  <div className="text-xs opacity-75">{soldier.role}</div>
+                                </div>
+                                {assignmentCount > 0 && !isSelected && (
+                                  <div className={`text-xs font-bold px-2 py-1 rounded ${
+                                    assignmentCount >= 2 ? 'bg-red-600 text-white' : 'bg-gray-600 text-white'
+                                  }`}>
+                                    {assignmentCount}×
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

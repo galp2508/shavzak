@@ -28,6 +28,10 @@ wheels/
 *.sqlite
 *.sqlite3
 
+# ML Models (keep ml_model.pkl but ignore temporary models)
+*.pkl.tmp
+*.pkl.backup
+
 # Environment
 .env
 .venv

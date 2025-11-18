@@ -130,7 +130,7 @@ class Certification(Base):
     id = Column(Integer, primary_key=True)
     soldier_id = Column(Integer, ForeignKey('soldiers.id'), nullable=False)
     certification_name = Column(String(100), nullable=False)  # תפקיד נוסף מתוך AVAILABLE_ROLES_CERTIFICATIONS
-    date_acquired = Column(Date, default=datetime.utcnow)
+    date_acquired = Column(Date, default=lambda: datetime.utcnow().date())
 
     soldier = relationship("Soldier", back_populates="certifications")
 

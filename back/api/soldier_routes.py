@@ -182,35 +182,19 @@ def create_soldiers_bulk(current_user):
                     cert = Certification(soldier_id=soldier.id, certification_name=cert_name)
                     session.add(cert)
 
-                # Add unavailable date if provided
+                # Set home round date if provided (תאריך סבב יציאה)
                 if soldier_data.get('unavailable_date'):
                     date_str = soldier_data['unavailable_date']
                     try:
                         # Try DD.MM.YYYY format
-                        unavailable_date = datetime.strptime(date_str, '%d.%m.%Y').date()
+                        soldier.home_round_date = datetime.strptime(date_str, '%d.%m.%Y').date()
                     except ValueError:
                         try:
                             # Try YYYY-MM-DD format
-                            unavailable_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                            soldier.home_round_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                         except ValueError:
                             # Skip if invalid format
                             pass
-                        else:
-                            unavailable = UnavailableDate(
-                                soldier_id=soldier.id,
-                                date=unavailable_date,
-                                reason='יציאה',
-                                status='approved'
-                            )
-                            session.add(unavailable)
-                    else:
-                        unavailable = UnavailableDate(
-                            soldier_id=soldier.id,
-                            date=unavailable_date,
-                            reason='יציאה',
-                            status='approved'
-                        )
-                        session.add(unavailable)
 
                 created.append({
                     'id': soldier.id,
@@ -807,6 +791,8 @@ def get_soldier_status(soldier_id, current_user):
             'status': {
                 'id': status.id,
                 'status_type': status.status_type,
+                'start_date': status.start_date.isoformat() if status.start_date else None,
+                'end_date': status.end_date.isoformat() if status.end_date else None,
                 'return_date': status.return_date.isoformat() if status.return_date else None,
                 'notes': status.notes,
                 'updated_at': status.updated_at.isoformat() if status.updated_at else None
@@ -832,11 +818,22 @@ def update_soldier_status(soldier_id, current_user):
 
         data = request.json
         status_type = data.get('status_type', 'בבסיס')
-        return_date = data.get('return_date')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        return_date = data.get('return_date')  # לתאימות לאחור
         notes = data.get('notes', '')
 
-        # המרת תאריך
+        # המרת תאריכים
+        start_date_obj = None
+        end_date_obj = None
         return_date_obj = None
+
+        if start_date:
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+
+        if end_date:
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+
         if return_date:
             return_date_obj = datetime.strptime(return_date, '%Y-%m-%d').date()
 
@@ -847,7 +844,9 @@ def update_soldier_status(soldier_id, current_user):
             session.add(status)
 
         status.status_type = status_type
-        status.return_date = return_date_obj
+        status.start_date = start_date_obj
+        status.end_date = end_date_obj
+        status.return_date = return_date_obj or end_date_obj  # אם אין return_date, קח את end_date
         status.notes = notes
         status.updated_by = current_user.get('user_id')
         status.updated_at = datetime.now()
@@ -871,8 +870,10 @@ def update_soldier_status(soldier_id, current_user):
                         start_day = (today - shavzak_start).days
                         end_day = start_day + 30  # מחק 30 ימים קדימה
 
-                        if return_date_obj:
-                            end_day = min(end_day, (return_date_obj - shavzak_start).days)
+                        # השתמש ב-end_date אם קיים, אחרת ב-return_date לתאימות לאחור
+                        relevant_end_date = end_date_obj or return_date_obj
+                        if relevant_end_date:
+                            end_day = min(end_day, (relevant_end_date - shavzak_start).days)
 
                         for day in range(max(0, start_day), end_day + 1):
                             soldier_assignments = session.query(AssignmentSoldier).join(Assignment).filter(
@@ -895,6 +896,8 @@ def update_soldier_status(soldier_id, current_user):
             'message': 'סטטוס עודכן בהצלחה',
             'status': {
                 'status_type': status.status_type,
+                'start_date': status.start_date.isoformat() if status.start_date else None,
+                'end_date': status.end_date.isoformat() if status.end_date else None,
                 'return_date': status.return_date.isoformat() if status.return_date else None
             }
         }), 200

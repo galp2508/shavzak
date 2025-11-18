@@ -36,6 +36,8 @@ export const getStatusBadge = (soldier) => {
       text: soldier.status.status_type,
       className: statusColors[soldier.status.status_type] || 'bg-gray-500 text-white',
       show: true,
+      startDate: soldier.status.start_date,
+      endDate: soldier.status.end_date,
       returnDate: soldier.status.return_date
     };
   }
@@ -49,17 +51,34 @@ export const SoldierStatusBadge = ({ soldier, onClick }) => {
 
   if (!badge.show) return null;
 
+  // בנה את הטקסט של התאריכים
+  let dateText = '';
+  let tooltipText = 'לחץ לשינוי סטטוס';
+
+  if (badge.startDate && badge.endDate) {
+    const start = new Date(badge.startDate);
+    const end = new Date(badge.endDate);
+    dateText = `${start.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })} - ${end.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}`;
+    tooltipText = `מ-${start.toLocaleDateString('he-IL')} עד ${end.toLocaleDateString('he-IL')}`;
+  } else if (badge.endDate) {
+    const end = new Date(badge.endDate);
+    dateText = end.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+    tooltipText = `עד: ${end.toLocaleDateString('he-IL')}`;
+  } else if (badge.returnDate) {
+    const returnDate = new Date(badge.returnDate);
+    dateText = returnDate.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+    tooltipText = `חזרה: ${returnDate.toLocaleDateString('he-IL')}`;
+  }
+
   return (
     <span
       onClick={onClick}
       className={`text-xs px-2 py-1 rounded-full cursor-pointer hover:opacity-80 transition-opacity ${badge.className}`}
-      title={badge.returnDate ? `חזרה: ${new Date(badge.returnDate).toLocaleDateString('he-IL')}` : 'לחץ לשינוי סטטוס'}
+      title={tooltipText}
     >
       {badge.text}
-      {badge.returnDate && (
-        <span className="mr-1">
-          ({new Date(badge.returnDate).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })})
-        </span>
+      {dateText && (
+        <span className="mr-1">({dateText})</span>
       )}
     </span>
   );
@@ -69,6 +88,8 @@ export const SoldierStatusBadge = ({ soldier, onClick }) => {
 export const StatusChangeModal = ({ soldier, onClose, onUpdate }) => {
   const [formData, setFormData] = useState({
     status_type: soldier.status?.status_type || 'בבסיס',
+    start_date: soldier.status?.start_date || '',
+    end_date: soldier.status?.end_date || '',
     return_date: soldier.status?.return_date || '',
     notes: soldier.status?.notes || ''
   });
@@ -87,9 +108,15 @@ export const StatusChangeModal = ({ soldier, onClose, onUpdate }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // בדיקה שבוחרים תאריך חזרה כשצריך
-    if (selectedType?.needsReturn && !formData.return_date) {
-      toast.error('חובה להזין תאריך חזרה לבסיס');
+    // בדיקה שבוחרים תאריך סיום כשצריך
+    if (selectedType?.needsReturn && !formData.end_date) {
+      toast.error('חובה להזין תאריך סיום');
+      return;
+    }
+
+    // בדיקה שתאריך התחלה לפני תאריך סיום
+    if (formData.start_date && formData.end_date && formData.start_date > formData.end_date) {
+      toast.error('תאריך התחלה חייב להיות לפני תאריך סיום');
       return;
     }
 
@@ -97,7 +124,9 @@ export const StatusChangeModal = ({ soldier, onClose, onUpdate }) => {
     try {
       await api.put(`/soldiers/${soldier.id}/status`, {
         status_type: formData.status_type,
-        return_date: formData.return_date || null,
+        start_date: formData.start_date || null,
+        end_date: formData.end_date || null,
+        return_date: formData.return_date || formData.end_date || null,
         notes: formData.notes
       });
       toast.success('סטטוס עודכן בהצלחה');
@@ -138,7 +167,7 @@ export const StatusChangeModal = ({ soldier, onClose, onUpdate }) => {
             <label className="label">סטטוס *</label>
             <select
               value={formData.status_type}
-              onChange={(e) => setFormData({ ...formData, status_type: e.target.value, return_date: '' })}
+              onChange={(e) => setFormData({ ...formData, status_type: e.target.value, start_date: '', end_date: '', return_date: '' })}
               className="input-field"
               required
             >
@@ -148,24 +177,43 @@ export const StatusChangeModal = ({ soldier, onClose, onUpdate }) => {
             </select>
           </div>
 
-          {/* תאריך חזרה (רק אם לא בבסיס ולא בסבב קו) */}
+          {/* תאריכי התחלה וסיום (רק אם לא בבסיס ולא בסבב קו) */}
           {selectedType?.needsReturn && (
-            <div>
-              <label className="label flex items-center gap-2">
-                <Calendar size={16} />
-                תאריך חזרה לבסיס *
-              </label>
-              <input
-                type="date"
-                value={formData.return_date}
-                onChange={(e) => setFormData({ ...formData, return_date: e.target.value })}
-                className="input-field"
-                required
-                min={new Date().toISOString().split('T')[0]}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                עד תאריך זה החייל יהיה לא זמין לשיבוצים
-              </p>
+            <div className="space-y-3">
+              <div>
+                <label className="label flex items-center gap-2">
+                  <Calendar size={16} />
+                  תאריך התחלה
+                </label>
+                <input
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                  className="input-field"
+                  max={formData.end_date || undefined}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  מתי הסטטוס מתחיל (אופציונלי)
+                </p>
+              </div>
+
+              <div>
+                <label className="label flex items-center gap-2">
+                  <Calendar size={16} />
+                  תאריך סיום *
+                </label>
+                <input
+                  type="date"
+                  value={formData.end_date}
+                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                  className="input-field"
+                  required
+                  min={formData.start_date || new Date().toISOString().split('T')[0]}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  עד תאריך זה החייל יהיה לא זמין לשיבוצים
+                </p>
+              </div>
             </div>
           )}
 

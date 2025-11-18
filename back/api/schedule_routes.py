@@ -811,6 +811,60 @@ def update_assignment(assignment_id, current_user):
         session.close()
 
 
+@schedule_bp.route('/api/assignments/<int:assignment_id>/time', methods=['PATCH'])
+@token_required
+def update_assignment_time(assignment_id, current_user):
+    """עדכון שעת התחלה ו/או שם של משימה (לדרג-אנד-דרופ)"""
+    try:
+        session = get_db()
+
+        assignment = session.query(Assignment).filter_by(id=assignment_id).first()
+        if not assignment:
+            return jsonify({'error': 'משימה לא נמצאה'}), 404
+
+        shavzak = session.query(Shavzak).filter_by(id=assignment.shavzak_id).first()
+        if not can_edit_pluga(current_user, shavzak.pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        data = request.json
+        new_start_hour = data.get('start_hour')
+        new_name = data.get('name')
+
+        # לפחות אחד מהשדות חייב להיות
+        if new_start_hour is None and new_name is None:
+            return jsonify({'error': 'חסר לפחות אחד מהפרמטרים: start_hour או name'}), 400
+
+        # אם יש start_hour, בדוק תקינות
+        if new_start_hour is not None:
+            if not (0 <= new_start_hour < 24):
+                return jsonify({'error': 'שעת התחלה לא חוקית (0-23)'}), 400
+            assignment.start_hour = new_start_hour
+
+        # אם יש name, בדוק תקינות ועדכן
+        if new_name is not None:
+            if not new_name.strip():
+                return jsonify({'error': 'שם משימה לא יכול להיות ריק'}), 400
+            assignment.name = new_name.strip()
+
+        session.commit()
+
+        return jsonify({
+            'message': 'המשימה עודכנה בהצלחה',
+            'assignment': {
+                'id': assignment.id,
+                'start_hour': assignment.start_hour,
+                'name': assignment.name
+            }
+        }), 200
+    except Exception as e:
+        print(f"🔴 שגיאה בעדכון משימה: {str(e)}")
+        traceback.print_exc()
+        session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
 @schedule_bp.route('/api/assignments/<int:assignment_id>/soldiers', methods=['PUT'])
 @token_required
 def update_assignment_soldiers(assignment_id, current_user):

@@ -17,7 +17,6 @@ const Layout = () => {
     { name: 'מחלקות', href: '/mahalkot', icon: Users, roles: ['מפ', 'ממ'] },
     { name: 'תבניות משימות', href: '/templates', icon: FileText, roles: ['מפ'] },
     { name: 'שיבוץ חי', href: '/live-schedule', icon: CalendarDays, roles: ['מפ', 'ממ', 'מכ'] },
-    { name: 'שיבוצים', href: '/shavzakim', icon: Calendar, roles: ['מפ', 'ממ', 'מכ'] },
   ];
 
   // הוסף "בקשות הצטרפות" רק למפ ראשי (מפ ללא pluga_id)

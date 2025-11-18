@@ -200,7 +200,8 @@ def create_soldiers_bulk(current_user):
                                 soldier_id=soldier.id,
                                 date=unavailable_date,
                                 reason='יציאה',
-                                status='approved'
+                                status='approved',
+                                unavailability_type='בקשת יציאה'
                             )
                             session.add(unavailable)
                     else:
@@ -208,7 +209,8 @@ def create_soldiers_bulk(current_user):
                             soldier_id=soldier.id,
                             date=unavailable_date,
                             reason='יציאה',
-                            status='approved'
+                            status='approved',
+                            unavailability_type='בקשת יציאה'
                         )
                         session.add(unavailable)
 

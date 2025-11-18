@@ -182,37 +182,19 @@ def create_soldiers_bulk(current_user):
                     cert = Certification(soldier_id=soldier.id, certification_name=cert_name)
                     session.add(cert)
 
-                # Add unavailable date if provided
+                # Set home round date if provided (תאריך סבב יציאה)
                 if soldier_data.get('unavailable_date'):
                     date_str = soldier_data['unavailable_date']
                     try:
                         # Try DD.MM.YYYY format
-                        unavailable_date = datetime.strptime(date_str, '%d.%m.%Y').date()
+                        soldier.home_round_date = datetime.strptime(date_str, '%d.%m.%Y').date()
                     except ValueError:
                         try:
                             # Try YYYY-MM-DD format
-                            unavailable_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                            soldier.home_round_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                         except ValueError:
                             # Skip if invalid format
                             pass
-                        else:
-                            unavailable = UnavailableDate(
-                                soldier_id=soldier.id,
-                                date=unavailable_date,
-                                reason='יציאה',
-                                status='approved',
-                                unavailability_type='בקשת יציאה'
-                            )
-                            session.add(unavailable)
-                    else:
-                        unavailable = UnavailableDate(
-                            soldier_id=soldier.id,
-                            date=unavailable_date,
-                            reason='יציאה',
-                            status='approved',
-                            unavailability_type='בקשת יציאה'
-                        )
-                        session.add(unavailable)
 
                 created.append({
                     'id': soldier.id,

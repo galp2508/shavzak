@@ -212,6 +212,19 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
     fetchCertifications();
   }, []);
 
+  // פונקציה שמחזירה הסמכות זמינות לפי תפקיד
+  const getAvailableCertificationsForRole = (role) => {
+    const commanderRoles = ['ממ', 'מכ', 'סמל'];
+
+    if (commanderRoles.includes(role)) {
+      // מפקדים רואים רק קצין תורן (מפקד יוסף אוטומטית)
+      return availableCertifications.filter(cert => cert === 'קצין תורן');
+    } else {
+      // לוחמים רואים רק נהג וחמל
+      return availableCertifications.filter(cert => cert === 'נהג' || cert === 'חמל');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -532,7 +545,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                     }}
                     className="input-field w-full h-20"
                   >
-                    {availableCertifications.map((cert) => (
+                    {getAvailableCertificationsForRole('ממ').map((cert) => (
                       <option key={cert} value={cert}>{cert}</option>
                     ))}
                   </select>
@@ -572,7 +585,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                     }}
                     className="input-field w-full h-20"
                   >
-                    {availableCertifications.map((cert) => (
+                    {getAvailableCertificationsForRole('סמל').map((cert) => (
                       <option key={cert} value={cert}>{cert}</option>
                     ))}
                   </select>
@@ -614,7 +627,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                         className="input-field w-full h-16 text-sm"
                         title="הסמכות (Ctrl)"
                       >
-                        {availableCertifications.map((cert) => (
+                        {getAvailableCertificationsForRole('מכ').map((cert) => (
                           <option key={cert} value={cert}>{cert}</option>
                         ))}
                       </select>
@@ -651,7 +664,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                         className="input-field w-full h-16 text-sm"
                         title="הסמכות (Ctrl)"
                       >
-                        {availableCertifications.map((cert) => (
+                        {getAvailableCertificationsForRole('מכ').map((cert) => (
                           <option key={cert} value={cert}>{cert}</option>
                         ))}
                       </select>
@@ -688,7 +701,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                         className="input-field w-full h-16 text-sm"
                         title="הסמכות (Ctrl)"
                       >
-                        {availableCertifications.map((cert) => (
+                        {getAvailableCertificationsForRole('מכ').map((cert) => (
                           <option key={cert} value={cert}>{cert}</option>
                         ))}
                       </select>
@@ -749,7 +762,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                       className="input-field w-32 h-10"
                       title="הסמכות (Ctrl לבחירה מרובה)"
                     >
-                      {availableCertifications.map((cert) => (
+                      {getAvailableCertificationsForRole('לוחם').map((cert) => (
                         <option key={cert} value={cert}>{cert}</option>
                       ))}
                     </select>
@@ -809,7 +822,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                       className="input-field w-32 h-10"
                       title="הסמכות (Ctrl לבחירה מרובה)"
                     >
-                      {availableCertifications.map((cert) => (
+                      {getAvailableCertificationsForRole('לוחם').map((cert) => (
                         <option key={cert} value={cert}>{cert}</option>
                       ))}
                     </select>
@@ -869,7 +882,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                       className="input-field w-32 h-10"
                       title="הסמכות (Ctrl לבחירה מרובה)"
                     >
-                      {availableCertifications.map((cert) => (
+                      {getAvailableCertificationsForRole('לוחם').map((cert) => (
                         <option key={cert} value={cert}>{cert}</option>
                       ))}
                     </select>
@@ -1514,11 +1527,24 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
         setAvailableRoles(response.data.roles_certifications || []);
       } catch (error) {
         console.error('Error loading available roles:', error);
-        setAvailableRoles(['מפקד', 'נהג', 'חמל', 'קצין תורן']);
+        setAvailableRoles(['נהג', 'חמל', 'קצין תורן']);
       }
     };
     loadAvailableRoles();
   }, []);
+
+  // פונקציה שמחזירה הסמכות זמינות לפי תפקיד החייל
+  const getAvailableCertificationsForSoldier = () => {
+    const commanderRoles = ['ממ', 'מכ', 'סמל'];
+
+    if (commanderRoles.includes(soldier.role)) {
+      // מפקדים רואים רק קצין תורן (מפקד יוסף אוטומטית)
+      return availableRoles.filter(cert => cert === 'קצין תורן');
+    } else {
+      // לוחמים רואים רק נהג וחמל
+      return availableRoles.filter(cert => cert === 'נהג' || cert === 'חמל');
+    }
+  };
 
   // הוסף הסמכה
   const handleAddCertification = async (certName) => {
@@ -1538,6 +1564,11 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
 
   // מחק הסמכה
   const handleDeleteCertification = async (cert) => {
+    if (!cert.id) {
+      toast.error('לא ניתן למחוק הסמכה זו');
+      return;
+    }
+
     if (!window.confirm(`האם למחוק את הסמכת "${cert.name}"?`)) return;
 
     try {
@@ -1545,7 +1576,7 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
       setCertifications(certifications.filter(c => c.id !== cert.id));
       toast.success('ההסמכה נמחקה בהצלחה');
     } catch (error) {
-      toast.error('שגיאה במחיקת הסמכה');
+      toast.error(error.response?.data?.error || 'שגיאה במחיקת הסמכה');
     }
   };
 
@@ -1728,21 +1759,31 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
             </div>
             {certifications.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {certifications.map((cert) => (
-                  <span
-                    key={cert.id}
-                    className="badge badge-blue flex items-center gap-2 group"
-                  >
-                    {cert.name}
-                    <button
-                      onClick={() => handleDeleteCertification(cert)}
-                      className="opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity"
-                      title="מחק הסמכה"
+                {certifications.map((cert, index) => {
+                  const commanderRoles = ['ממ', 'מכ', 'סמל'];
+                  const isCommanderCert = cert.name === 'מפקד' && commanderRoles.includes(soldier.role);
+
+                  return (
+                    <span
+                      key={cert.id || `cert-${index}-${cert.name}`}
+                      className={`badge ${isCommanderCert ? 'badge-green' : 'badge-blue'} flex items-center gap-2 group`}
+                      title={isCommanderCert ? 'הסמכה אוטומטית למפקדים' : ''}
                     >
-                      <X size={14} />
-                    </button>
-                  </span>
-                ))}
+                      {cert.name}
+                      {isCommanderCert && <span className="text-xs">(אוטומטי)</span>}
+                      {!isCommanderCert && (
+                        <button
+                          onClick={() => handleDeleteCertification(cert)}
+                          className="opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity"
+                          title="מחק הסמכה"
+                          disabled={!cert.id}
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-gray-500 text-sm">אין הסמכות</p>
@@ -1832,7 +1873,7 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
                 בחר הסמכה להוספה עבור {soldier.name}
               </p>
 
-              {availableRoles
+              {getAvailableCertificationsForSoldier()
                 .filter(role => !certifications.some(c => c.name === role))
                 .map(role => (
                   <button
@@ -1844,7 +1885,7 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
                   </button>
                 ))}
 
-              {availableRoles.filter(role => !certifications.some(c => c.name === role)).length === 0 && (
+              {getAvailableCertificationsForSoldier().filter(role => !certifications.some(c => c.name === role)).length === 0 && (
                 <p className="text-center text-gray-500 py-4">
                   כל ההסמכות כבר נוספו
                 </p>

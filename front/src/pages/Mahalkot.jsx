@@ -186,18 +186,31 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
   const [createdMahlakaId, setCreatedMahlakaId] = useState(null);
   const [showSoldiersImport, setShowSoldiersImport] = useState(false);
   const [soldiersFormData, setSoldiersFormData] = useState({
-    mm: { name: '', date: '', role: 'ממ' },
-    samal: { name: '', date: '', role: 'סמל' },
-    mkXa: { name: '', date: '', role: 'מכ' },
-    mkXb: { name: '', date: '', role: 'מכ' },
-    mkXg: { name: '', date: '', role: 'מכ' },
-    kitaA: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
-    kitaB: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
-    kitaG: { soldiers: [{ name: '', role: 'לוחם' }], date: '' }
+    mm: { name: '', date: '', role: 'ממ', certifications: [] },
+    samal: { name: '', date: '', role: 'סמל', certifications: [] },
+    mkXa: { name: '', date: '', role: 'מכ', certifications: [] },
+    mkXb: { name: '', date: '', role: 'מכ', certifications: [] },
+    mkXg: { name: '', date: '', role: 'מכ', certifications: [] },
+    kitaA: { soldiers: [{ name: '', certifications: [] }], date: '' },
+    kitaB: { soldiers: [{ name: '', certifications: [] }], date: '' },
+    kitaG: { soldiers: [{ name: '', certifications: [] }], date: '' }
   });
   const [soldierImportLoading, setSoldierImportLoading] = useState(false);
   const [useSharedDate, setUseSharedDate] = useState(false);
   const [sharedDate, setSharedDate] = useState('');
+  const [availableCertifications, setAvailableCertifications] = useState([]);
+
+  useEffect(() => {
+    const fetchCertifications = async () => {
+      try {
+        const response = await api.get('/available-roles-certifications');
+        setAvailableCertifications(response.data.roles_certifications || []);
+      } catch (error) {
+        console.error('Error loading certifications:', error);
+      }
+    };
+    fetchCertifications();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -300,17 +313,19 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
         name: soldiersFormData.mm.name,
         role: 'ממ',
         unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.mm.date),
-        mahlaka_id: createdMahlakaId
+        mahlaka_id: createdMahlakaId,
+        certifications: soldiersFormData.mm.certifications || []
       });
     }
 
     // Add סמל
     if (soldiersFormData.samal.name) {
-      soldiers.push({ 
-        name: soldiersFormData.samal.name, 
-        role: 'סמל', 
+      soldiers.push({
+        name: soldiersFormData.samal.name,
+        role: 'סמל',
         unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.samal.date),
-        mahlaka_id: createdMahlakaId
+        mahlaka_id: createdMahlakaId,
+        certifications: soldiersFormData.samal.certifications || []
       });
     }
 
@@ -321,7 +336,8 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
         role: 'מכ',
         kita: `${mahlakaNum}א`,
         unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.mkXa.date),
-        mahlaka_id: createdMahlakaId
+        mahlaka_id: createdMahlakaId,
+        certifications: soldiersFormData.mkXa.certifications || []
       });
     }
     if (soldiersFormData.mkXb.name) {
@@ -330,7 +346,8 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
         role: 'מכ',
         kita: `${mahlakaNum}ב`,
         unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.mkXb.date),
-        mahlaka_id: createdMahlakaId
+        mahlaka_id: createdMahlakaId,
+        certifications: soldiersFormData.mkXb.certifications || []
       });
     }
     if (soldiersFormData.mkXg.name) {
@@ -339,45 +356,49 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
         role: 'מכ',
         kita: `${mahlakaNum}ג`,
         unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.mkXg.date),
-        mahlaka_id: createdMahlakaId
+        mahlaka_id: createdMahlakaId,
+        certifications: soldiersFormData.mkXg.certifications || []
       });
     }
 
-    // Add soldiers from כיתה א
+    // Add soldiers from כיתה א - תפקיד "לוחם" אוטומטית
     soldiersFormData.kitaA.soldiers.forEach((soldier) => {
       if (soldier.name) {
         soldiers.push({
           name: soldier.name,
-          role: soldier.role,
+          role: 'לוחם',
           kita: `${mahlakaNum}א`,
           unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.kitaA.date),
-          mahlaka_id: createdMahlakaId
+          mahlaka_id: createdMahlakaId,
+          certifications: soldier.certifications || []
         });
       }
     });
 
-    // Add soldiers from כיתה ב
+    // Add soldiers from כיתה ב - תפקיד "לוחם" אוטומטית
     soldiersFormData.kitaB.soldiers.forEach((soldier) => {
       if (soldier.name) {
         soldiers.push({
           name: soldier.name,
-          role: soldier.role,
+          role: 'לוחם',
           kita: `${mahlakaNum}ב`,
           unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.kitaB.date),
-          mahlaka_id: createdMahlakaId
+          mahlaka_id: createdMahlakaId,
+          certifications: soldier.certifications || []
         });
       }
     });
 
-    // Add soldiers from כיתה ג
+    // Add soldiers from כיתה ג - תפקיד "לוחם" אוטומטית
     soldiersFormData.kitaG.soldiers.forEach((soldier) => {
       if (soldier.name) {
         soldiers.push({
           name: soldier.name,
-          role: soldier.role,
+          role: 'לוחם',
           kita: `${mahlakaNum}ג`,
           unavailable_date: useSharedDate ? formatDateForBackend(sharedDate) : formatDateForBackend(soldiersFormData.kitaG.date),
-          mahlaka_id: createdMahlakaId
+          mahlaka_id: createdMahlakaId,
+          certifications: soldier.certifications || []
         });
       }
     });
@@ -418,14 +439,14 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
         setCreatedMahlakaId(null);
         setShowSoldiersImport(false);
         setSoldiersFormData({
-          mm: { name: '', date: '' },
-          samal: { name: '', date: '' },
-          mkXa: { name: '', date: '' },
-          mkXb: { name: '', date: '' },
-          mkXg: { name: '', date: '' },
-          kitaA: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
-          kitaB: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
-          kitaG: { soldiers: [{ name: '', role: 'לוחם' }], date: '' }
+          mm: { name: '', date: '', role: 'ממ', certifications: [] },
+          samal: { name: '', date: '', role: 'סמל', certifications: [] },
+          mkXa: { name: '', date: '', role: 'מכ', certifications: [] },
+          mkXb: { name: '', date: '', role: 'מכ', certifications: [] },
+          mkXg: { name: '', date: '', role: 'מכ', certifications: [] },
+          kitaA: { soldiers: [{ name: '', certifications: [] }], date: '' },
+          kitaB: { soldiers: [{ name: '', certifications: [] }], date: '' },
+          kitaG: { soldiers: [{ name: '', certifications: [] }], date: '' }
         });
         onSave();
       }, 1000);
@@ -440,14 +461,14 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
     setCreatedMahlakaId(null);
     setShowSoldiersImport(false);
     setSoldiersFormData({
-      mm: { name: '', date: '' },
-      samal: { name: '', date: '' },
-      mkXa: { name: '', date: '' },
-      mkXb: { name: '', date: '' },
-      mkXg: { name: '', date: '' },
-      kitaA: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
-      kitaB: { soldiers: [{ name: '', role: 'לוחם' }], date: '' },
-      kitaG: { soldiers: [{ name: '', role: 'לוחם' }], date: '' }
+      mm: { name: '', date: '', role: 'ממ', certifications: [] },
+      samal: { name: '', date: '', role: 'סמל', certifications: [] },
+      mkXa: { name: '', date: '', role: 'מכ', certifications: [] },
+      mkXb: { name: '', date: '', role: 'מכ', certifications: [] },
+      mkXg: { name: '', date: '', role: 'מכ', certifications: [] },
+      kitaA: { soldiers: [{ name: '', certifications: [] }], date: '' },
+      kitaB: { soldiers: [{ name: '', certifications: [] }], date: '' },
+      kitaG: { soldiers: [{ name: '', certifications: [] }], date: '' }
     });
     onSave();
   };
@@ -499,6 +520,24 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                   />
                 )}
               </div>
+              {soldiersFormData.mm.name && (
+                <div className="mt-2">
+                  <label className="block text-sm font-medium mb-1">הסמכות (Ctrl לבחירה מרובה)</label>
+                  <select
+                    multiple
+                    value={soldiersFormData.mm.certifications || []}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions, option => option.value);
+                      setSoldiersFormData({ ...soldiersFormData, mm: { ...soldiersFormData.mm, certifications: selected } });
+                    }}
+                    className="input-field w-full h-20"
+                  >
+                    {availableCertifications.map((cert) => (
+                      <option key={cert} value={cert}>{cert}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Block 2: סמל */}
@@ -521,61 +560,139 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                   />
                 )}
               </div>
+              {soldiersFormData.samal.name && (
+                <div className="mt-2">
+                  <label className="block text-sm font-medium mb-1">הסמכות (Ctrl לבחירה מרובה)</label>
+                  <select
+                    multiple
+                    value={soldiersFormData.samal.certifications || []}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions, option => option.value);
+                      setSoldiersFormData({ ...soldiersFormData, samal: { ...soldiersFormData.samal, certifications: selected } });
+                    }}
+                    className="input-field w-full h-20"
+                  >
+                    {availableCertifications.map((cert) => (
+                      <option key={cert} value={cert}>{cert}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Block 3: מ"כ */}
             <div className="border-l-4 border-green-600 pl-4">
               <h3 className="font-bold text-lg mb-3">מ"כ (מפקדי כיתה)</h3>
               <div className="space-y-3">
-                <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
-                  <input
-                    type="text"
-                    placeholder={`שם מ"כ כיתה ${formData.number}א`}
-                    value={soldiersFormData.mkXa.name}
-                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXa: { ...soldiersFormData.mkXa, name: e.target.value } })}
-                    className="input-field"
-                  />
-                  {!useSharedDate && (
+                <div>
+                  <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                     <input
-                      type="date"
-                      value={soldiersFormData.mkXa.date}
-                      onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXa: { ...soldiersFormData.mkXa, date: e.target.value } })}
+                      type="text"
+                      placeholder={`שם מ"כ כיתה ${formData.number}א`}
+                      value={soldiersFormData.mkXa.name}
+                      onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXa: { ...soldiersFormData.mkXa, name: e.target.value } })}
                       className="input-field"
                     />
+                    {!useSharedDate && (
+                      <input
+                        type="date"
+                        value={soldiersFormData.mkXa.date}
+                        onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXa: { ...soldiersFormData.mkXa, date: e.target.value } })}
+                        className="input-field"
+                      />
+                    )}
+                  </div>
+                  {soldiersFormData.mkXa.name && (
+                    <div className="mt-2">
+                      <select
+                        multiple
+                        value={soldiersFormData.mkXa.certifications || []}
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.selectedOptions, option => option.value);
+                          setSoldiersFormData({ ...soldiersFormData, mkXa: { ...soldiersFormData.mkXa, certifications: selected } });
+                        }}
+                        className="input-field w-full h-16 text-sm"
+                        title="הסמכות (Ctrl)"
+                      >
+                        {availableCertifications.map((cert) => (
+                          <option key={cert} value={cert}>{cert}</option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
-                <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
-                  <input
-                    type="text"
-                    placeholder={`שם מ"כ כיתה ${formData.number}ב`}
-                    value={soldiersFormData.mkXb.name}
-                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXb: { ...soldiersFormData.mkXb, name: e.target.value } })}
-                    className="input-field"
-                  />
-                  {!useSharedDate && (
+                <div>
+                  <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                     <input
-                      type="date"
-                      value={soldiersFormData.mkXb.date}
-                      onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXb: { ...soldiersFormData.mkXb, date: e.target.value } })}
+                      type="text"
+                      placeholder={`שם מ"כ כיתה ${formData.number}ב`}
+                      value={soldiersFormData.mkXb.name}
+                      onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXb: { ...soldiersFormData.mkXb, name: e.target.value } })}
                       className="input-field"
                     />
+                    {!useSharedDate && (
+                      <input
+                        type="date"
+                        value={soldiersFormData.mkXb.date}
+                        onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXb: { ...soldiersFormData.mkXb, date: e.target.value } })}
+                        className="input-field"
+                      />
+                    )}
+                  </div>
+                  {soldiersFormData.mkXb.name && (
+                    <div className="mt-2">
+                      <select
+                        multiple
+                        value={soldiersFormData.mkXb.certifications || []}
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.selectedOptions, option => option.value);
+                          setSoldiersFormData({ ...soldiersFormData, mkXb: { ...soldiersFormData.mkXb, certifications: selected } });
+                        }}
+                        className="input-field w-full h-16 text-sm"
+                        title="הסמכות (Ctrl)"
+                      >
+                        {availableCertifications.map((cert) => (
+                          <option key={cert} value={cert}>{cert}</option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
-                <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
-                  <input
-                    type="text"
-                    placeholder={`שם מ"כ כיתה ${formData.number}ג`}
-                    value={soldiersFormData.mkXg.name}
-                    onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXg: { ...soldiersFormData.mkXg, name: e.target.value } })}
-                    className="input-field"
-                  />
-                  {!useSharedDate && (
+                <div>
+                  <div className={useSharedDate ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                     <input
-                      type="date"
-                      value={soldiersFormData.mkXg.date}
-                      onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXg: { ...soldiersFormData.mkXg, date: e.target.value } })}
+                      type="text"
+                      placeholder={`שם מ"כ כיתה ${formData.number}ג`}
+                      value={soldiersFormData.mkXg.name}
+                      onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXg: { ...soldiersFormData.mkXg, name: e.target.value } })}
                       className="input-field"
                     />
+                    {!useSharedDate && (
+                      <input
+                        type="date"
+                        value={soldiersFormData.mkXg.date}
+                        onChange={(e) => setSoldiersFormData({ ...soldiersFormData, mkXg: { ...soldiersFormData.mkXg, date: e.target.value } })}
+                        className="input-field"
+                      />
+                    )}
+                  </div>
+                  {soldiersFormData.mkXg.name && (
+                    <div className="mt-2">
+                      <select
+                        multiple
+                        value={soldiersFormData.mkXg.certifications || []}
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.selectedOptions, option => option.value);
+                          setSoldiersFormData({ ...soldiersFormData, mkXg: { ...soldiersFormData.mkXg, certifications: selected } });
+                        }}
+                        className="input-field w-full h-16 text-sm"
+                        title="הסמכות (Ctrl)"
+                      >
+                        {availableCertifications.map((cert) => (
+                          <option key={cert} value={cert}>{cert}</option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
               </div>
@@ -598,7 +715,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
 
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {soldiersFormData.kitaA.soldiers.map((soldier, idx) => (
-                  <div key={idx} className="grid grid-cols-3 gap-2">
+                  <div key={idx} className="flex gap-2 items-start">
                     <input
                       type="text"
                       placeholder="שם חייל"
@@ -607,7 +724,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                         const newSoldiers = [...soldiersFormData.kitaA.soldiers];
                         newSoldiers[idx].name = e.target.value;
                         if (idx === newSoldiers.length - 1 && e.target.value.trim()) {
-                          newSoldiers.push({ name: '', role: 'לוחם' });
+                          newSoldiers.push({ name: '', certifications: [] });
                         }
                         setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, soldiers: newSoldiers } });
                       }}
@@ -618,19 +735,22 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                           setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, soldiers: newSoldiers } });
                         }
                       }}
-                      className="input-field col-span-2"
+                      className="input-field flex-1"
                     />
                     <select
-                      value={soldier.role}
+                      multiple
+                      value={soldier.certifications || []}
                       onChange={(e) => {
                         const newSoldiers = [...soldiersFormData.kitaA.soldiers];
-                        newSoldiers[idx].role = e.target.value;
+                        const selected = Array.from(e.target.selectedOptions, option => option.value);
+                        newSoldiers[idx].certifications = selected;
                         setSoldiersFormData({ ...soldiersFormData, kitaA: { ...soldiersFormData.kitaA, soldiers: newSoldiers } });
                       }}
-                      className="input-field"
+                      className="input-field w-32 h-10"
+                      title="הסמכות (Ctrl לבחירה מרובה)"
                     >
-                      {ROLES.map((role) => (
-                        <option key={role} value={role}>{role}</option>
+                      {availableCertifications.map((cert) => (
+                        <option key={cert} value={cert}>{cert}</option>
                       ))}
                     </select>
                   </div>
@@ -655,7 +775,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
 
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {soldiersFormData.kitaB.soldiers.map((soldier, idx) => (
-                  <div key={idx} className="grid grid-cols-3 gap-2">
+                  <div key={idx} className="flex gap-2 items-start">
                     <input
                       type="text"
                       placeholder="שם חייל"
@@ -664,7 +784,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                         const newSoldiers = [...soldiersFormData.kitaB.soldiers];
                         newSoldiers[idx].name = e.target.value;
                         if (idx === newSoldiers.length - 1 && e.target.value.trim()) {
-                          newSoldiers.push({ name: '', role: 'לוחם' });
+                          newSoldiers.push({ name: '', certifications: [] });
                         }
                         setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, soldiers: newSoldiers } });
                       }}
@@ -675,19 +795,22 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                           setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, soldiers: newSoldiers } });
                         }
                       }}
-                      className="input-field col-span-2"
+                      className="input-field flex-1"
                     />
                     <select
-                      value={soldier.role}
+                      multiple
+                      value={soldier.certifications || []}
                       onChange={(e) => {
                         const newSoldiers = [...soldiersFormData.kitaB.soldiers];
-                        newSoldiers[idx].role = e.target.value;
+                        const selected = Array.from(e.target.selectedOptions, option => option.value);
+                        newSoldiers[idx].certifications = selected;
                         setSoldiersFormData({ ...soldiersFormData, kitaB: { ...soldiersFormData.kitaB, soldiers: newSoldiers } });
                       }}
-                      className="input-field"
+                      className="input-field w-32 h-10"
+                      title="הסמכות (Ctrl לבחירה מרובה)"
                     >
-                      {ROLES.map((role) => (
-                        <option key={role} value={role}>{role}</option>
+                      {availableCertifications.map((cert) => (
+                        <option key={cert} value={cert}>{cert}</option>
                       ))}
                     </select>
                   </div>
@@ -712,7 +835,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
 
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {soldiersFormData.kitaG.soldiers.map((soldier, idx) => (
-                  <div key={idx} className="grid grid-cols-3 gap-2">
+                  <div key={idx} className="flex gap-2 items-start">
                     <input
                       type="text"
                       placeholder="שם חייל"
@@ -721,7 +844,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                         const newSoldiers = [...soldiersFormData.kitaG.soldiers];
                         newSoldiers[idx].name = e.target.value;
                         if (idx === newSoldiers.length - 1 && e.target.value.trim()) {
-                          newSoldiers.push({ name: '', role: 'לוחם' });
+                          newSoldiers.push({ name: '', certifications: [] });
                         }
                         setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, soldiers: newSoldiers } });
                       }}
@@ -732,19 +855,22 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                           setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, soldiers: newSoldiers } });
                         }
                       }}
-                      className="input-field col-span-2"
+                      className="input-field flex-1"
                     />
                     <select
-                      value={soldier.role}
+                      multiple
+                      value={soldier.certifications || []}
                       onChange={(e) => {
                         const newSoldiers = [...soldiersFormData.kitaG.soldiers];
-                        newSoldiers[idx].role = e.target.value;
+                        const selected = Array.from(e.target.selectedOptions, option => option.value);
+                        newSoldiers[idx].certifications = selected;
                         setSoldiersFormData({ ...soldiersFormData, kitaG: { ...soldiersFormData.kitaG, soldiers: newSoldiers } });
                       }}
-                      className="input-field"
+                      className="input-field w-32 h-10"
+                      title="הסמכות (Ctrl לבחירה מרובה)"
                     >
-                      {ROLES.map((role) => (
-                        <option key={role} value={role}>{role}</option>
+                      {availableCertifications.map((cert) => (
+                        <option key={cert} value={cert}>{cert}</option>
                       ))}
                     </select>
                   </div>

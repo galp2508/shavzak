@@ -167,6 +167,36 @@ def create_soldiers_bulk(current_user):
                         cert = Certification(soldier_id=soldier.id, certification_name=cert_name)
                         session.add(cert)
 
+                # Add unavailable date if provided
+                if soldier_data.get('unavailable_date'):
+                    date_str = soldier_data['unavailable_date']
+                    try:
+                        # Try DD.MM.YYYY format
+                        unavailable_date = datetime.strptime(date_str, '%d.%m.%Y').date()
+                    except ValueError:
+                        try:
+                            # Try YYYY-MM-DD format
+                            unavailable_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                        except ValueError:
+                            # Skip if invalid format
+                            pass
+                        else:
+                            unavailable = UnavailableDate(
+                                soldier_id=soldier.id,
+                                date=unavailable_date,
+                                reason='יציאה',
+                                status='approved'
+                            )
+                            session.add(unavailable)
+                    else:
+                        unavailable = UnavailableDate(
+                            soldier_id=soldier.id,
+                            date=unavailable_date,
+                            reason='יציאה',
+                            status='approved'
+                        )
+                        session.add(unavailable)
+
                 created.append({
                     'id': soldier.id,
                     'name': soldier.name,
@@ -183,6 +213,7 @@ def create_soldiers_bulk(current_user):
 
         return jsonify({
             'message': f'נוצרו {len(created)} חיילים',
+            'success_count': len(created),
             'created': created,
             'errors': errors
         }), 201 if created else 400

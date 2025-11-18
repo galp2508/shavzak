@@ -222,31 +222,53 @@ const LiveSchedule = () => {
       return;
     }
 
-    // חלץ את השעה החדשה מה-over id (פורמט: "drop-zone-{name}-{hour}")
+    // חלץ את השעה ושם התבנית החדשים מה-over id (פורמט: "drop-zone-{name}-{hour}")
     const overIdParts = over.id.toString().split('-');
     const newStartHour = parseInt(overIdParts[overIdParts.length - 1]);
+
+    // שם התבנית הוא כל מה שבין "drop-zone-" ל-hour האחרון
+    const newTemplateName = overIdParts.slice(2, -1).join('-');
 
     if (isNaN(newStartHour)) {
       return;
     }
 
-    // בדוק אם השעה באמת השתנתה
-    if (draggedAssignment.start_hour === newStartHour) {
+    // בדוק אם משהו באמת השתנה
+    const hourChanged = draggedAssignment.start_hour !== newStartHour;
+    const templateChanged = draggedAssignment.name !== newTemplateName;
+
+    if (!hourChanged && !templateChanged) {
       return;
     }
 
     try {
-      // עדכן את השרת
-      await api.patch(`/assignments/${draggedAssignment.id}/time`, {
-        start_hour: newStartHour
-      });
+      // הכן את הנתונים לעדכון
+      const updateData = {};
 
-      toast.success(`המשימה הועברה לשעה ${newStartHour.toString().padStart(2, '0')}:00`);
+      if (hourChanged) {
+        updateData.start_hour = newStartHour;
+      }
+
+      if (templateChanged) {
+        updateData.name = newTemplateName;
+      }
+
+      // עדכן את השרת
+      await api.patch(`/assignments/${draggedAssignment.id}/time`, updateData);
+
+      // הודעה מותאמת
+      if (hourChanged && templateChanged) {
+        toast.success(`המשימה הועברה ל-${newTemplateName} בשעה ${newStartHour.toString().padStart(2, '0')}:00`);
+      } else if (templateChanged) {
+        toast.success(`המשימה שונתה ל-${newTemplateName}`);
+      } else {
+        toast.success(`המשימה הועברה לשעה ${newStartHour.toString().padStart(2, '0')}:00`);
+      }
 
       // רענן את הנתונים
       loadSchedule(currentDate);
     } catch (error) {
-      console.error('Error updating assignment time:', error);
+      console.error('Error updating assignment:', error);
       toast.error(error.response?.data?.error || 'שגיאה בהזזת המשימה');
     }
   };

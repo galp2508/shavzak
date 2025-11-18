@@ -814,7 +814,7 @@ def update_assignment(assignment_id, current_user):
 @schedule_bp.route('/api/assignments/<int:assignment_id>/time', methods=['PATCH'])
 @token_required
 def update_assignment_time(assignment_id, current_user):
-    """עדכון שעת התחלה של משימה (לדרג-אנד-דרופ)"""
+    """עדכון שעת התחלה ו/או שם של משימה (לדרג-אנד-דרופ)"""
     try:
         session = get_db()
 
@@ -828,26 +828,36 @@ def update_assignment_time(assignment_id, current_user):
 
         data = request.json
         new_start_hour = data.get('start_hour')
+        new_name = data.get('name')
 
-        if new_start_hour is None:
-            return jsonify({'error': 'חסר פרמטר start_hour'}), 400
+        # לפחות אחד מהשדות חייב להיות
+        if new_start_hour is None and new_name is None:
+            return jsonify({'error': 'חסר לפחות אחד מהפרמטרים: start_hour או name'}), 400
 
-        if not (0 <= new_start_hour < 24):
-            return jsonify({'error': 'שעת התחלה לא חוקית (0-23)'}), 400
+        # אם יש start_hour, בדוק תקינות
+        if new_start_hour is not None:
+            if not (0 <= new_start_hour < 24):
+                return jsonify({'error': 'שעת התחלה לא חוקית (0-23)'}), 400
+            assignment.start_hour = new_start_hour
 
-        # עדכן את שעת ההתחלה
-        assignment.start_hour = new_start_hour
+        # אם יש name, בדוק תקינות ועדכן
+        if new_name is not None:
+            if not new_name.strip():
+                return jsonify({'error': 'שם משימה לא יכול להיות ריק'}), 400
+            assignment.name = new_name.strip()
+
         session.commit()
 
         return jsonify({
-            'message': 'שעת המשימה עודכנה בהצלחה',
+            'message': 'המשימה עודכנה בהצלחה',
             'assignment': {
                 'id': assignment.id,
-                'start_hour': assignment.start_hour
+                'start_hour': assignment.start_hour,
+                'name': assignment.name
             }
         }), 200
     except Exception as e:
-        print(f"🔴 שגיאה בעדכון שעת משימה: {str(e)}")
+        print(f"🔴 שגיאה בעדכון משימה: {str(e)}")
         traceback.print_exc()
         session.rollback()
         return jsonify({'error': str(e)}), 500

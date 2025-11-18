@@ -67,10 +67,18 @@ def create_soldier(current_user):
         session.add(soldier)
         session.flush()
 
-        if 'certifications' in data:
-            for cert_name in data['certifications']:
-                cert = Certification(soldier_id=soldier.id, certification_name=cert_name)
-                session.add(cert)
+        # הוסף הסמכות שנבחרו על ידי המשתמש
+        certifications_to_add = data.get('certifications', [])
+
+        # אם החייל הוא מפקד (ממ, מכ, סמל), הוסף אוטומטית הסמכת "מפקד"
+        commander_roles = ['ממ', 'מכ', 'סמל']
+        if soldier.role in commander_roles and 'מפקד' not in certifications_to_add:
+            certifications_to_add.append('מפקד')
+
+        # הוסף את כל ההסמכות
+        for cert_name in certifications_to_add:
+            cert = Certification(soldier_id=soldier.id, certification_name=cert_name)
+            session.add(cert)
 
         session.commit()
 
@@ -161,11 +169,18 @@ def create_soldiers_bulk(current_user):
                 session.add(soldier)
                 session.flush()
 
-                # Add certifications
-                if 'certifications' in soldier_data:
-                    for cert_name in soldier_data['certifications']:
-                        cert = Certification(soldier_id=soldier.id, certification_name=cert_name)
-                        session.add(cert)
+                # הוסף הסמכות שנבחרו על ידי המשתמש
+                certifications_to_add = soldier_data.get('certifications', [])
+
+                # אם החייל הוא מפקד (ממ, מכ, סמל), הוסף אוטומטית הסמכת "מפקד"
+                commander_roles = ['ממ', 'מכ', 'סמל']
+                if soldier.role in commander_roles and 'מפקד' not in certifications_to_add:
+                    certifications_to_add.append('מפקד')
+
+                # הוסף את כל ההסמכות
+                for cert_name in certifications_to_add:
+                    cert = Certification(soldier_id=soldier.id, certification_name=cert_name)
+                    session.add(cert)
 
                 # Add unavailable date if provided
                 if soldier_data.get('unavailable_date'):
@@ -343,6 +358,20 @@ def update_soldier(soldier_id, current_user):
             soldier.birth_date = datetime.strptime(data['birth_date'], '%Y-%m-%d').date()
         if 'home_round_date' in data and data['home_round_date']:
             soldier.home_round_date = datetime.strptime(data['home_round_date'], '%Y-%m-%d').date()
+
+        # אם התפקיד השתנה למפקד, ודא שיש לו הסמכת "מפקד"
+        commander_roles = ['ממ', 'מכ', 'סמל']
+        if soldier.role in commander_roles:
+            # בדוק אם יש לו כבר הסמכת "מפקד"
+            existing_commander_cert = session.query(Certification).filter(
+                Certification.soldier_id == soldier.id,
+                Certification.certification_name == 'מפקד'
+            ).first()
+
+            # אם אין לו הסמכת "מפקד", הוסף אותה
+            if not existing_commander_cert:
+                commander_cert = Certification(soldier_id=soldier.id, certification_name='מפקד')
+                session.add(commander_cert)
 
         session.commit()
 
@@ -546,6 +575,14 @@ def delete_certification(certification_id, current_user):
         # בדוק הרשאות - רק מפקדים יכולים למחוק הסמכות
         if not can_edit_soldier(current_user, cert.soldier_id, session):
             return jsonify({'error': 'אין לך הרשאה למחוק הסמכה זו'}), 403
+
+        # מנע מחיקת הסמכת "מפקד" ממפקדים
+        soldier = session.query(Soldier).filter_by(id=cert.soldier_id).first()
+        commander_roles = ['ממ', 'מכ', 'סמל']
+        if soldier and soldier.role in commander_roles and cert.certification_name == 'מפקד':
+            return jsonify({
+                'error': 'לא ניתן למחוק הסמכת "מפקד" ממפקד. הסמכה זו ניתנת אוטומטית לכל מפקד.'
+            }), 400
 
         cert_name = cert.certification_name
         session.delete(cert)

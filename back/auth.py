@@ -2,11 +2,12 @@
 Authentication & Authorization System
 """
 import jwt
+import os
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify
 
-SECRET_KEY = "your-secret-key-change-in-production"
+SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
 ALGORITHM = "HS256"
 
 def create_token(user):

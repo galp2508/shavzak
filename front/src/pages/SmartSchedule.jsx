@@ -26,6 +26,13 @@ const SmartSchedule = () => {
   const [rejectedAssignment, setRejectedAssignment] = useState(null);
   const [editingAssignment, setEditingAssignment] = useState(null);
 
+  // 🐛 Debug logging
+  useEffect(() => {
+    console.log('👤 User object:', user);
+    console.log('👤 User role:', user?.role);
+    console.log('✅ Should show AI button?', user?.role === 'מפ' || user?.role === 'ממ' || user?.role === 'מכ');
+  }, [user]);
+
   useEffect(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);

@@ -315,7 +315,7 @@ const SmartSchedule = () => {
 
           {/* Actions */}
           <div className="flex items-center gap-2 mr-4">
-            {(user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
+            {(user?.role === 'מפ' || user?.role === 'ממ' || user?.role === 'מכ') && (
               <>
                 <button
                   onClick={generateSmartSchedule}
@@ -481,7 +481,7 @@ const SmartSchedule = () => {
           <Brain className="w-16 h-16 text-purple-400 mx-auto mb-4" />
           <h3 className="text-xl font-bold text-gray-700 mb-2">אין משימות ליום זה</h3>
           <p className="text-gray-500 mb-4">לחץ על "שיבוץ AI" כדי ליצור שיבוץ חכם אוטומטי</p>
-          {(user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
+          {(user?.role === 'מפ' || user?.role === 'ממ' || user?.role === 'מכ') && (
             <button
               onClick={generateSmartSchedule}
               disabled={isGenerating}
@@ -613,7 +613,7 @@ const SmartSchedule = () => {
                                   {/* Assignment Content */}
                                   <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative">
                                     {/* Feedback and Edit Buttons */}
-                                    {(user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
+                                    {(user?.role === 'מפ' || user?.role === 'ממ' || user?.role === 'מכ') && (
                                       <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
                                         <button
                                           onClick={(e) => {

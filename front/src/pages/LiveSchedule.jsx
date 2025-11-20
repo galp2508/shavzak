@@ -21,7 +21,6 @@ const LiveSchedule = () => {
   const [columnOrder, setColumnOrder] = useState([]); // סדר העמודות
   const [isGenerating, setIsGenerating] = useState(false); // מצב יצירת שיבוץ AI
   const [feedbackGiven, setFeedbackGiven] = useState({}); // מעקב אחרי פידבקים שניתנו {assignmentId: 'approved'/'rejected'}
-  const [swapMode, setSwapMode] = useState(false); // מצב החלפה פעיל
   const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
   const [mlStats, setMlStats] = useState(null); // סטטיסטיקות ML
 
@@ -274,20 +273,23 @@ const LiveSchedule = () => {
     loadSchedule(currentDate);
   };
 
-  // Swap mode handlers
-  const handleSwapClick = (assignment) => {
+  // Swap handler - לחיצה ישירה על כפתור swap במשימה
+  const handleSwapClick = (assignment, e) => {
+    e.stopPropagation(); // מנע פתיחת modal של עריכה
+
     if (!selectedForSwap) {
       // בחירת משימה ראשונה להחלפה
       setSelectedForSwap(assignment);
-      setSwapMode(true);
-      toast.info(`נבחרה משימה: ${assignment.name}. לחץ על משימה נוספת להחלפה`, {
-        autoClose: 3000
+      toast.info(`נבחרה משימה: ${assignment.name}. לחץ על כפתור החלפה במשימה נוספת`, {
+        autoClose: 3000,
+        icon: '🔄'
       });
     } else if (selectedForSwap.id === assignment.id) {
-      // ביטול הבחירה
+      // ביטול הבחירה - לחיצה על אותה משימה שוב
       setSelectedForSwap(null);
-      setSwapMode(false);
-      toast.info('הבחירה בוטלה');
+      toast.info('הבחירה בוטלה', {
+        icon: '❌'
+      });
     } else {
       // החלפה בין שתי המשימות
       swapAssignments(selectedForSwap, assignment);
@@ -318,11 +320,12 @@ const LiveSchedule = () => {
         })
       ));
 
-      toast.success('המשימות הוחלפו בהצלחה! 🔄');
+      toast.success('המשימות הוחלפו בהצלחה! 🔄', {
+        icon: '✅'
+      });
 
       // נקה את מצב ההחלפה
       setSelectedForSwap(null);
-      setSwapMode(false);
 
       // רענן את הנתונים
       loadSchedule(currentDate);
@@ -332,14 +335,7 @@ const LiveSchedule = () => {
 
       // נקה את מצב ההחלפה גם במקרה של שגיאה
       setSelectedForSwap(null);
-      setSwapMode(false);
     }
-  };
-
-  const cancelSwapMode = () => {
-    setSelectedForSwap(null);
-    setSwapMode(false);
-    toast.info('מצב החלפה בוטל');
   };
 
   // Drag & Drop handlers
@@ -525,20 +521,6 @@ const LiveSchedule = () => {
                 </button>
               </>
             )}
-            {(user.role === 'מפ' || user.role === 'ממ') && (
-              <button
-                onClick={() => swapMode ? cancelSwapMode() : setSwapMode(true)}
-                className={`p-2 rounded-lg transition-all flex items-center gap-2 ${
-                  swapMode
-                    ? 'bg-yellow-500 text-white hover:bg-yellow-600 animate-pulse'
-                    : 'hover:bg-white hover:bg-opacity-20'
-                }`}
-                title={swapMode ? "ביטול מצב החלפה" : "הפעל מצב החלפה בין משימות"}
-              >
-                <ArrowLeftRight size={24} />
-                <span className="hidden md:inline">{swapMode ? 'ביטול' : 'החלפה'}</span>
-              </button>
-            )}
             <button
               onClick={() => loadSchedule(currentDate)}
               className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
@@ -550,41 +532,6 @@ const LiveSchedule = () => {
           </div>
         </div>
       </div>
-
-      {/* Swap Mode Banner */}
-      {swapMode && (
-        <div className="card bg-gradient-to-r from-yellow-100 to-orange-100 border-l-4 border-yellow-500 animate-slideIn">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-yellow-500 text-white p-2 rounded-full animate-pulse">
-                <ArrowLeftRight size={24} />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-yellow-900">
-                  מצב החלפת משימות פעיל
-                </h3>
-                {selectedForSwap ? (
-                  <p className="text-yellow-700">
-                    נבחרה משימה: <span className="font-bold">{selectedForSwap.name}</span> -
-                    לחץ על משימה אחרת להחלפה או לחץ שוב על אותה משימה לביטול
-                  </p>
-                ) : (
-                  <p className="text-yellow-700">
-                    לחץ על משימה כלשהי כדי לבחור אותה להחלפה
-                  </p>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={cancelSwapMode}
-              className="p-2 hover:bg-yellow-200 rounded-lg transition-colors"
-              title="ביטול מצב החלפה"
-            >
-              <X size={24} className="text-yellow-900" />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ML Stats Bar - סטטיסטיקות מטורפות */}
       {mlStats && (
@@ -862,7 +809,6 @@ const LiveSchedule = () => {
                                   feedbackStatus={feedbackGiven[assignment.id]}
                                   isAiGenerated={assignment.is_ai_generated}
                                   userRole={user.role}
-                                  swapMode={swapMode}
                                   selectedForSwap={selectedForSwap}
                                   onSwapClick={handleSwapClick}
                                 >
@@ -978,7 +924,6 @@ const DraggableAssignment = ({
   feedbackStatus,
   isAiGenerated,
   userRole,
-  swapMode,
   selectedForSwap,
   onSwapClick
 }) => {
@@ -987,6 +932,7 @@ const DraggableAssignment = ({
   });
 
   const [showFeedbackButtons, setShowFeedbackButtons] = useState(false);
+  const [dragHandleRef, setDragHandleRef] = useState(null);
 
   // בדוק אם משימה זו נבחרה להחלפה
   const isSelectedForSwap = selectedForSwap && selectedForSwap.id === assignment.id;
@@ -1014,7 +960,6 @@ const DraggableAssignment = ({
     borderColor: assignmentColor,
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     opacity: isDragging ? 0.5 : 1,
-    cursor: (userRole === 'מפ' || userRole === 'ממ') ? 'grab' : 'default',
   };
 
   const handleFeedbackClick = (e, rating) => {
@@ -1027,8 +972,6 @@ const DraggableAssignment = ({
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
-      {...attributes}
       className={`absolute rounded-lg shadow-md overflow-visible group hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] transform border pointer-events-auto ${feedbackClass} ${isAiGenerated ? 'animate-pulse-slow' : ''}`}
       onMouseEnter={() => isAiGenerated && !hasFeedback && setShowFeedbackButtons(true)}
       onMouseLeave={() => setShowFeedbackButtons(false)}
@@ -1082,33 +1025,36 @@ const DraggableAssignment = ({
 
       {/* Assignment Content */}
       <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative overflow-y-auto">
-        {/* Drag Icon */}
+        {/* Drag Handle - גרירה רק מכאן */}
         {(userRole === 'מפ' || userRole === 'ממ') && (
-          <div className="absolute top-1 left-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-            <Move className="w-3 h-3" />
+          <div
+            {...listeners}
+            {...attributes}
+            className="absolute top-0 left-0 right-0 h-8 bg-white/10 rounded-t-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 cursor-grab active:cursor-grabbing flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+            title="גרור כדי להזיז משימה"
+          >
+            <Move className="w-4 h-4 text-white/80" />
           </div>
         )}
 
         {/* Edit Icon */}
-        {(userRole === 'מפ' || userRole === 'ממ') && onEdit && !swapMode && (
+        {(userRole === 'מפ' || userRole === 'ממ') && onEdit && (
           <div className="absolute top-1 right-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
             <Edit className="w-3 h-3" />
           </div>
         )}
 
-        {/* Swap Button - Show when swap mode is active */}
-        {swapMode && (userRole === 'מפ' || userRole === 'ממ') && (
+        {/* Swap Button - תמיד זמין בhover */}
+        {(userRole === 'מפ' || userRole === 'ממ') && (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSwapClick(assignment);
-            }}
-            className={`absolute bottom-1 right-1 rounded p-1.5 transition-all duration-200 z-10 pointer-events-auto ${
+            onClick={(e) => onSwapClick(assignment, e)}
+            className={`absolute top-1 left-1 rounded p-1.5 transition-all duration-200 z-10 pointer-events-auto opacity-0 group-hover:opacity-100 ${
               isSelectedForSwap
-                ? 'bg-yellow-500 text-white animate-bounce'
+                ? 'bg-yellow-500 text-white animate-pulse opacity-100'
                 : 'bg-white/30 hover:bg-yellow-400 hover:text-white'
             }`}
-            title={isSelectedForSwap ? "לחץ שוב לביטול" : "בחר משימה זו להחלפה"}
+            title={isSelectedForSwap ? "לחץ שוב לביטול" : "החלף משימה זו עם אחרת"}
           >
             <ArrowLeftRight className="w-3 h-3" />
           </button>

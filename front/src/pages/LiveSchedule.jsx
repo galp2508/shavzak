@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Move } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Move, Brain } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
 import AssignmentModal from '../components/AssignmentModal';
@@ -19,6 +19,7 @@ const LiveSchedule = () => {
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [columnOrder, setColumnOrder] = useState([]); // סדר העמודות
+  const [isGenerating, setIsGenerating] = useState(false); // מצב יצירת שיבוץ AI
 
   useEffect(() => {
     // התחל עם מחר
@@ -104,6 +105,38 @@ const LiveSchedule = () => {
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() + days);
     setCurrentDate(newDate);
+  };
+
+  const generateSmartSchedule = async () => {
+    if (!window.confirm('האם אתה בטוח שברצונך ליצור שיבוץ חכם עם AI? זה עשוי לקחת כמה שניות.')) {
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const startDate = new Date(currentDate);
+      startDate.setDate(startDate.getDate() - currentDate.getDay()); // תחילת שבוע
+
+      const response = await api.post('/ml/smart-schedule', {
+        pluga_id: user.pluga_id,
+        start_date: startDate.toISOString().split('T')[0],
+        days_count: 7
+      });
+
+      // הצג מידע על משימות שלא הצליחו
+      if (response.data.failed_assignments && response.data.failed_assignments.length > 0) {
+        toast.warning(`⚠️ ${response.data.message} - ${response.data.success_rate} הצליחו`);
+      } else {
+        toast.success(`🤖 ${response.data.message}`);
+      }
+
+      loadSchedule(currentDate);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'שגיאה ביצירת שיבוץ חכם');
+      console.error('Smart schedule error:', error);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleFeedback = async (assignmentId, rating) => {
@@ -346,8 +379,26 @@ const LiveSchedule = () => {
           </div>
 
           <div className="flex items-center gap-2 mr-4">
-            {(user.role === 'מפ' || user.role === 'ממ') && (
+            {(user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
               <>
+                <button
+                  onClick={generateSmartSchedule}
+                  disabled={isGenerating}
+                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-lg transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
+                  title="יצירת שיבוץ חכם עם AI"
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw size={20} className="animate-spin" />
+                      <span className="hidden md:inline">מייצר...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Brain size={20} />
+                      <span className="hidden md:inline">שיבוץ AI</span>
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={openNewAssignmentModal}
                   className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors flex items-center gap-2"

@@ -327,8 +327,7 @@ def ml_smart_schedule(current_user):
                     day=assign_data['day'],
                     start_hour=assign_data['start_hour'],
                     length_in_hours=assign_data['length_in_hours'],
-                    assigned_mahlaka_id=result.get('mahlaka_id'),
-                    is_ai_generated=True  # סימון שהמשימה נוצרה ע"י AI
+                    assigned_mahlaka_id=result.get('mahlaka_id')
                 )
                 session.add(assignment)
                 session.flush()
@@ -772,8 +771,7 @@ def ml_regenerate_schedule(current_user):
                     day=assign_data['day'],
                     start_hour=assign_data['start_hour'],
                     length_in_hours=assign_data['length_in_hours'],
-                    assigned_mahlaka_id=result.get('mahlaka_id'),
-                    is_ai_generated=True  # סימון שהמשימה נוצרה ע"י AI
+                    assigned_mahlaka_id=result.get('mahlaka_id')
                 )
                 session.add(new_assignment)
                 session.flush()  # כדי לקבל את ה-ID

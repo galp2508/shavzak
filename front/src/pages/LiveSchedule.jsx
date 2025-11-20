@@ -972,21 +972,12 @@ const DraggableAssignment = ({
     <div
       ref={setNodeRef}
       style={style}
-      className={`absolute rounded-lg shadow-md overflow-visible group hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] transform border pointer-events-auto ${feedbackClass} ${isAiGenerated ? 'animate-pulse-slow' : ''}`}
+      className={`absolute rounded-lg shadow-md overflow-visible group hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] transform border pointer-events-auto ${feedbackClass}`}
       onMouseEnter={() => isAiGenerated && !hasFeedback && setShowFeedbackButtons(true)}
       onMouseLeave={() => setShowFeedbackButtons(false)}
       onClick={() => onEdit && onEdit(assignment)}
-      title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00)${isAiGenerated ? ' - נוצר על ידי AI' : ''}`}
+      title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00)`}
     >
-      {/* AI Badge - Top Left Corner */}
-      {isAiGenerated && (
-        <div className="absolute -top-2 -left-2 z-20 pointer-events-none">
-          <div className="bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-lg flex items-center gap-1 animate-bounce-slow">
-            <Sparkles className="w-3 h-3" />
-            AI
-          </div>
-        </div>
-      )}
 
       {/* Feedback Status Badge - Top Right Corner */}
       {hasFeedback && (

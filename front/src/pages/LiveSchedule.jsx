@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Move, Brain } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Move, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
 import AssignmentModal from '../components/AssignmentModal';
@@ -20,6 +20,7 @@ const LiveSchedule = () => {
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [columnOrder, setColumnOrder] = useState([]); // סדר העמודות
   const [isGenerating, setIsGenerating] = useState(false); // מצב יצירת שיבוץ AI
+  const [feedbackGiven, setFeedbackGiven] = useState({}); // מעקב אחרי פידבקים שניתנו {assignmentId: 'approved'/'rejected'}
 
   useEffect(() => {
     // התחל עם מחר
@@ -155,11 +156,23 @@ const LiveSchedule = () => {
         enable_auto_regeneration: false  // לא לרענן אוטומטית בשיבוץ חי
       });
 
+      // עדכן את ה-state של הפידבקים
+      setFeedbackGiven(prev => ({
+        ...prev,
+        [assignmentId]: rating
+      }));
+
       // הצג הודעה מהשרת
       if (rating === 'approved') {
-        toast.success('✅ פידבק חיובי נשמר - המודל לומד מזה!');
+        toast.success('✅ פידבק חיובי נשמר - המודל לומד מזה!', {
+          autoClose: 3000,
+          icon: '🎉'
+        });
       } else if (rating === 'rejected') {
-        toast.info('❌ פידבק שלילי נשמר - המודל ישתפר!');
+        toast.info('❌ פידבק שלילי נשמר - המודל ישתפר!', {
+          autoClose: 3000,
+          icon: '📝'
+        });
       }
 
       // אין רענון אוטומטי בשיבוץ חי
@@ -180,9 +193,15 @@ const LiveSchedule = () => {
     const soldiers = assignment.soldiers || [];
     if (soldiers.length === 0) return '#FBBF24'; // צהוב כברירת מחדל אם אין חיילים
 
-    // בדוק כמה מחלקות שונות יש במשימה
+    // סנן רק חיילים שאינם נהגים - נהגים לא קובעים את צבע המשימה
+    const nonDriverSoldiers = soldiers.filter(s => s.role_in_assignment !== 'driver');
+
+    // אם אין חיילים שאינם נהגים, השתמש בצהוב
+    if (nonDriverSoldiers.length === 0) return '#FBBF24';
+
+    // בדוק כמה מחלקות שונות יש במשימה (לא כולל נהגים)
     const mahalkotSet = new Set(
-      soldiers.map(s => s.mahlaka_id).filter(id => id != null)
+      nonDriverSoldiers.map(s => s.mahlaka_id).filter(id => id != null)
     );
 
     // אם יש 2+ מחלקות = פלוגתי (צהוב)
@@ -624,6 +643,9 @@ const LiveSchedule = () => {
                                   startHour={startHour}
                                   endHour={endHour}
                                   onEdit={(user.role === 'מפ' || user.role === 'ממ') ? openEditAssignmentModal : null}
+                                  onFeedback={handleFeedback}
+                                  feedbackStatus={feedbackGiven[assignment.id]}
+                                  isAiGenerated={assignment.is_ai_generated}
                                   userRole={user.role}
                                 >
                                 </DraggableAssignment>
@@ -734,22 +756,45 @@ const DraggableAssignment = ({
   startHour,
   endHour,
   onEdit,
+  onFeedback,
+  feedbackStatus,
+  isAiGenerated,
   userRole
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: assignment.id,
   });
 
+  const [showFeedbackButtons, setShowFeedbackButtons] = useState(false);
+
+  // קבע אם יש אנימציית פידבק
+  const hasFeedback = feedbackStatus === 'approved' || feedbackStatus === 'rejected';
+  const feedbackClass = feedbackStatus === 'approved'
+    ? 'ring-4 ring-green-400 shadow-green-400/50'
+    : feedbackStatus === 'rejected'
+    ? 'ring-4 ring-red-400 shadow-red-400/50'
+    : '';
+
   const style = {
     top: `calc(${topPosition}% + 2px)`,
     height: `calc(${height}% - 4px)`,
     left: '6px',
     right: '6px',
-    background: `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
+    background: hasFeedback
+      ? feedbackStatus === 'approved'
+        ? `linear-gradient(135deg, #10B981 0%, ${assignmentColor}dd 100%)`
+        : `linear-gradient(135deg, #EF4444 0%, ${assignmentColor}dd 100%)`
+      : `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
     borderColor: assignmentColor,
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     opacity: isDragging ? 0.5 : 1,
     cursor: (userRole === 'מפ' || userRole === 'ממ') ? 'grab' : 'default',
+  };
+
+  const handleFeedbackClick = (e, rating) => {
+    e.stopPropagation();
+    onFeedback(assignment.id, rating);
+    setShowFeedbackButtons(false);
   };
 
   return (
@@ -758,22 +803,69 @@ const DraggableAssignment = ({
       style={style}
       {...listeners}
       {...attributes}
-      className="absolute rounded-lg shadow-md overflow-hidden group hover:shadow-lg transition-all duration-200 hover:scale-[1.02] transform border pointer-events-auto"
+      className={`absolute rounded-lg shadow-md overflow-visible group hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] transform border pointer-events-auto ${feedbackClass} ${isAiGenerated ? 'animate-pulse-slow' : ''}`}
+      onMouseEnter={() => isAiGenerated && !hasFeedback && setShowFeedbackButtons(true)}
+      onMouseLeave={() => setShowFeedbackButtons(false)}
       onClick={() => onEdit && onEdit(assignment)}
-      title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00) - גרור להזזה`}
+      title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00)${isAiGenerated ? ' - נוצר על ידי AI' : ''}`}
     >
+      {/* AI Badge - Top Left Corner */}
+      {isAiGenerated && (
+        <div className="absolute -top-2 -left-2 z-20 pointer-events-none">
+          <div className="bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-lg flex items-center gap-1 animate-bounce-slow">
+            <Sparkles className="w-3 h-3" />
+            AI
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Status Badge - Top Right Corner */}
+      {hasFeedback && (
+        <div className="absolute -top-2 -right-2 z-20 pointer-events-none">
+          {feedbackStatus === 'approved' ? (
+            <div className="bg-gradient-to-br from-green-400 to-emerald-600 text-white p-1 rounded-full shadow-lg animate-scale-in">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          ) : (
+            <div className="bg-gradient-to-br from-red-400 to-rose-600 text-white p-1 rounded-full shadow-lg animate-scale-in">
+              <XCircle className="w-4 h-4" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Feedback Buttons - Show on Hover for AI Generated Assignments */}
+      {isAiGenerated && !hasFeedback && showFeedbackButtons && (userRole === 'מפ' || userRole === 'ממ' || userRole === 'מכ') && (
+        <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 z-30 flex gap-2 animate-slide-up pointer-events-auto">
+          <button
+            onClick={(e) => handleFeedbackClick(e, 'approved')}
+            className="bg-gradient-to-br from-green-400 to-emerald-600 hover:from-green-500 hover:to-emerald-700 text-white p-2 rounded-full shadow-2xl transition-all duration-200 hover:scale-110 transform"
+            title="אישור שיבוץ"
+          >
+            <ThumbsUp className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => handleFeedbackClick(e, 'rejected')}
+            className="bg-gradient-to-br from-red-400 to-rose-600 hover:from-red-500 hover:to-rose-700 text-white p-2 rounded-full shadow-2xl transition-all duration-200 hover:scale-110 transform"
+            title="דחיית שיבוץ"
+          >
+            <ThumbsDown className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Assignment Content */}
-      <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative">
+      <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative overflow-y-auto">
         {/* Drag Icon */}
         {(userRole === 'מפ' || userRole === 'ממ') && (
-          <div className="absolute top-1 left-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="absolute top-1 left-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
             <Move className="w-3 h-3" />
           </div>
         )}
 
         {/* Edit Icon */}
         {(userRole === 'מפ' || userRole === 'ממ') && onEdit && (
-          <div className="absolute top-1 right-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="absolute top-1 right-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
             <Edit className="w-3 h-3" />
           </div>
         )}
@@ -801,7 +893,9 @@ const DraggableAssignment = ({
                     {soldier.name}
                   </div>
                   <div className="text-[10px] opacity-90 font-medium">
-                    {soldier.role_in_assignment}
+                    {soldier.role_in_assignment === 'driver' ? '🚗 נהג' :
+                     soldier.role_in_assignment === 'commander' ? '⭐ מפקד' :
+                     '👤 חייל'}
                   </div>
                 </div>
               ))}

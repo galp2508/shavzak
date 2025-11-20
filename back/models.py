@@ -230,18 +230,19 @@ class Shavzak(Base):
 class Assignment(Base):
     """משימה ספציפית"""
     __tablename__ = 'assignments'
-    
+
     id = Column(Integer, primary_key=True)
     shavzak_id = Column(Integer, ForeignKey('shavzakim.id'), nullable=False)
-    
+
     name = Column(String(100), nullable=False)
     assignment_type = Column(String(50), nullable=False)
     day = Column(Integer, nullable=False)
     start_hour = Column(Integer, nullable=False)
     length_in_hours = Column(Integer, nullable=False)
-    
+
     assigned_mahlaka_id = Column(Integer, ForeignKey('mahalkot.id'), nullable=True)
-    
+    is_ai_generated = Column(Boolean, default=False)  # האם המשימה נוצרה ע"י AI
+
     shavzak = relationship("Shavzak", back_populates="assignments")
     assigned_mahlaka = relationship("Mahlaka")
     soldiers_assigned = relationship("AssignmentSoldier", back_populates="assignment", cascade="all, delete-orphan")

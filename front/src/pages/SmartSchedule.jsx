@@ -664,7 +664,9 @@ const SmartSchedule = () => {
                                                 {soldier.name}
                                               </div>
                                               <div className="text-[10px] opacity-90 font-medium">
-                                                {soldier.role_in_assignment}
+                                                {soldier.role_in_assignment === 'driver' ? '🚗 נהג' :
+                                                 soldier.role_in_assignment === 'commander' ? '⭐ מפקד' :
+                                                 '👤 חייל'}
                                               </div>
                                             </div>
                                           ))}

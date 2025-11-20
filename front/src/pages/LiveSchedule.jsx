@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Move, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, ArrowLeftRight, X } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Move, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, ArrowLeftRight, X, TrendingUp, Award, Zap } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
 import AssignmentModal from '../components/AssignmentModal';
@@ -23,6 +23,7 @@ const LiveSchedule = () => {
   const [feedbackGiven, setFeedbackGiven] = useState({}); // מעקב אחרי פידבקים שניתנו {assignmentId: 'approved'/'rejected'}
   const [swapMode, setSwapMode] = useState(false); // מצב החלפה פעיל
   const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
+  const [mlStats, setMlStats] = useState(null); // סטטיסטיקות ML
 
   useEffect(() => {
     // התחל עם מחר
@@ -30,6 +31,7 @@ const LiveSchedule = () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     setCurrentDate(tomorrow);
     loadMahalkot();
+    loadMLStats();
   }, []);
 
   useEffect(() => {
@@ -70,6 +72,15 @@ const LiveSchedule = () => {
       setMahalkot(response.data.mahalkot || []);
     } catch (error) {
       console.error('Error loading mahalkot:', error);
+    }
+  };
+
+  const loadMLStats = async () => {
+    try {
+      const response = await api.get('/ml/stats');
+      setMlStats(response.data.stats);
+    } catch (error) {
+      console.error('Error loading ML stats:', error);
     }
   };
 
@@ -134,6 +145,7 @@ const LiveSchedule = () => {
       }
 
       loadSchedule(currentDate);
+      loadMLStats(); // עדכן סטטיסטיקות ML
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה ביצירת שיבוץ חכם');
       console.error('Smart schedule error:', error);
@@ -178,6 +190,8 @@ const LiveSchedule = () => {
       }
 
       // אין רענון אוטומטי בשיבוץ חי
+      // עדכן סטטיסטיקות ML
+      loadMLStats();
     } catch (error) {
       const errorMsg = error.response?.data?.error || 'שגיאה בשמירת פידבק';
       toast.error(errorMsg);
@@ -427,15 +441,21 @@ const LiveSchedule = () => {
   return (
     <div className="space-y-6">
       {/* Header with Date Navigation */}
-      <div className="card bg-gradient-to-br from-military-600 via-military-700 to-military-800 text-white shadow-2xl border-none">
+      <div className="card bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl border-none">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 flex-1">
-            <div className="bg-white bg-opacity-20 p-3 rounded-2xl backdrop-blur-sm">
+            <div className="bg-white bg-opacity-20 p-3 rounded-2xl backdrop-blur-sm animate-pulse-slow">
               <Calendar className="w-12 h-12" />
             </div>
             <div className="flex-1">
-              <h1 className="text-4xl font-bold tracking-tight">שיבוץ חי</h1>
-              <p className="text-military-100 text-lg font-medium">ניווט אוטומטי בין ימים</p>
+              <div className="flex items-center gap-3">
+                <h1 className="text-4xl font-bold tracking-tight">שיבוץ חי</h1>
+                <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs px-3 py-1 rounded-full font-bold animate-pulse flex items-center gap-1">
+                  <Sparkles size={12} />
+                  LIVE
+                </span>
+              </div>
+              <p className="text-purple-100 text-lg font-medium">ניווט אוטומטי בין ימים • למידת מכונה פעילה</p>
             </div>
           </div>
 
@@ -562,6 +582,82 @@ const LiveSchedule = () => {
             >
               <X size={24} className="text-yellow-900" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ML Stats Bar - סטטיסטיקות מטורפות */}
+      {mlStats && (
+        <div className="card bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border-l-4 border-blue-500 shadow-xl">
+          <div className="flex items-center gap-6 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-2 rounded-full">
+                <TrendingUp className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">דירוג אישור</div>
+                <div className="text-lg font-bold text-blue-700">
+                  {mlStats.approval_rate?.toFixed(1)}%
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-2 rounded-full">
+                <Award className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">דפוסים שנלמדו</div>
+                <div className="text-lg font-bold text-purple-700">
+                  {mlStats.patterns_learned}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="bg-gradient-to-br from-green-500 to-green-600 p-2 rounded-full">
+                <Brain className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">סה"כ שיבוצים</div>
+                <div className="text-lg font-bold text-green-700">
+                  {mlStats.total_assignments}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="bg-gradient-to-br from-emerald-400 to-emerald-500 p-2 rounded-full">
+                <ThumbsUp className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">אושרו</div>
+                <div className="text-lg font-bold text-emerald-700">
+                  {mlStats.user_approvals}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="bg-gradient-to-br from-red-400 to-red-500 p-2 rounded-full">
+                <ThumbsDown className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">נדחו</div>
+                <div className="text-lg font-bold text-red-700">
+                  {mlStats.user_rejections}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="bg-gradient-to-br from-yellow-400 to-orange-500 p-2 rounded-full animate-pulse">
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">אחוז הצלחה</div>
+                <div className="text-lg font-bold text-orange-700">
+                  {mlStats.total_assignments > 0
+                    ? ((mlStats.user_approvals / mlStats.total_assignments) * 100).toFixed(1)
+                    : 0}%
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

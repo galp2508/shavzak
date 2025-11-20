@@ -145,6 +145,29 @@ def check_and_run_migrations():
         else:
             print("✅ reuse_soldiers_for_standby בטבלת assignment_templates כבר קיים")
 
+        # בדיקה 7: הוספת is_ai_generated לטבלת assignments
+        cursor.execute("PRAGMA table_info(assignments)")
+        assignment_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'is_ai_generated' not in assignment_columns:
+            print("⚠️  מזהה עמודה חסרה: is_ai_generated בטבלת assignments")
+            print("🔧 מריץ migration אוטומטי להוספת is_ai_generated...")
+            conn.close()
+            from migrate_add_is_ai_generated import migrate_database as migrate_add_is_ai
+            try:
+                if migrate_add_is_ai(DB_PATH):
+                    print("✅ Migration להוספת is_ai_generated הושלם בהצלחה")
+                else:
+                    print("❌ Migration להוספת is_ai_generated נכשל")
+                    return False
+            except Exception as e:
+                print(f"❌ Migration להוספת is_ai_generated נכשל: {e}")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        else:
+            print("✅ is_ai_generated בטבלת assignments כבר קיים")
+
         conn.close()
         return True
     except Exception as e:

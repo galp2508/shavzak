@@ -533,6 +533,39 @@ const LiveSchedule = () => {
         </div>
       </div>
 
+      {/* Feedback Panel - למעלה משמאל */}
+      {scheduleData?.assignments && scheduleData.assignments.some(a => a.is_ai_generated) && (userRole === 'מפ' || userRole === 'ממ' || userRole === 'מכ') && (
+        <div className="card bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-300 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-2 rounded-full">
+                <Brain className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">פידבק למערכת AI</h3>
+                <p className="text-sm text-gray-600">עבור על משימות ותן פידבק לשיפור המערכת</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
+                <ThumbsUp className="w-5 h-5 text-green-600" />
+                <div>
+                  <div className="text-xs text-gray-500">אושרו</div>
+                  <div className="text-lg font-bold text-green-700">{mlStats?.user_approvals || 0}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-lg border border-red-200">
+                <ThumbsDown className="w-5 h-5 text-red-600" />
+                <div>
+                  <div className="text-xs text-gray-500">נדחו</div>
+                  <div className="text-lg font-bold text-red-700">{mlStats?.user_rejections || 0}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ML Stats Bar - סטטיסטיקות מטורפות */}
       {mlStats && (
         <div className="card bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border-l-4 border-blue-500 shadow-xl">
@@ -927,12 +960,11 @@ const DraggableAssignment = ({
   selectedForSwap,
   onSwapClick
 }) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, isDragging, setActivatorNodeRef } = useDraggable({
     id: assignment.id,
   });
 
   const [showFeedbackButtons, setShowFeedbackButtons] = useState(false);
-  const [dragHandleRef, setDragHandleRef] = useState(null);
 
   // בדוק אם משימה זו נבחרה להחלפה
   const isSelectedForSwap = selectedForSwap && selectedForSwap.id === assignment.id;
@@ -1019,13 +1051,14 @@ const DraggableAssignment = ({
         {/* Drag Handle - גרירה רק מכאן */}
         {(userRole === 'מפ' || userRole === 'ממ') && (
           <div
+            ref={setActivatorNodeRef}
             {...listeners}
             {...attributes}
-            className="absolute top-0 left-0 right-0 h-8 bg-white/10 rounded-t-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 cursor-grab active:cursor-grabbing flex items-center justify-center"
+            className="absolute top-1 right-8 w-6 h-6 bg-white/20 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 cursor-grab active:cursor-grabbing flex items-center justify-center"
             onClick={(e) => e.stopPropagation()}
             title="גרור כדי להזיז משימה"
           >
-            <Move className="w-4 h-4 text-white/80" />
+            <Move className="w-4 h-4 text-white" />
           </div>
         )}
 
@@ -1036,18 +1069,18 @@ const DraggableAssignment = ({
           </div>
         )}
 
-        {/* Swap Button - תמיד זמין בhover */}
+        {/* Swap Button - תמיד גלוי */}
         {(userRole === 'מפ' || userRole === 'ממ') && (
           <button
             onClick={(e) => onSwapClick(assignment, e)}
-            className={`absolute top-1 left-1 rounded p-1.5 transition-all duration-200 z-10 pointer-events-auto opacity-0 group-hover:opacity-100 ${
+            className={`absolute top-1 left-1 rounded-md p-1.5 transition-all duration-200 z-10 pointer-events-auto shadow-lg ${
               isSelectedForSwap
-                ? 'bg-yellow-500 text-white animate-pulse opacity-100'
-                : 'bg-white/30 hover:bg-yellow-400 hover:text-white'
+                ? 'bg-yellow-500 text-white animate-pulse scale-110'
+                : 'bg-white/40 hover:bg-yellow-400 hover:text-white opacity-70 hover:opacity-100 hover:scale-105'
             }`}
-            title={isSelectedForSwap ? "לחץ שוב לביטול" : "החלף משימה זו עם אחרת"}
+            title={isSelectedForSwap ? "לחץ שוב לביטול או לחץ על משימה אחרת להחלפה" : "החלף משימה זו עם אחרת"}
           >
-            <ArrowLeftRight className="w-3 h-3" />
+            <ArrowLeftRight className="w-3.5 h-3.5" />
           </button>
         )}
 

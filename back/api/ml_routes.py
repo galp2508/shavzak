@@ -169,7 +169,10 @@ def ml_smart_schedule(current_user):
 
         # פונקציה לבדיקת זמינות
         def is_soldier_available(soldier_data, check_date):
-            if soldier_data.get('status_type') == 'ריתוק':
+            status_type = soldier_data.get('status_type', 'בבסיס')
+
+            # חיילים בריתוק או בסבב קו לא זמינים
+            if status_type in ['ריתוק', 'בסבב קו']:
                 return False
 
             if check_date in soldier_data.get('unavailable_dates', []):
@@ -672,7 +675,10 @@ def ml_regenerate_schedule(current_user):
 
         # פונקציה לבדיקת זמינות
         def is_soldier_available(soldier_data, check_date):
-            if soldier_data.get('status_type') == 'ריתוק':
+            status_type = soldier_data.get('status_type', 'בבסיס')
+
+            # חיילים בריתוק או בסבב קו לא זמינים
+            if status_type in ['ריתוק', 'בסבב קו']:
                 return False
 
             if check_date in soldier_data.get('unavailable_dates', []):
@@ -1056,6 +1062,296 @@ def ml_constraint_feedback(current_user):
         print(f"🔴 שגיאה בשמירת פידבק על אילוץ: {str(e)}")
         traceback.print_exc()
         session.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+# ============================================================================
+# ML EXPLAINABILITY - הסבר בחירות
+# ============================================================================
+
+@ml_bp.route('/api/ml/explain-selection', methods=['POST'])
+@token_required
+def ml_explain_selection(current_user):
+    """
+    הסבר מפורט למה המודל בחר בחייל מסוים למשימה
+
+    Body:
+    {
+        "soldier_id": 123,
+        "assignment_type": "שמירה",
+        "day": 0,
+        "start_hour": 8,
+        "length_in_hours": 8,
+        "shavzak_id": 456,  // אופציונלי - לקבלת קונטקסט
+        "pluga_id": 1
+    }
+
+    Returns:
+    {
+        "soldier_name": "...",
+        "soldier_role": "...",
+        "total_score": 123.4,
+        "confidence": 0.85,
+        "recommendation": "בחירה מצוינת ✅",
+        "breakdown": [
+            {
+                "factor": "😴 מנוחה",
+                "contribution": 48.0,
+                "explanation": "24.0 שעות מאז המשימה האחרונה"
+            },
+            ...
+        ]
+    }
+    """
+    session = get_db()
+
+    try:
+        data = request.get_json()
+
+        soldier_id = data.get('soldier_id')
+        assignment_type = data.get('assignment_type')
+        day = data.get('day', 0)
+        start_hour = data.get('start_hour', 8)
+        length_in_hours = data.get('length_in_hours', 8)
+        shavzak_id = data.get('shavzak_id')
+        pluga_id = data.get('pluga_id')
+
+        # וולידציה
+        if soldier_id is None:
+            return jsonify({'error': 'חסר soldier_id'}), 400
+        if not assignment_type:
+            return jsonify({'error': 'חסר assignment_type'}), 400
+        if pluga_id is None:
+            return jsonify({'error': 'חסר pluga_id'}), 400
+
+        # בדוק הרשאות
+        if not can_view_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לפלוגה זו'}), 403
+
+        # טען חייל
+        soldier = session.get(Soldier, soldier_id)
+        if not soldier:
+            return jsonify({'error': 'חייל לא נמצא'}), 404
+
+        # בנה נתוני משימה
+        task = {
+            'type': assignment_type,
+            'day': day,
+            'start_hour': start_hour,
+            'length_in_hours': length_in_hours
+        }
+
+        # בנה נתוני חייל
+        certifications = session.query(Certification).filter_by(soldier_id=soldier_id).all()
+        cert_list = [c.certification_name for c in certifications]
+
+        soldier_data = {
+            'id': soldier.id,
+            'name': soldier.name,
+            'role': soldier.role,
+            'certifications': cert_list,
+            'mahlaka_id': soldier.mahlaka_id
+        }
+
+        # טען schedules וכל החיילים (לקונטקסט)
+        schedules = {}
+        mahlaka_workload = {}
+        all_soldiers = []
+
+        if shavzak_id:
+            # אם יש shavzak_id, טען את כל המידע הרלוונטי
+            shavzak = session.get(Shavzak, shavzak_id)
+            if shavzak:
+                assignments = session.query(Assignment).filter_by(shavzak_id=shavzak_id).all()
+
+                # בנה schedules מהמשימות הקיימות
+                for assignment in assignments:
+                    for assigned_soldier in assignment.soldiers_assigned:
+                        s_id = assigned_soldier.soldier_id
+                        if s_id not in schedules:
+                            schedules[s_id] = []
+                        schedules[s_id].append((
+                            assignment.day,
+                            assignment.start_hour,
+                            assignment.start_hour + assignment.length_in_hours,
+                            assignment.name,
+                            assignment.assignment_type
+                        ))
+
+                # טען כל החיילים בפלוגה
+                all_soldiers_query = session.query(Soldier).join(Mahlaka).filter(
+                    Mahlaka.pluga_id == pluga_id
+                ).all()
+
+                for s in all_soldiers_query:
+                    certs = session.query(Certification).filter_by(soldier_id=s.id).all()
+                    all_soldiers.append({
+                        'id': s.id,
+                        'name': s.name,
+                        'role': s.role,
+                        'mahlaka_id': s.mahlaka_id,
+                        'certifications': [c.certification_name for c in certs]
+                    })
+
+                # חשב עומס מחלקות
+                mahalkot = session.query(Mahlaka).filter_by(pluga_id=pluga_id).all()
+                for mahlaka in mahalkot:
+                    mahlaka_workload[mahlaka.id] = 0
+                    for assignment in assignments:
+                        if assignment.assigned_mahlaka_id == mahlaka.id:
+                            mahlaka_workload[mahlaka.id] += assignment.length_in_hours
+
+        # אם אין שיבוץ, השתמש בברירת מחדל
+        if not all_soldiers:
+            all_soldiers = [soldier_data]
+
+        # קרא להסבר מהמודל
+        explanation = smart_scheduler.explain_soldier_selection(
+            soldier=soldier_data,
+            task=task,
+            schedules=schedules,
+            mahlaka_workload=mahlaka_workload,
+            all_soldiers=all_soldiers
+        )
+
+        print(f"✅ Generated explanation for soldier {soldier_id} on task {assignment_type}")
+
+        return jsonify(explanation), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה בהסבר בחירה: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@ml_bp.route('/api/ml/soldier-confidence/<int:soldier_id>', methods=['POST'])
+@token_required
+def ml_soldier_confidence(current_user, soldier_id):
+    """
+    קבלת רמת ביטחון המודל בבחירת חייל למשימה
+
+    Body:
+    {
+        "assignment_type": "שמירה",
+        "day": 0,
+        "start_hour": 8,
+        "length_in_hours": 8,
+        "shavzak_id": 456,  // אופציונלי
+        "pluga_id": 1
+    }
+
+    Returns:
+    {
+        "soldier_id": 123,
+        "soldier_name": "...",
+        "score": 123.4,
+        "confidence": 0.85,
+        "confidence_level": "גבוה" | "בינוני" | "נמוך"
+    }
+    """
+    session = get_db()
+
+    try:
+        data = request.get_json()
+
+        assignment_type = data.get('assignment_type')
+        day = data.get('day', 0)
+        start_hour = data.get('start_hour', 8)
+        length_in_hours = data.get('length_in_hours', 8)
+        shavzak_id = data.get('shavzak_id')
+        pluga_id = data.get('pluga_id')
+
+        # וולידציה
+        if not assignment_type:
+            return jsonify({'error': 'חסר assignment_type'}), 400
+        if pluga_id is None:
+            return jsonify({'error': 'חסר pluga_id'}), 400
+
+        # בדוק הרשאות
+        if not can_view_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לפלוגה זו'}), 403
+
+        # טען חייל
+        soldier = session.get(Soldier, soldier_id)
+        if not soldier:
+            return jsonify({'error': 'חייל לא נמצא'}), 404
+
+        # בנה נתוני משימה
+        task = {
+            'type': assignment_type,
+            'day': day,
+            'start_hour': start_hour,
+            'length_in_hours': length_in_hours
+        }
+
+        # בנה נתוני חייל
+        certifications = session.query(Certification).filter_by(soldier_id=soldier_id).all()
+        cert_list = [c.certification_name for c in certifications]
+
+        soldier_data = {
+            'id': soldier.id,
+            'name': soldier.name,
+            'role': soldier.role,
+            'certifications': cert_list,
+            'mahlaka_id': soldier.mahlaka_id
+        }
+
+        # טען קונטקסט מינימלי
+        schedules = {}
+        mahlaka_workload = {}
+
+        if shavzak_id:
+            shavzak = session.get(Shavzak, shavzak_id)
+            if shavzak:
+                assignments = session.query(Assignment).filter_by(shavzak_id=shavzak_id).all()
+
+                # בנה schedules
+                for assignment in assignments:
+                    for assigned_soldier in assignment.soldiers_assigned:
+                        s_id = assigned_soldier.soldier_id
+                        if s_id not in schedules:
+                            schedules[s_id] = []
+                        schedules[s_id].append((
+                            assignment.day,
+                            assignment.start_hour,
+                            assignment.start_hour + assignment.length_in_hours,
+                            assignment.name,
+                            assignment.assignment_type
+                        ))
+
+        # חשב ציון וביטחון
+        score, confidence = smart_scheduler.calculate_soldier_score_with_confidence(
+            soldier=soldier_data,
+            task=task,
+            schedules=schedules,
+            mahlaka_workload=mahlaka_workload
+        )
+
+        # קבע רמת ביטחון
+        if confidence > 0.7:
+            confidence_level = "גבוה"
+        elif confidence > 0.4:
+            confidence_level = "בינוני"
+        else:
+            confidence_level = "נמוך"
+
+        print(f"✅ Calculated confidence for soldier {soldier_id}: {confidence:.2f} ({confidence_level})")
+
+        return jsonify({
+            'soldier_id': soldier_id,
+            'soldier_name': soldier.name,
+            'score': round(score, 1),
+            'confidence': round(confidence, 2),
+            'confidence_level': confidence_level
+        }), 200
+
+    except Exception as e:
+        print(f"🔴 שגיאה בחישוב ביטחון: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()

@@ -4,6 +4,8 @@ Shavzak API Server
 """
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import traceback
 import os
 import sqlite3
@@ -12,6 +14,14 @@ from models import init_db
 
 app = Flask(__name__)
 CORS(app)
+
+# Rate Limiting Configuration
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
 
 # ודא שה-DB נמצא תמיד באותו מיקום (תיקיית back)
 DB_PATH = os.path.join(os.path.dirname(__file__), 'shavzak.db')
@@ -191,9 +201,10 @@ def bad_request(e):
 # BLUEPRINT REGISTRATION
 # ============================================================================
 
-# Initialize the database engine for all blueprints
-from api.utils import set_engine
+# Initialize the database engine and limiter for all blueprints
+from api.utils import set_engine, set_limiter
 set_engine(engine)
+set_limiter(limiter)
 
 # Register blueprints
 from api.auth_routes import auth_bp

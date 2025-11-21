@@ -8,7 +8,8 @@ import traceback
 
 from models import User, Pluga, JoinRequest
 from auth import create_token, token_required, role_required
-from .utils import get_db, build_user_response
+from .utils import get_db, build_user_response, limiter
+from validation import validate_data, UserRegistrationSchema, UserLoginSchema
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -16,7 +17,12 @@ auth_bp = Blueprint('auth', __name__)
 def register():
     """רישום משתמש חדש / בקשת הצטרפות"""
     try:
-        data = request.json
+        # אימות נתונים
+        validated_data, errors = validate_data(UserRegistrationSchema, request.json)
+        if errors:
+            return jsonify({'errors': errors}), 400
+
+        data = validated_data
         session = get_db()
 
         # בדיקה אם שם המשתמש כבר קיים
@@ -105,10 +111,16 @@ def register():
 
 
 @auth_bp.route('/api/login', methods=['POST'])
+@limiter.limit("5 per minute")
 def login():
-    """התחברות"""
+    """התחברות - מוגבל ל-5 ניסיונות בדקה למניעת brute-force"""
     try:
-        data = request.json
+        # אימות נתונים
+        validated_data, errors = validate_data(UserLoginSchema, request.json)
+        if errors:
+            return jsonify({'errors': errors}), 400
+
+        data = validated_data
         session = get_db()
 
         user = session.query(User).filter_by(username=data['username']).first()

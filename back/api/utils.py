@@ -7,11 +7,17 @@ import os
 
 # Get the DB engine (will be set by main api.py)
 engine = None
+limiter = None
 
 def set_engine(db_engine):
     """Set the database engine for all blueprints"""
     global engine
     engine = db_engine
+
+def set_limiter(rate_limiter):
+    """Set the rate limiter for all blueprints"""
+    global limiter
+    limiter = rate_limiter
 
 def get_db():
     """מקבל session של DB"""

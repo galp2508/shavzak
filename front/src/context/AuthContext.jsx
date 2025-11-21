@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useMemo, useCallback } from 'react';
 import api from '../services/api';
 
 const AuthContext = createContext(null);
@@ -34,32 +34,6 @@ export const AuthProvider = ({ children }) => {
       console.error('Failed to load user data:', error);
       // אם הטעינה נכשלה (token לא תקף), התנתק
       logout();
-    }
-  };
-
-  // מפענח JWT פשוט (בצד הלקוח) כדי להוציא payload בלי אימות
-  const decodeJwt = (token) => {
-    try {
-      const parts = token.split('.');
-      if (parts.length < 2) return null;
-      const payload = parts[1];
-      // base64url -> base64
-      let base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-      while (base64.length % 4) {
-        base64 += '=';
-      }
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map(function (c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-          })
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (e) {
-      console.error('Failed to decode token', e);
-      return null;
     }
   };
 
@@ -115,29 +89,29 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
-  };
+  }, []);
 
   // Update the user object stored in context (shallow merge)
-  const updateUser = (updates) => {
+  const updateUser = useCallback((updates) => {
     setUser((prev) => {
       if (!prev) return { ...updates };
       return { ...prev, ...updates };
     });
-  };
+  }, []);
 
-  const isRole = (roles) => {
+  const isRole = useCallback((roles) => {
     if (!user) return false;
     if (Array.isArray(roles)) {
       return roles.includes(user.role);
     }
     return user.role === roles;
-  };
+  }, [user]);
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     token,
     loading,
@@ -148,7 +122,7 @@ export const AuthProvider = ({ children }) => {
     isRole,
     // ✅ שינוי קריטי: isAuthenticated מבוסס על token בלבד!
     isAuthenticated: !!token,
-  };
+  }), [user, token, loading, login, register, logout, updateUser, isRole]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

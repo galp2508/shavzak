@@ -1,7 +1,7 @@
 """
 Database Models for Shavzak System
 """
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Date
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Date, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
@@ -115,6 +115,12 @@ class Soldier(Base):
     unavailable_dates = relationship("UnavailableDate", back_populates="soldier", cascade="all, delete-orphan")
     assignments = relationship("AssignmentSoldier", back_populates="soldier", cascade="all, delete-orphan")
     current_status = relationship("SoldierStatus", back_populates="soldier", uselist=False, cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_soldier_mahlaka', 'mahlaka_id'),
+        Index('idx_soldier_idf_id', 'idf_id'),
+        Index('idx_soldier_role', 'role'),
+    )
 
 
 class Certification(Base):
@@ -246,6 +252,12 @@ class Assignment(Base):
     assigned_mahlaka = relationship("Mahlaka")
     soldiers_assigned = relationship("AssignmentSoldier", back_populates="assignment", cascade="all, delete-orphan")
 
+    __table_args__ = (
+        Index('idx_assignment_shavzak', 'shavzak_id'),
+        Index('idx_assignment_day', 'day'),
+        Index('idx_assignment_type', 'assignment_type'),
+    )
+
 
 class AssignmentSoldier(Base):
     """קישור בין משימה לחייל"""
@@ -364,6 +376,12 @@ class FeedbackHistory(Base):
     iteration = relationship("ScheduleIteration", back_populates="feedbacks")
     assignment = relationship("Assignment")
     user = relationship("User")
+
+    __table_args__ = (
+        Index('idx_feedback_shavzak', 'shavzak_id'),
+        Index('idx_feedback_rating', 'rating'),
+        Index('idx_feedback_created_at', 'created_at'),
+    )
 
 
 class ConstraintFeedback(Base):

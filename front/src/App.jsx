@@ -1,21 +1,23 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useServerStatus } from './context/ServerStatusContext';
 import { setServerDownCallback, setServerUpCallback } from './services/api';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Plugot from './pages/Plugot';
-import Mahalkot from './pages/Mahalkot';
-import Templates from './pages/Templates';
-import SmartSchedule from './pages/SmartSchedule';
-import LiveSchedule from './pages/LiveSchedule';
-import Profile from './pages/Profile';
-import JoinRequests from './pages/JoinRequests';
 import Loading from './components/Loading';
 import MaintenanceScreen from './components/MaintenanceScreen';
+
+// Lazy load heavy pages
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Plugot = lazy(() => import('./pages/Plugot'));
+const Mahalkot = lazy(() => import('./pages/Mahalkot'));
+const Templates = lazy(() => import('./pages/Templates'));
+const SmartSchedule = lazy(() => import('./pages/SmartSchedule'));
+const LiveSchedule = lazy(() => import('./pages/LiveSchedule'));
+const Profile = lazy(() => import('./pages/Profile'));
+const JoinRequests = lazy(() => import('./pages/JoinRequests'));
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -99,13 +101,13 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Dashboard />} />
-          <Route path="plugot" element={<Plugot />} />
-          <Route path="mahalkot" element={<Mahalkot />} />
-          <Route path="templates" element={<Templates />} />
-          <Route path="live-schedule" element={<LiveSchedule />} />
-          <Route path="join-requests" element={<JoinRequests />} />
-          <Route path="profile" element={<Profile />} />
+          <Route index element={<Suspense fallback={<Loading />}><Dashboard /></Suspense>} />
+          <Route path="plugot" element={<Suspense fallback={<Loading />}><Plugot /></Suspense>} />
+          <Route path="mahalkot" element={<Suspense fallback={<Loading />}><Mahalkot /></Suspense>} />
+          <Route path="templates" element={<Suspense fallback={<Loading />}><Templates /></Suspense>} />
+          <Route path="live-schedule" element={<Suspense fallback={<Loading />}><LiveSchedule /></Suspense>} />
+          <Route path="join-requests" element={<Suspense fallback={<Loading />}><JoinRequests /></Suspense>} />
+          <Route path="profile" element={<Suspense fallback={<Loading />}><Profile /></Suspense>} />
         </Route>
 
         {/* 404 */}

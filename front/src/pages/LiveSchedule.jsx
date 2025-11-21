@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Move, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, ArrowLeftRight, X, TrendingUp, Award, Zap } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
 import AssignmentModal from '../components/AssignmentModal';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable, useDraggable } from '@dnd-kit/core';
-import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 const LiveSchedule = () => {
   const { user } = useAuth();
@@ -18,10 +15,8 @@ const LiveSchedule = () => {
   const [showConstraints, setShowConstraints] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
-  const [columnOrder, setColumnOrder] = useState([]); // סדר העמודות
   const [isGenerating, setIsGenerating] = useState(false); // מצב יצירת שיבוץ AI
   const [feedbackGiven, setFeedbackGiven] = useState({}); // מעקב אחרי פידבקים שניתנו {assignmentId: 'approved'/'rejected'}
-  const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
   const [mlStats, setMlStats] = useState(null); // סטטיסטיקות ML
 
   useEffect(() => {
@@ -89,10 +84,6 @@ const LiveSchedule = () => {
       const dateStr = date.toISOString().split('T')[0];
       const response = await api.get(`/plugot/${user.pluga_id}/live-schedule?date=${dateStr}`);
       setScheduleData(response.data);
-
-      // אתחל את סדר העמודות
-      const assignmentNames = [...new Set(response.data?.assignments?.map(a => a.name) || [])].sort();
-      setColumnOrder(assignmentNames);
     } catch (error) {
       const errorData = error.response?.data;
       let errorMessage = errorData?.error || error.message;
@@ -271,159 +262,6 @@ const LiveSchedule = () => {
 
   const handleAssignmentSave = () => {
     loadSchedule(currentDate);
-  };
-
-  // Swap handler - לחיצה ישירה על כפתור swap במשימה
-  const handleSwapClick = (assignment, e) => {
-    e.stopPropagation(); // מנע פתיחת modal של עריכה
-
-    if (!selectedForSwap) {
-      // בחירת משימה ראשונה להחלפה
-      setSelectedForSwap(assignment);
-      toast.info(`נבחרה משימה: ${assignment.name}. לחץ על כפתור החלפה במשימה נוספת`, {
-        autoClose: 3000,
-        icon: '🔄'
-      });
-    } else if (selectedForSwap.id === assignment.id) {
-      // ביטול הבחירה - לחיצה על אותה משימה שוב
-      setSelectedForSwap(null);
-      toast.info('הבחירה בוטלה', {
-        icon: '❌'
-      });
-    } else {
-      // החלפה בין שתי המשימות
-      swapAssignments(selectedForSwap, assignment);
-    }
-  };
-
-  const swapAssignments = async (assignment1, assignment2) => {
-    try {
-      // החלף בין start_hour ו-name של שתי המשימות
-      const updates = [
-        {
-          id: assignment1.id,
-          start_hour: assignment2.start_hour,
-          name: assignment2.name
-        },
-        {
-          id: assignment2.id,
-          start_hour: assignment1.start_hour,
-          name: assignment1.name
-        }
-      ];
-
-      // עדכן את שתי המשימות
-      await Promise.all(updates.map(update =>
-        api.patch(`/assignments/${update.id}/time`, {
-          start_hour: update.start_hour,
-          name: update.name
-        })
-      ));
-
-      toast.success('המשימות הוחלפו בהצלחה! 🔄', {
-        icon: '✅'
-      });
-
-      // נקה את מצב ההחלפה
-      setSelectedForSwap(null);
-
-      // רענן את הנתונים
-      loadSchedule(currentDate);
-    } catch (error) {
-      console.error('Error swapping assignments:', error);
-      toast.error(error.response?.data?.error || 'שגיאה בהחלפת המשימות');
-
-      // נקה את מצב ההחלפה גם במקרה של שגיאה
-      setSelectedForSwap(null);
-    }
-  };
-
-  // Drag & Drop handlers
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // דרוש תזוזה של 8 פיקסלים כדי להתחיל גרירה
-      },
-    })
-  );
-
-  const handleDragEnd = async (event) => {
-    const { active, over } = event;
-
-    if (!over || active.id === over.id) {
-      return;
-    }
-
-    // בדוק אם זו גרירת עמודה (ID מתחיל ב-"column-")
-    if (active.id.toString().startsWith('column-')) {
-      // גרירת עמודה
-      const oldIndex = columnOrder.findIndex(name => `column-${name}` === active.id);
-      const newIndex = columnOrder.findIndex(name => `column-${name}` === over.id);
-
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newColumnOrder = arrayMove(columnOrder, oldIndex, newIndex);
-        setColumnOrder(newColumnOrder);
-        toast.success('סדר העמודות עודכן');
-      }
-      return;
-    }
-
-    // אחרת, זו גרירת משימה (הקוד הקיים)
-    // מצא את המשימה שנגררה
-    const draggedAssignment = scheduleData?.assignments?.find(a => a.id === active.id);
-    if (!draggedAssignment) {
-      return;
-    }
-
-    // חלץ את השעה ושם התבנית החדשים מה-over id (פורמט: "drop-zone-{name}-{hour}")
-    const overIdParts = over.id.toString().split('-');
-    const newStartHour = parseInt(overIdParts[overIdParts.length - 1]);
-
-    // שם התבנית הוא כל מה שבין "drop-zone-" ל-hour האחרון
-    const newTemplateName = overIdParts.slice(2, -1).join('-');
-
-    if (isNaN(newStartHour)) {
-      return;
-    }
-
-    // בדוק אם משהו באמת השתנה
-    const hourChanged = draggedAssignment.start_hour !== newStartHour;
-    const templateChanged = draggedAssignment.name !== newTemplateName;
-
-    if (!hourChanged && !templateChanged) {
-      return;
-    }
-
-    try {
-      // הכן את הנתונים לעדכון
-      const updateData = {};
-
-      if (hourChanged) {
-        updateData.start_hour = newStartHour;
-      }
-
-      if (templateChanged) {
-        updateData.name = newTemplateName;
-      }
-
-      // עדכן את השרת
-      await api.patch(`/assignments/${draggedAssignment.id}/time`, updateData);
-
-      // הודעה מותאמת
-      if (hourChanged && templateChanged) {
-        toast.success(`המשימה הועברה ל-${newTemplateName} בשעה ${newStartHour.toString().padStart(2, '0')}:00`);
-      } else if (templateChanged) {
-        toast.success(`המשימה שונתה ל-${newTemplateName}`);
-      } else {
-        toast.success(`המשימה הועברה לשעה ${newStartHour.toString().padStart(2, '0')}:00`);
-      }
-
-      // רענן את הנתונים
-      loadSchedule(currentDate);
-    } catch (error) {
-      console.error('Error updating assignment:', error);
-      toast.error(error.response?.data?.error || 'שגיאה בהזזת המשימה');
-    }
   };
 
   if (loading && !scheduleData) {
@@ -743,120 +581,208 @@ const LiveSchedule = () => {
               </span>
             </div>
 
-            {/* Time Grid Schedule with Drag & Drop */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <div className="overflow-x-auto">
-                {(() => {
-                  // צור מפה של משימות לפי שם ושעה
-                  const assignmentsByName = {};
-                  columnOrder.forEach(name => {
-                    assignmentsByName[name] = [];
-                  });
+            {/* Time Grid Schedule */}
+            <div className="overflow-x-auto">
+              {(() => {
+                // צור מפה של משימות לפי שם ושעה
+                const assignmentNames = [...new Set(scheduleData?.assignments?.map(a => a.name) || [])].sort();
+                const assignmentsByName = {};
+                assignmentNames.forEach(name => {
+                  assignmentsByName[name] = [];
+                });
 
-                  scheduleData?.assignments?.forEach(assignment => {
-                    if (!assignmentsByName[assignment.name]) {
-                      assignmentsByName[assignment.name] = [];
-                    }
-                    assignmentsByName[assignment.name].push(assignment);
-                  });
+                scheduleData?.assignments?.forEach(assignment => {
+                  if (!assignmentsByName[assignment.name]) {
+                    assignmentsByName[assignment.name] = [];
+                  }
+                  assignmentsByName[assignment.name].push(assignment);
+                });
 
-                  // יצירת 24 שעות
-                  const hours = Array.from({ length: 24 }, (_, i) => i);
+                // יצירת 24 שעות
+                const hours = Array.from({ length: 24 }, (_, i) => i);
 
-                  // יצירת IDs לעמודות (עבור SortableContext)
-                  const columnIds = columnOrder.map(name => `column-${name}`);
-
-                return (
-                  <div className="min-w-max">
-                    {/* Header - שמות תבניות */}
-                    <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
-                      <div className="flex border-b-2 border-gray-300 mb-2">
-                        <div className="w-20 flex-shrink-0 font-bold text-gray-700 p-2">
-                          שעה
-                        </div>
-                        {columnOrder.map(name => (
-                          <SortableColumnHeader
-                            key={name}
-                            id={`column-${name}`}
-                            name={name}
-                            userRole={user.role}
-                          />
-                        ))}
+              return (
+                <div className="min-w-max">
+                  {/* Header - שמות תבניות */}
+                  <div className="flex border-b-2 border-gray-300 mb-2">
+                    <div className="w-20 flex-shrink-0 font-bold text-gray-700 p-2">
+                      שעה
+                    </div>
+                    {assignmentNames.map(name => (
+                      <div
+                        key={name}
+                        className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300"
+                      >
+                        {name}
                       </div>
-                    </SortableContext>
+                    ))}
+                  </div>
 
-                    {/* Grid Container */}
-                    <div className="flex">
-                      {/* Hours Column */}
-                      <div className="w-20 flex-shrink-0">
-                        {hours.map(hour => (
-                          <div
-                            key={hour}
-                            className="h-12 flex items-center justify-center border-b border-gray-200 text-sm text-gray-600 font-medium"
-                          >
-                            {hour.toString().padStart(2, '0')}:00
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Assignment Name Columns */}
-                      {columnOrder.map(name => (
-                        <div key={name} className="flex-1 min-w-[200px] border-l border-gray-300 relative">
-                          {/* Hour Grid Lines with Drop Zones */}
-                          {hours.map(hour => (
-                            <DropZone
-                              key={hour}
-                              id={`drop-zone-${name}-${hour}`}
-                              hour={hour}
-                            />
-                          ))}
-
-                          {/* Assignment Blocks - Positioned Absolutely with Drag */}
-                          <div className="absolute inset-0 pointer-events-none">
-                            {assignmentsByName[name]?.map(assignment => {
-                              const startHour = assignment.start_hour || 0;
-                              const lengthInHours = assignment.length_in_hours || 1;
-                              const endHour = startHour + lengthInHours;
-                              // צבע לפי פלוגתי (2+ מחלקות = צהוב) או מחלקתי (צבע המחלקה)
-                              const assignmentColor = getAssignmentColor(assignment);
-
-                              // Calculate position and height
-                              const topPosition = (startHour / 24) * 100;
-                              const height = (lengthInHours / 24) * 100;
-
-                              return (
-                                <DraggableAssignment
-                                  key={assignment.id}
-                                  assignment={assignment}
-                                  topPosition={topPosition}
-                                  height={height}
-                                  assignmentColor={assignmentColor}
-                                  startHour={startHour}
-                                  endHour={endHour}
-                                  onEdit={(user.role === 'מפ' || user.role === 'ממ') ? openEditAssignmentModal : null}
-                                  onFeedback={handleFeedback}
-                                  feedbackStatus={feedbackGiven[assignment.id]}
-                                  isAiGenerated={assignment.is_ai_generated}
-                                  userRole={user.role}
-                                  selectedForSwap={selectedForSwap}
-                                  onSwapClick={handleSwapClick}
-                                >
-                                </DraggableAssignment>
-                              );
-                            })}
-                          </div>
+                  {/* Grid Container */}
+                  <div className="flex">
+                    {/* Hours Column */}
+                    <div className="w-20 flex-shrink-0">
+                      {hours.map(hour => (
+                        <div
+                          key={hour}
+                          className="h-12 flex items-center justify-center border-b border-gray-200 text-sm text-gray-600 font-medium"
+                        >
+                          {hour.toString().padStart(2, '0')}:00
                         </div>
                       ))}
                     </div>
+
+                    {/* Assignment Name Columns */}
+                    {assignmentNames.map(name => (
+                      <div key={name} className="flex-1 min-w-[200px] border-l border-gray-300 relative">
+                        {/* Hour Grid Lines */}
+                        {hours.map(hour => (
+                          <div
+                            key={hour}
+                            className="h-12 border-b border-gray-200"
+                          />
+                        ))}
+
+                        {/* Assignment Blocks - Positioned Absolutely */}
+                        <div className="absolute inset-0 pointer-events-none">
+                          {assignmentsByName[name]?.map(assignment => {
+                            const startHour = assignment.start_hour || 0;
+                            const lengthInHours = assignment.length_in_hours || 1;
+                            const endHour = startHour + lengthInHours;
+                            // צבע לפי פלוגתי (2+ מחלקות = צהוב) או מחלקתי (צבע המחלקה)
+                            const assignmentColor = getAssignmentColor(assignment);
+
+                            // Calculate position and height
+                            const topPosition = (startHour / 24) * 100;
+                            const height = (lengthInHours / 24) * 100;
+
+                            // בדוק אם יש פידבק
+                            const feedbackStatus = feedbackGiven[assignment.id];
+                            const hasFeedback = feedbackStatus === 'approved' || feedbackStatus === 'rejected';
+                            const feedbackClass = feedbackStatus === 'approved'
+                              ? 'ring-4 ring-green-400 shadow-green-400/50'
+                              : feedbackStatus === 'rejected'
+                              ? 'ring-4 ring-red-400 shadow-red-400/50'
+                              : '';
+
+                            return (
+                              <div
+                                key={assignment.id}
+                                className={`absolute rounded-lg shadow-md overflow-visible group hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] transform border pointer-events-auto ${feedbackClass}`}
+                                style={{
+                                  top: `calc(${topPosition}% + 2px)`,
+                                  height: `calc(${height}% - 4px)`,
+                                  left: '6px',
+                                  right: '6px',
+                                  background: hasFeedback
+                                    ? feedbackStatus === 'approved'
+                                      ? `linear-gradient(135deg, #10B981 0%, ${assignmentColor}dd 100%)`
+                                      : `linear-gradient(135deg, #EF4444 0%, ${assignmentColor}dd 100%)`
+                                    : `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
+                                  borderColor: assignmentColor,
+                                }}
+                                onClick={() => (user.role === 'מפ' || user.role === 'ממ') && openEditAssignmentModal(assignment)}
+                                title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00)`}
+                              >
+                                {/* Feedback Status Badge - Top Right Corner */}
+                                {hasFeedback && (
+                                  <div className="absolute -top-2 -right-2 z-20 pointer-events-none">
+                                    {feedbackStatus === 'approved' ? (
+                                      <div className="bg-gradient-to-br from-green-400 to-emerald-600 text-white p-1 rounded-full shadow-lg animate-scale-in">
+                                        <CheckCircle2 className="w-4 h-4" />
+                                      </div>
+                                    ) : (
+                                      <div className="bg-gradient-to-br from-red-400 to-rose-600 text-white p-1 rounded-full shadow-lg animate-scale-in">
+                                        <XCircle className="w-4 h-4" />
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Assignment Content */}
+                                <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative overflow-y-auto">
+                                  {/* Edit Icon */}
+                                  {(user.role === 'מפ' || user.role === 'ממ') && (
+                                    <div className="absolute top-1 right-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                                      <Edit className="w-3 h-3" />
+                                    </div>
+                                  )}
+
+                                  {/* Feedback Buttons - תמיד גלויים למשימות AI */}
+                                  {assignment.is_ai_generated && !hasFeedback && (user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
+                                    <div className="absolute top-1 left-1 z-10 flex gap-1 pointer-events-auto">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleFeedback(assignment.id, 'approved');
+                                        }}
+                                        className="bg-gradient-to-br from-green-400 to-emerald-600 hover:from-green-500 hover:to-emerald-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform"
+                                        title="אישור שיבוץ"
+                                      >
+                                        <ThumbsUp className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleFeedback(assignment.id, 'rejected');
+                                        }}
+                                        className="bg-gradient-to-br from-red-400 to-rose-600 hover:from-red-500 hover:to-rose-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform"
+                                        title="דחיית שיבוץ"
+                                      >
+                                        <ThumbsDown className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* Assignment Name & Time */}
+                                  <div className="font-bold text-sm mb-1 flex items-center gap-1.5">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {assignment.name}
+                                  </div>
+                                  <div className="text-xs opacity-95 mb-1.5 font-medium bg-black bg-opacity-20 rounded px-1.5 py-0.5 inline-block">
+                                    {startHour.toString().padStart(2, '0')}:00 - {endHour.toString().padStart(2, '0')}:00
+                                  </div>
+
+                                  {/* Soldiers List */}
+                                  {assignment.soldiers && assignment.soldiers.length > 0 && (
+                                    <div className="flex-1 overflow-y-auto">
+                                      <div className="space-y-1">
+                                        {assignment.soldiers.map((soldier) => (
+                                          <div
+                                            key={soldier.id}
+                                            className="text-xs bg-white/25 backdrop-blur-md px-2 py-1 rounded border border-white/30 shadow-sm hover:bg-white/35 transition-all duration-200"
+                                          >
+                                            <div className="font-semibold flex items-center gap-1">
+                                              <Users className="w-2.5 h-2.5" />
+                                              {soldier.name}
+                                            </div>
+                                            <div className="text-[10px] opacity-90 font-medium">
+                                              {soldier.role_in_assignment}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* No soldiers indicator */}
+                                  {(!assignment.soldiers || assignment.soldiers.length === 0) && (
+                                    <div className="text-xs opacity-80 italic bg-red-500/30 px-2 py-1 rounded border border-red-400/50">
+                                      אין חיילים משובצים
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  );
-                })()}
-              </div>
-            </DndContext>
+                </div>
+                );
+              })()}
+            </div>
           </div>
         </>
       )}
@@ -886,242 +812,6 @@ const LiveSchedule = () => {
           onSave={handleAssignmentSave}
         />
       )}
-    </div>
-  );
-};
-
-// SortableColumnHeader Component - כותרת עמודה שאפשר לגרור
-const SortableColumnHeader = ({ id, name, userRole }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    cursor: (userRole === 'מפ' || userRole === 'ממ') ? 'grab' : 'default',
-  };
-
-  const canDrag = userRole === 'מפ' || userRole === 'ממ';
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...(canDrag ? listeners : {})}
-      {...(canDrag ? attributes : {})}
-      className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300 hover:bg-gray-200 transition-colors group relative"
-      title={canDrag ? 'גרור כדי לשנות סדר העמודות' : name}
-    >
-      {canDrag && (
-        <div className="absolute top-1 right-1 bg-white/50 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <Move className="w-3 h-3 text-gray-600" />
-        </div>
-      )}
-      {name}
-    </div>
-  );
-};
-
-// DropZone Component - אזור שאפשר לזרוק בו משימות
-const DropZone = ({ id, hour }) => {
-  const { setNodeRef, isOver } = useDroppable({ id });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`h-12 border-b border-gray-200 transition-colors ${
-        isOver ? 'bg-blue-100 border-blue-400' : ''
-      }`}
-      data-hour={hour}
-    />
-  );
-};
-
-// DraggableAssignment Component - משימה שאפשר לגרור
-const DraggableAssignment = ({
-  assignment,
-  topPosition,
-  height,
-  assignmentColor,
-  startHour,
-  endHour,
-  onEdit,
-  onFeedback,
-  feedbackStatus,
-  isAiGenerated,
-  userRole,
-  selectedForSwap,
-  onSwapClick
-}) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging, setActivatorNodeRef } = useDraggable({
-    id: assignment.id,
-  });
-
-  const [showFeedbackButtons, setShowFeedbackButtons] = useState(false);
-
-  // בדוק אם משימה זו נבחרה להחלפה
-  const isSelectedForSwap = selectedForSwap && selectedForSwap.id === assignment.id;
-
-  // קבע אם יש אנימציית פידבק
-  const hasFeedback = feedbackStatus === 'approved' || feedbackStatus === 'rejected';
-  const feedbackClass = feedbackStatus === 'approved'
-    ? 'ring-4 ring-green-400 shadow-green-400/50'
-    : feedbackStatus === 'rejected'
-    ? 'ring-4 ring-red-400 shadow-red-400/50'
-    : isSelectedForSwap
-    ? 'ring-4 ring-yellow-500 shadow-yellow-500/50 animate-pulse'
-    : '';
-
-  const style = {
-    top: `calc(${topPosition}% + 2px)`,
-    height: `calc(${height}% - 4px)`,
-    left: '6px',
-    right: '6px',
-    background: hasFeedback
-      ? feedbackStatus === 'approved'
-        ? `linear-gradient(135deg, #10B981 0%, ${assignmentColor}dd 100%)`
-        : `linear-gradient(135deg, #EF4444 0%, ${assignmentColor}dd 100%)`
-      : `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
-    borderColor: assignmentColor,
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  const handleFeedbackClick = (e, rating) => {
-    e.stopPropagation();
-    onFeedback(assignment.id, rating);
-    setShowFeedbackButtons(false);
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`absolute rounded-lg shadow-md overflow-visible group hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] transform border pointer-events-auto ${feedbackClass}`}
-      onMouseEnter={() => isAiGenerated && !hasFeedback && setShowFeedbackButtons(true)}
-      onMouseLeave={() => setShowFeedbackButtons(false)}
-      onClick={() => onEdit && onEdit(assignment)}
-      title={`${assignment.name} (${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00)`}
-    >
-
-      {/* Feedback Status Badge - Top Right Corner */}
-      {hasFeedback && (
-        <div className="absolute -top-2 -right-2 z-20 pointer-events-none">
-          {feedbackStatus === 'approved' ? (
-            <div className="bg-gradient-to-br from-green-400 to-emerald-600 text-white p-1 rounded-full shadow-lg animate-scale-in">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-          ) : (
-            <div className="bg-gradient-to-br from-red-400 to-rose-600 text-white p-1 rounded-full shadow-lg animate-scale-in">
-              <XCircle className="w-4 h-4" />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Feedback Buttons - Show on Hover for AI Generated Assignments */}
-      {isAiGenerated && !hasFeedback && showFeedbackButtons && (userRole === 'מפ' || userRole === 'ממ' || userRole === 'מכ') && (
-        <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 z-30 flex gap-2 animate-slide-up pointer-events-auto">
-          <button
-            onClick={(e) => handleFeedbackClick(e, 'approved')}
-            className="bg-gradient-to-br from-green-400 to-emerald-600 hover:from-green-500 hover:to-emerald-700 text-white p-2 rounded-full shadow-2xl transition-all duration-200 hover:scale-110 transform"
-            title="אישור שיבוץ"
-          >
-            <ThumbsUp className="w-4 h-4" />
-          </button>
-          <button
-            onClick={(e) => handleFeedbackClick(e, 'rejected')}
-            className="bg-gradient-to-br from-red-400 to-rose-600 hover:from-red-500 hover:to-rose-700 text-white p-2 rounded-full shadow-2xl transition-all duration-200 hover:scale-110 transform"
-            title="דחיית שיבוץ"
-          >
-            <ThumbsDown className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Assignment Content */}
-      <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative overflow-y-auto">
-        {/* Drag Handle - גרירה רק מכאן */}
-        {(userRole === 'מפ' || userRole === 'ממ') && (
-          <div
-            ref={setActivatorNodeRef}
-            {...listeners}
-            {...attributes}
-            className="absolute top-1 right-8 w-6 h-6 bg-white/20 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 cursor-grab active:cursor-grabbing flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-            title="גרור כדי להזיז משימה"
-          >
-            <Move className="w-4 h-4 text-white" />
-          </div>
-        )}
-
-        {/* Edit Icon */}
-        {(userRole === 'מפ' || userRole === 'ממ') && onEdit && (
-          <div className="absolute top-1 right-1 bg-white/30 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-            <Edit className="w-3 h-3" />
-          </div>
-        )}
-
-        {/* Swap Button - תמיד גלוי */}
-        {(userRole === 'מפ' || userRole === 'ממ') && (
-          <button
-            onClick={(e) => onSwapClick(assignment, e)}
-            className={`absolute top-1 left-1 rounded-md p-1.5 transition-all duration-200 z-10 pointer-events-auto shadow-lg ${
-              isSelectedForSwap
-                ? 'bg-yellow-500 text-white animate-pulse scale-110'
-                : 'bg-white/40 hover:bg-yellow-400 hover:text-white opacity-70 hover:opacity-100 hover:scale-105'
-            }`}
-            title={isSelectedForSwap ? "לחץ שוב לביטול או לחץ על משימה אחרת להחלפה" : "החלף משימה זו עם אחרת"}
-          >
-            <ArrowLeftRight className="w-3.5 h-3.5" />
-          </button>
-        )}
-
-        {/* Assignment Name & Time */}
-        <div className="font-bold text-sm mb-1 flex items-center gap-1.5">
-          <Clock className="w-3.5 h-3.5" />
-          {assignment.name}
-        </div>
-        <div className="text-xs opacity-95 mb-1.5 font-medium bg-black bg-opacity-20 rounded px-1.5 py-0.5 inline-block">
-          {startHour.toString().padStart(2, '0')}:00 - {endHour.toString().padStart(2, '0')}:00
-        </div>
-
-        {/* Soldiers List */}
-        {assignment.soldiers && assignment.soldiers.length > 0 && (
-          <div className="flex-1 overflow-y-auto">
-            <div className="space-y-1">
-              {assignment.soldiers.map((soldier) => (
-                <div
-                  key={soldier.id}
-                  className="text-xs bg-white/25 backdrop-blur-md px-2 py-1 rounded border border-white/30 shadow-sm hover:bg-white/35 transition-all duration-200"
-                >
-                  <div className="font-semibold flex items-center gap-1">
-                    <Users className="w-2.5 h-2.5" />
-                    {soldier.name}
-                  </div>
-                  <div className="text-[10px] opacity-90 font-medium">
-                    {soldier.role_in_assignment}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* No soldiers indicator */}
-        {(!assignment.soldiers || assignment.soldiers.length === 0) && (
-          <div className="text-xs opacity-80 italic bg-red-500/30 px-2 py-1 rounded border border-red-400/50">
-            אין חיילים משובצים
-          </div>
-        )}
-      </div>
     </div>
   );
 };

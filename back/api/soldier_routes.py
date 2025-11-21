@@ -4,6 +4,7 @@ Soldier Routes Blueprint
 """
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
+from sqlalchemy.orm import joinedload
 import traceback
 
 from models import (
@@ -414,18 +415,22 @@ def list_soldiers_by_mahlaka(mahlaka_id, current_user):
         if not can_view_mahlaka(current_user, mahlaka_id, session):
             return jsonify({'error': 'אין לך הרשאה'}), 403
 
-        soldiers = session.query(Soldier).filter_by(mahlaka_id=mahlaka_id).all()
+        # Eager loading למניעת N+1 queries
+        soldiers = session.query(Soldier).options(
+            joinedload(Soldier.certifications),
+            joinedload(Soldier.current_status)
+        ).filter_by(mahlaka_id=mahlaka_id).all()
 
         if current_user.get('role') == 'מכ':
             soldiers = [s for s in soldiers if s.kita == current_user.get('kita')]
 
         result = []
         for soldier in soldiers:
-            certifications = session.query(Certification).filter_by(soldier_id=soldier.id).all()
-            cert_list = [{'id': cert.id, 'name': cert.certification_name} for cert in certifications]
+            # certifications כבר נטענו עם joinedload
+            cert_list = [{'id': cert.id, 'name': cert.certification_name} for cert in soldier.certifications]
 
-            # קבל סטטוס נוכחי
-            status = session.query(SoldierStatus).filter_by(soldier_id=soldier.id).first()
+            # status כבר נטען עם joinedload
+            status = soldier.current_status
 
             # בדוק אם בסבב קו
             in_round = False

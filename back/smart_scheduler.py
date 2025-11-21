@@ -28,6 +28,11 @@ class SmartScheduler:
         # לבנות: 8 שעות עבודה + 16 שעות מנוחה
         self.min_rest_hours = min_rest_hours
 
+        # הגבלות גודל למניעת memory leak
+        self.MAX_TRAINING_EXAMPLES = 1000
+        self.MAX_FEEDBACK_HISTORY = 500
+        self.MAX_REJECTED_ASSIGNMENTS = 200
+
         # נתוני למידה
         self.training_examples = []  # דוגמאות שיבוץ טובות
         self.learned_patterns = {}   # דפוסים שנלמדו
@@ -47,6 +52,17 @@ class SmartScheduler:
             'user_rejections': 0,
             'manual_changes': 0
         }
+
+    def _cleanup_history(self):
+        """ניקוי היסטוריה למניעת memory leak - שומר רק X רשומות אחרונות"""
+        if len(self.training_examples) > self.MAX_TRAINING_EXAMPLES:
+            self.training_examples = self.training_examples[-self.MAX_TRAINING_EXAMPLES:]
+
+        if len(self.user_feedback) > self.MAX_FEEDBACK_HISTORY:
+            self.user_feedback = self.user_feedback[-self.MAX_FEEDBACK_HISTORY:]
+
+        if len(self.rejected_assignments) > self.MAX_REJECTED_ASSIGNMENTS:
+            self.rejected_assignments = self.rejected_assignments[-self.MAX_REJECTED_ASSIGNMENTS:]
 
     # ============================================
     # HARD CONSTRAINTS - אילוצים קשיחים
@@ -359,12 +375,17 @@ class SmartScheduler:
             if pattern['count'] > 0:
                 pattern['success_rate'] = pattern['success_rate'] / pattern['count']
 
+        # ניקוי היסטוריה
+        self._cleanup_history()
+
     def train_from_examples(self, examples: List[Dict]):
         """לומד מרשימת דוגמאות"""
         print(f"🎓 מאמן מודל מ-{len(examples)} דוגמאות...")
         for example in examples:
             self.train_from_example(example)
         print(f"✅ אימון הושלם! נלמדו {len(self.learned_patterns)} דפוסים")
+        # ניקוי היסטוריה
+        self._cleanup_history()
 
     def add_feedback(self, assignment: Dict, rating: str, changes: Optional[Dict] = None):
         """
@@ -395,6 +416,9 @@ class SmartScheduler:
 
         # למד מהפידבק!
         self._learn_from_feedback(feedback_entry)
+
+        # ניקוי היסטוריה
+        self._cleanup_history()
 
     def add_feedback_with_learning_loop(self, shavzak_id: int, assignment: Dict,
                                        rating: str, changes: Optional[Dict] = None,

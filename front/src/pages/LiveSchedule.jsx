@@ -438,7 +438,7 @@ const LiveSchedule = () => {
       </div>
 
       {/* Feedback Panel - למעלה משמאל */}
-      {scheduleData?.assignments && scheduleData.assignments.some(a => a.is_ai_generated) && (userRole === 'מפ' || userRole === 'ממ' || userRole === 'מכ') && (
+      {scheduleData?.assignments && scheduleData.assignments.some(a => a.is_ai_generated) && (user?.role === 'מפ' || user?.role === 'ממ' || user?.role === 'מכ') && (
         <div className="card bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-300 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">

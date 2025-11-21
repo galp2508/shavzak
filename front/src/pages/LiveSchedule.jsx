@@ -330,7 +330,8 @@ const LiveSchedule = () => {
         toast.success(`🤖 ${response.data.message}`);
       }
 
-      loadSchedule(currentDate);
+      // טען את השיבוץ החדש - דלג על יצירה אוטומטית נוספת
+      loadSchedule(currentDate, true);
       loadMLStats(); // עדכן סטטיסטיקות ML
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה ביצירת שיבוץ חכם');

@@ -85,6 +85,18 @@ const LiveSchedule = () => {
       const dateStr = date.toISOString().split('T')[0];
       const response = await api.get(`/plugot/${user.pluga_id}/live-schedule?date=${dateStr}`);
       setScheduleData(response.data);
+
+      // בדוק אם אין משימות ליום זה והתאריך בעתיד
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const checkDate = new Date(date);
+      checkDate.setHours(0, 0, 0, 0);
+
+      if (response.data.assignments && response.data.assignments.length === 0 && checkDate >= today) {
+        // אין שיבוץ ליום זה - בנה אוטומטית 2 ימים קדימה
+        console.log(`📅 אין שיבוץ ל-${dateStr} - בונה אוטומטית 2 ימים קדימה`);
+        await generateScheduleAutomatically(date);
+      }
     } catch (error) {
       const errorData = error.response?.data;
       let errorMessage = errorData?.error || error.message;
@@ -106,6 +118,26 @@ const LiveSchedule = () => {
     }
   };
 
+  const generateScheduleAutomatically = async (startDate) => {
+    try {
+      console.log('🤖 בונה שיבוץ אוטומטי ליומיים קדימה...');
+      const response = await api.post('/ml/smart-schedule', {
+        pluga_id: user.pluga_id,
+        start_date: startDate.toISOString().split('T')[0],
+        days_count: 2
+      });
+
+      // רענן את התצוגה בשקט (בלי הודעה)
+      if (response.data) {
+        loadSchedule(currentDate);
+        console.log('✅ שיבוץ אוטומטי הושלם');
+      }
+    } catch (error) {
+      console.error('שגיאה בשיבוץ אוטומטי:', error);
+      // לא מציגים שגיאה למשתמש - זה רק ניסיון אוטומטי
+    }
+  };
+
   const navigateDay = (days) => {
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() + days);
@@ -113,19 +145,19 @@ const LiveSchedule = () => {
   };
 
   const generateSmartSchedule = async () => {
-    if (!window.confirm('האם אתה בטוח שברצונך ליצור שיבוץ חכם עם AI? זה עשוי לקחת כמה שניות.')) {
+    if (!window.confirm('האם אתה בטוח שברצונך ליצור שיבוץ חכם עם AI ליומיים הבאים?')) {
       return;
     }
 
     setIsGenerating(true);
     try {
+      // התחל מהיום הנוכחי (לא מתחילת שבוע)
       const startDate = new Date(currentDate);
-      startDate.setDate(startDate.getDate() - currentDate.getDay()); // תחילת שבוע
 
       const response = await api.post('/ml/smart-schedule', {
         pluga_id: user.pluga_id,
         start_date: startDate.toISOString().split('T')[0],
-        days_count: 7
+        days_count: 2  // 2 ימים במקום 7
       });
 
       // הצג מידע על משימות שלא הצליחו
@@ -726,11 +758,8 @@ const LiveSchedule = () => {
                             const feedbackStatus = feedbackGiven[assignment.id];
                             const hasFeedback = feedbackStatus === 'approved' || feedbackStatus === 'rejected';
                             const isSelectedForSwap = selectedForSwap && selectedForSwap.id === assignment.id;
-                            const feedbackClass = feedbackStatus === 'approved'
-                              ? 'ring-4 ring-green-400 shadow-green-400/50'
-                              : feedbackStatus === 'rejected'
-                              ? 'ring-4 ring-red-400 shadow-red-400/50'
-                              : isSelectedForSwap
+                            // מסגרת רק למשימה שנבחרה להחלפה, לא לפידבק
+                            const feedbackClass = isSelectedForSwap
                               ? 'ring-4 ring-yellow-500 shadow-yellow-500/50 animate-pulse'
                               : '';
 
@@ -743,11 +772,8 @@ const LiveSchedule = () => {
                                   height: `calc(${height}% - 4px)`,
                                   left: '6px',
                                   right: '6px',
-                                  background: hasFeedback
-                                    ? feedbackStatus === 'approved'
-                                      ? `linear-gradient(135deg, #10B981 0%, ${assignmentColor}dd 100%)`
-                                      : `linear-gradient(135deg, #EF4444 0%, ${assignmentColor}dd 100%)`
-                                    : `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
+                                  // רקע רגיל ללא שינוי צבע לפי פידבק
+                                  background: `linear-gradient(135deg, ${assignmentColor} 0%, ${assignmentColor}dd 100%)`,
                                   borderColor: assignmentColor,
                                 }}
                                 onClick={() => (user.role === 'מפ' || user.role === 'ממ') && openEditAssignmentModal(assignment)}
@@ -792,16 +818,20 @@ const LiveSchedule = () => {
                                     </button>
                                   )}
 
-                                  {/* Feedback Buttons - תמיד גלויים לכל המשימות */}
-                                  {!hasFeedback && (user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
+                                  {/* Feedback Buttons - תמיד גלויים לכל המשתמשים המורשים */}
+                                  {(user?.role === 'מפ' || user?.role === 'ממ' || user?.role === 'מכ') && (
                                     <div className="absolute top-1 left-1 z-10 flex gap-1 pointer-events-auto">
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           handleFeedback(assignment.id, 'approved');
                                         }}
-                                        className="bg-gradient-to-br from-green-400 to-emerald-600 hover:from-green-500 hover:to-emerald-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform"
-                                        title="אישור שיבוץ - המערכת תלמד מהפידבק"
+                                        className={`bg-gradient-to-br hover:from-green-500 hover:to-emerald-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform ${
+                                          feedbackStatus === 'approved'
+                                            ? 'from-green-500 to-emerald-700 ring-2 ring-white'
+                                            : 'from-green-400 to-emerald-600'
+                                        }`}
+                                        title={feedbackStatus === 'approved' ? 'שיבוץ מאושר - לחץ שוב לביטול' : 'אישור שיבוץ - המערכת תלמד מהפידבק'}
                                       >
                                         <ThumbsUp className="w-3.5 h-3.5" />
                                       </button>
@@ -810,8 +840,12 @@ const LiveSchedule = () => {
                                           e.stopPropagation();
                                           handleFeedback(assignment.id, 'rejected');
                                         }}
-                                        className="bg-gradient-to-br from-red-400 to-rose-600 hover:from-red-500 hover:to-rose-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform"
-                                        title="דחיית שיבוץ - המערכת תלמד מהפידבק"
+                                        className={`bg-gradient-to-br hover:from-red-500 hover:to-rose-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform ${
+                                          feedbackStatus === 'rejected'
+                                            ? 'from-red-500 to-rose-700 ring-2 ring-white'
+                                            : 'from-red-400 to-rose-600'
+                                        }`}
+                                        title={feedbackStatus === 'rejected' ? 'שיבוץ נדחה - לחץ שוב לביטול' : 'דחיית שיבוץ - המערכת תלמד מהפידבק'}
                                       >
                                         <ThumbsDown className="w-3.5 h-3.5" />
                                       </button>

@@ -169,7 +169,10 @@ def ml_smart_schedule(current_user):
 
         # פונקציה לבדיקת זמינות
         def is_soldier_available(soldier_data, check_date):
-            if soldier_data.get('status_type') == 'ריתוק':
+            status_type = soldier_data.get('status_type', 'בבסיס')
+
+            # חיילים בריתוק או בסבב קו לא זמינים
+            if status_type in ['ריתוק', 'בסבב קו']:
                 return False
 
             if check_date in soldier_data.get('unavailable_dates', []):
@@ -672,7 +675,10 @@ def ml_regenerate_schedule(current_user):
 
         # פונקציה לבדיקת זמינות
         def is_soldier_available(soldier_data, check_date):
-            if soldier_data.get('status_type') == 'ריתוק':
+            status_type = soldier_data.get('status_type', 'בבסיס')
+
+            # חיילים בריתוק או בסבב קו לא זמינים
+            if status_type in ['ריתוק', 'בסבב קו']:
                 return False
 
             if check_date in soldier_data.get('unavailable_dates', []):

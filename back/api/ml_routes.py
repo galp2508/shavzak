@@ -238,6 +238,8 @@ def ml_smart_schedule(current_user):
             Shavzak.name == 'שיבוץ אוטומטי'
         ).first()
 
+        start_date_changed = False  # האם start_date השתנה
+
         if not master_shavzak:
             # צור Shavzak מאסטר
             master_shavzak = Shavzak(
@@ -255,7 +257,9 @@ def ml_smart_schedule(current_user):
         else:
             # עדכן את טווח התאריכים אם נדרש
             if start_date < master_shavzak.start_date:
+                print(f"⚠️ משנה start_date מ-{master_shavzak.start_date} ל-{start_date} - נמחק את כל המשימות הקיימות")
                 master_shavzak.start_date = start_date
+                start_date_changed = True
 
             end_date_needed = start_date + timedelta(days=days_count)
             current_end_date = master_shavzak.start_date + timedelta(days=master_shavzak.days_count)
@@ -264,9 +268,18 @@ def ml_smart_schedule(current_user):
 
             session.flush()
 
-        # מחק משימות קיימות בטווח התאריכים הנוכחי
-        day_start = (start_date - master_shavzak.start_date).days
-        days_to_delete = list(range(day_start, day_start + days_count))
+        # 🐛 תיקון: אם start_date השתנה, מחק את כל המשימות הקיימות (לא רק בטווח החדש)
+        # כי המשימות הישנות עכשיו יש להן day שגוי יחסית ל-start_date החדש
+        if start_date_changed:
+            print("🗑️ מוחק את כל המשימות הקיימות כי start_date השתנה")
+            days_to_delete = session.query(Assignment.day).filter(
+                Assignment.shavzak_id == master_shavzak.id
+            ).distinct().all()
+            days_to_delete = [d[0] for d in days_to_delete]
+        else:
+            # מחק רק משימות בטווח התאריכים הנוכחי
+            day_start = (start_date - master_shavzak.start_date).days
+            days_to_delete = list(range(day_start, day_start + days_count))
 
         # מחק גם את החיילים המשובצים למשימות האלה
         assignments_to_delete = session.query(Assignment).filter(
@@ -362,6 +375,20 @@ def ml_smart_schedule(current_user):
 
         # שמור הכל למסד הנתונים
         session.commit()
+
+        # 🐛 Debug: וודא שהמשימות נשמרו בפועל
+        saved_assignments_count = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id
+        ).count()
+        print(f"🔍 DEBUG: שמרתי {len(created_assignments)} משימות, מצאתי במסד {saved_assignments_count} משימות")
+
+        # בדוק משימות לפי day
+        for day in range(days_count):
+            day_assignments = session.query(Assignment).filter(
+                Assignment.shavzak_id == master_shavzak.id,
+                Assignment.day == day
+            ).count()
+            print(f"🔍 DEBUG: יום {day}: {day_assignments} משימות")
 
         smart_scheduler.stats['total_assignments'] += len(created_assignments)
         smart_scheduler.stats['successful_assignments'] += len(created_assignments)

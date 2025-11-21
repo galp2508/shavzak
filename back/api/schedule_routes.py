@@ -1295,10 +1295,25 @@ def get_live_schedule(pluga_id, current_user):
                 print(f"⚠️ אין תבניות משימות במערכת - לא ניתן להריץ שיבוץ אוטומטי")
 
         # בדוק אם יש משימות קיימות ליום המבוקש
+        # 🐛 Debug logging
+        total_assignments_in_shavzak = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id
+        ).count()
+        print(f"🔍 DEBUG live-schedule: shavzak_id={master_shavzak.id}, סה\"כ משימות={total_assignments_in_shavzak}")
+        print(f"🔍 DEBUG live-schedule: requested_date={requested_date}, master_start_date={master_shavzak.start_date}, day_diff={day_diff}")
+
+        # בדוק לאיזה days יש משימות
+        all_days_with_assignments = session.query(Assignment.day).filter(
+            Assignment.shavzak_id == master_shavzak.id
+        ).distinct().all()
+        print(f"🔍 DEBUG live-schedule: ימים עם משימות: {[d[0] for d in all_days_with_assignments]}")
+
         existing_assignments = session.query(Assignment).filter(
             Assignment.shavzak_id == master_shavzak.id,
             Assignment.day == day_diff
         ).all()
+
+        print(f"🔍 DEBUG live-schedule: מצאתי {len(existing_assignments)} משימות ליום {day_diff}")
 
         # אם יש משימות, החזר אותן
         if existing_assignments:

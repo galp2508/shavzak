@@ -19,6 +19,7 @@ const LiveSchedule = () => {
   const [feedbackGiven, setFeedbackGiven] = useState({}); // מעקב אחרי פידבקים שניתנו {assignmentId: 'approved'/'rejected'}
   const [mlStats, setMlStats] = useState(null); // סטטיסטיקות ML
   const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false); // מצב יצירה אוטומטית - למניעת לולאות
 
   useEffect(() => {
     // התחל עם מחר
@@ -243,7 +244,7 @@ const LiveSchedule = () => {
       const checkDate = new Date(date);
       checkDate.setHours(0, 0, 0, 0);
 
-      if (response.data.assignments && response.data.assignments.length === 0 && checkDate >= today) {
+      if (response.data.assignments && response.data.assignments.length === 0 && checkDate >= today && !isAutoGenerating) {
         // אין שיבוץ ליום זה - בנה אוטומטית 2 ימים קדימה
         console.log(`📅 אין שיבוץ ל-${dateStr} - בונה אוטומטית 2 ימים קדימה`);
         await generateScheduleAutomatically(date);
@@ -270,6 +271,13 @@ const LiveSchedule = () => {
   };
 
   const generateScheduleAutomatically = async (startDate) => {
+    // מנע קריאות מקבילות - אם כבר בתהליך יצירה, צא
+    if (isAutoGenerating) {
+      console.log('⏳ כבר בתהליך יצירה אוטומטית - מדלג');
+      return;
+    }
+
+    setIsAutoGenerating(true);
     try {
       console.log('🤖 בונה שיבוץ אוטומטי ליומיים קדימה...');
       const response = await api.post('/ml/smart-schedule', {
@@ -280,12 +288,14 @@ const LiveSchedule = () => {
 
       // רענן את התצוגה בשקט (בלי הודעה)
       if (response.data) {
-        loadSchedule(currentDate);
+        await loadSchedule(currentDate);
         console.log('✅ שיבוץ אוטומטי הושלם');
       }
     } catch (error) {
       console.error('שגיאה בשיבוץ אוטומטי:', error);
       // לא מציגים שגיאה למשתמש - זה רק ניסיון אוטומטי
+    } finally {
+      setIsAutoGenerating(false);
     }
   };
 

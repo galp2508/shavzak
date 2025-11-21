@@ -780,7 +780,7 @@ def ml_regenerate_schedule(current_user):
                 for role_key in ['commanders', 'drivers', 'soldiers']:
                     if role_key in result:
                         for soldier_id in result[role_key]:
-                            role_name = 'מפקד' if role_key == 'commanders' else ('נהג' if role_key == 'drivers' else 'לוחם')
+                            role_name = 'מפקד' if role_key == 'commanders' else ('נהג' if role_key == 'drivers' else 'חייל')
                             assignment_soldier = AssignmentSoldier(
                                 assignment_id=new_assignment.id,
                                 soldier_id=soldier_id,

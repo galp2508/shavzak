@@ -570,6 +570,7 @@ class SmartScheduler:
         commanders_needed = task.get('commanders_needed', 1)
         soldiers_needed = task.get('soldiers_needed', 2)
         drivers_needed = task.get('drivers_needed', 0)
+        same_mahlaka_required = task.get('same_mahlaka_required', False)
 
         # הפרד לפי תפקידים
         commanders = [s for s in all_soldiers if self.is_commander(s)]
@@ -587,6 +588,65 @@ class SmartScheduler:
                             if self.check_availability(s, task['day'], task['start_hour'],
                                                      task['length_in_hours'], schedules)]
 
+        # אם דרוש שיבוץ מאותה מחלקה - נסה למצוא מחלקה שיכולה לספק את כל הדרישות
+        if same_mahlaka_required:
+            # קבל רשימת כל המחלקות
+            mahlaka_ids = set()
+            for s in all_soldiers:
+                if s.get('mahlaka_id'):
+                    mahlaka_ids.add(s['mahlaka_id'])
+
+            # נסה כל מחלקה לפי סדר עומס (פחות -> יותר)
+            sorted_mahalkot = sorted(mahlaka_ids, key=lambda m: mahlaka_workload.get(m, 0))
+
+            for mahlaka_id in sorted_mahalkot:
+                # סנן רק חיילים מהמחלקה הזאת
+                mahlaka_commanders = [c for c in available_commanders if c.get('mahlaka_id') == mahlaka_id]
+                mahlaka_drivers = [d for d in available_drivers if d.get('mahlaka_id') == mahlaka_id]
+                mahlaka_soldiers = [s for s in available_soldiers if s.get('mahlaka_id') == mahlaka_id]
+
+                # בדוק אם המחלקה יכולה לספק את כל הדרישות
+                if (len(mahlaka_commanders) >= commanders_needed and
+                    (drivers_needed == 0 or len(mahlaka_drivers) >= drivers_needed) and
+                    len(mahlaka_soldiers) >= soldiers_needed):
+
+                    # ניקוד וסידור לפי ML
+                    scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
+                                        for c in mahlaka_commanders]
+                    scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
+                                      for s in mahlaka_soldiers]
+                    scored_drivers = [(d, self.calculate_soldier_score(d, task, schedules, mahlaka_workload, all_soldiers))
+                                     for d in mahlaka_drivers]
+
+                    # מיון לפי ציון
+                    scored_commanders.sort(key=lambda x: x[1], reverse=True)
+                    scored_soldiers.sort(key=lambda x: x[1], reverse=True)
+                    scored_drivers.sort(key=lambda x: x[1], reverse=True)
+
+                    # בחר הטובים ביותר
+                    selected_commanders = [c[0] for c in scored_commanders[:commanders_needed]]
+                    selected_soldiers = [s[0] for s in scored_soldiers[:soldiers_needed]]
+
+                    # עדכן עומס מחלקה
+                    mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
+
+                    result = {
+                        'commanders': [c['id'] for c in selected_commanders],
+                        'soldiers': [s['id'] for s in selected_soldiers],
+                        'mahlaka_id': mahlaka_id
+                    }
+
+                    if drivers_needed > 0:
+                        selected_drivers = [d[0] for d in scored_drivers[:drivers_needed]]
+                        result['drivers'] = [d['id'] for d in selected_drivers]
+
+                    return result
+
+            # לא מצאנו מחלקה שיכולה לספק את כל הדרישות
+            print(f"❌ סיור יום {task['day']}: אין מחלקה שיכולה לספק את כל הדרישות")
+            return None
+
+        # אם לא דרוש אותה מחלקה - התנהג כמו קודם
         # בדיקת אילוצים קשיחים מהתבנית
         missing = []
         if len(available_commanders) < commanders_needed:
@@ -667,6 +727,7 @@ class SmartScheduler:
         # קריאת דרישות מהתבנית
         soldiers_needed = task.get('soldiers_needed', 7)
         drivers_needed = task.get('drivers_needed', 0)  # כמה נהגים נדרשים
+        same_mahlaka_required = task.get('same_mahlaka_required', False)
 
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         drivers = [s for s in all_soldiers if self.is_driver(s)]
@@ -683,6 +744,52 @@ class SmartScheduler:
                             if self.check_availability(s, task['day'], task['start_hour'],
                                                      task['length_in_hours'], schedules)]
 
+        # אם דרוש שיבוץ מאותה מחלקה
+        if same_mahlaka_required:
+            mahlaka_ids = set()
+            for s in all_soldiers:
+                if s.get('mahlaka_id'):
+                    mahlaka_ids.add(s['mahlaka_id'])
+
+            sorted_mahalkot = sorted(mahlaka_ids, key=lambda m: mahlaka_workload.get(m, 0))
+
+            for mahlaka_id in sorted_mahalkot:
+                mahlaka_commanders = [c for c in available_commanders if c.get('mahlaka_id') == mahlaka_id]
+                mahlaka_drivers = [d for d in available_drivers if d.get('mahlaka_id') == mahlaka_id]
+                mahlaka_soldiers = [s for s in available_soldiers if s.get('mahlaka_id') == mahlaka_id]
+
+                if (len(mahlaka_commanders) >= 1 and
+                    (drivers_needed == 0 or len(mahlaka_drivers) >= drivers_needed) and
+                    len(mahlaka_soldiers) >= soldiers_needed):
+
+                    scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
+                                        for c in mahlaka_commanders]
+                    scored_drivers = [(d, self.calculate_soldier_score(d, task, schedules, mahlaka_workload, all_soldiers))
+                                     for d in mahlaka_drivers]
+                    scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
+                                      for s in mahlaka_soldiers]
+
+                    scored_commanders.sort(key=lambda x: x[1], reverse=True)
+                    scored_drivers.sort(key=lambda x: x[1], reverse=True)
+                    scored_soldiers.sort(key=lambda x: x[1], reverse=True)
+
+                    mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
+
+                    result = {
+                        'commanders': [scored_commanders[0][0]['id']],
+                        'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
+                        'mahlaka_id': mahlaka_id
+                    }
+
+                    if drivers_needed > 0:
+                        result['drivers'] = [d[0]['id'] for d in scored_drivers[:drivers_needed]]
+
+                    return result
+
+            print(f"❌ כוננות א' יום {task['day']}: אין מחלקה שיכולה לספק את כל הדרישות")
+            return None
+
+        # אם לא דרוש אותה מחלקה
         # בדיקת אילוצים קשיחים מהתבנית
         missing = []
         if not available_commanders:
@@ -708,10 +815,14 @@ class SmartScheduler:
         scored_drivers.sort(key=lambda x: x[1], reverse=True)
         scored_soldiers.sort(key=lambda x: x[1], reverse=True)
 
+        # שמור את mahlaka_id של המפקד הנבחר
+        selected_commander = scored_commanders[0][0]
+        mahlaka_id = selected_commander.get('mahlaka_id')
+
         result = {
-            'commanders': [scored_commanders[0][0]['id']],
+            'commanders': [selected_commander['id']],
             'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
-            'mahlaka_id': 'pluga'  # פלוגתי
+            'mahlaka_id': mahlaka_id
         }
 
         # נהגים - לפי הדרישה בתבנית
@@ -725,6 +836,7 @@ class SmartScheduler:
         """כוננות ב' - מפקד + חיילים (גמיש)"""
         # תיקון: השתמש במספר החיילים מהתבנית
         soldiers_needed = task.get('soldiers_needed', 3)
+        same_mahlaka_required = task.get('same_mahlaka_required', False)
 
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
@@ -736,6 +848,40 @@ class SmartScheduler:
                             if self.check_availability(s, task['day'], task['start_hour'],
                                                      task['length_in_hours'], schedules)]
 
+        # אם דרוש שיבוץ מאותה מחלקה
+        if same_mahlaka_required:
+            mahlaka_ids = set()
+            for s in all_soldiers:
+                if s.get('mahlaka_id'):
+                    mahlaka_ids.add(s['mahlaka_id'])
+
+            sorted_mahalkot = sorted(mahlaka_ids, key=lambda m: mahlaka_workload.get(m, 0))
+
+            for mahlaka_id in sorted_mahalkot:
+                mahlaka_commanders = [c for c in available_commanders if c.get('mahlaka_id') == mahlaka_id]
+                mahlaka_soldiers = [s for s in available_soldiers if s.get('mahlaka_id') == mahlaka_id]
+
+                if len(mahlaka_commanders) >= 1 and len(mahlaka_soldiers) >= soldiers_needed:
+                    scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
+                                        for c in mahlaka_commanders]
+                    scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
+                                      for s in mahlaka_soldiers]
+
+                    scored_commanders.sort(key=lambda x: x[1], reverse=True)
+                    scored_soldiers.sort(key=lambda x: x[1], reverse=True)
+
+                    mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
+
+                    return {
+                        'commanders': [scored_commanders[0][0]['id']],
+                        'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
+                        'mahlaka_id': mahlaka_id
+                    }
+
+            print(f"❌ כוננות ב' יום {task['day']}: אין מחלקה שיכולה לספק את כל הדרישות")
+            return None
+
+        # אם לא דרוש אותה מחלקה
         if not available_commanders or len(available_soldiers) < soldiers_needed:
             print(f"⚠️  כוננות ב' יום {task['day']}: חסרים - מפקדים: {len(available_commanders)}, חיילים: {len(available_soldiers)}/{soldiers_needed}")
             return None
@@ -748,10 +894,14 @@ class SmartScheduler:
         scored_commanders.sort(key=lambda x: x[1], reverse=True)
         scored_soldiers.sort(key=lambda x: x[1], reverse=True)
 
+        # שמור את mahlaka_id של המפקד הנבחר
+        selected_commander = scored_commanders[0][0]
+        mahlaka_id = selected_commander.get('mahlaka_id')
+
         return {
-            'commanders': [scored_commanders[0][0]['id']],
+            'commanders': [selected_commander['id']],
             'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
-            'mahlaka_id': 'pluga'
+            'mahlaka_id': mahlaka_id
         }
 
     def _assign_operations(self, task: Dict, all_soldiers: List[Dict],

@@ -1086,9 +1086,18 @@ def get_live_schedule(pluga_id, current_user):
 
                         return True
 
-                    # יצירת משימות עם ML
+                    # יצירת משימות עם ML - מהיום הנוכחי ועד 7 ימים קדימה
                     all_assignments = []
-                    for day in range(min(master_shavzak.days_count, 7)):  # רק 7 ימים ראשונים
+                    today = datetime.now().date()
+                    # חשב את היום הנוכחי יחסית ל-start_date
+                    today_offset = (today - master_shavzak.start_date).days
+                    # יצירת משימות מהיום הנוכחי ועד 7 ימים קדימה (או עד הסוף)
+                    start_day = max(0, today_offset)  # לא ליצור משימות לעבר
+                    end_day = min(master_shavzak.days_count, start_day + 7)
+
+                    print(f"🔄 יוצר משימות מיום {start_day} עד יום {end_day} (היום הנוכחי: {today_offset})")
+
+                    for day in range(start_day, end_day):
                         current_date = master_shavzak.start_date + timedelta(days=day)
 
                         for template in templates:
@@ -1161,7 +1170,7 @@ def get_live_schedule(pluga_id, current_user):
                             ))
 
                     # מחק משימות קיימות מהימים שאנחנו עומדים ליצור (כדי למנוע כפילויות)
-                    days_to_create = set(range(min(master_shavzak.days_count, 7)))
+                    days_to_create = set(range(start_day, end_day))
                     assignments_to_delete = [a for a in existing_assignments_all if a.day in days_to_create]
 
                     if assignments_to_delete:

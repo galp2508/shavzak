@@ -249,4 +249,38 @@ if __name__ == '__main__':
     print("🚀 Server running on http://localhost:5000")
     print("=" * 70)
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    import sys
+    import atexit
+
+    def cleanup_on_exit():
+        """ניקוי resources בעת סגירת האפליקציה"""
+        try:
+            # סגור את כל ה-sessions הפתוחים
+            from models import get_session
+            print("\n🧹 ניקוי resources לפני סגירה...")
+
+            # סגור את מנוע ה-DB
+            if engine:
+                engine.dispose()
+                print("✅ מנוע DB נסגר בהצלחה")
+
+            # flush stdout/stderr כדי למנוע lock
+            sys.stdout.flush()
+            sys.stderr.flush()
+
+        except Exception as e:
+            print(f"⚠️ שגיאה בניקוי: {e}")
+
+    # רשום את פונקציית הניקוי
+    atexit.register(cleanup_on_exit)
+
+    # הרצת השרת
+    try:
+        app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    except KeyboardInterrupt:
+        print("\n👋 Server shutting down...")
+        cleanup_on_exit()
+    finally:
+        # ודא flush סופי
+        sys.stdout.flush()
+        sys.stderr.flush()

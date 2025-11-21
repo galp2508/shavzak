@@ -196,8 +196,44 @@ def ml_smart_schedule(current_user):
 
             return True
 
+        # חפש או צור Shavzak "מאסטר" לפלוגה
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        start_date_changed = False  # האם start_date השתנה
+
+        if not master_shavzak:
+            # צור Shavzak מאסטר
+            master_shavzak = Shavzak(
+                name='שיבוץ אוטומטי',
+                pluga_id=pluga_id,
+                created_by=current_user.get('user_id'),
+                start_date=start_date,
+                days_count=days_count,
+                min_rest_hours=8,
+                emergency_mode=False,
+                created_at=datetime.now()
+            )
+            session.add(master_shavzak)
+            session.flush()
+        else:
+            # עדכן את טווח התאריכים אם נדרש
+            if start_date < master_shavzak.start_date:
+                print(f"⚠️ משנה start_date מ-{master_shavzak.start_date} ל-{start_date} - נמחק את כל המשימות הקיימות")
+                master_shavzak.start_date = start_date
+                start_date_changed = True
+
+            end_date_needed = start_date + timedelta(days=days_count)
+            current_end_date = master_shavzak.start_date + timedelta(days=master_shavzak.days_count)
+            if end_date_needed > current_end_date:
+                master_shavzak.days_count = (end_date_needed - master_shavzak.start_date).days
+
+            session.flush()
+
         # יצירת משימות
-        # 🐛 תיקון: צריך לחשב את day_start כאן, לפני יצירת המשימות
+        # 🐛 תיקון: צריך לחשב את day_start כאן, אחרי הגדרת master_shavzak
         # כדי שהמשימות יישמרו עם ה-day הנכון יחסית ל-master_shavzak.start_date
         temp_day_start = 0
         if master_shavzak:
@@ -239,42 +275,6 @@ def ml_smart_schedule(current_user):
             return (assign['day'], assign['start_hour'], priority)
 
         all_assignments.sort(key=assignment_priority)
-
-        # חפש או צור Shavzak "מאסטר" לפלוגה
-        master_shavzak = session.query(Shavzak).filter(
-            Shavzak.pluga_id == pluga_id,
-            Shavzak.name == 'שיבוץ אוטומטי'
-        ).first()
-
-        start_date_changed = False  # האם start_date השתנה
-
-        if not master_shavzak:
-            # צור Shavzak מאסטר
-            master_shavzak = Shavzak(
-                name='שיבוץ אוטומטי',
-                pluga_id=pluga_id,
-                created_by=current_user.get('user_id'),
-                start_date=start_date,
-                days_count=days_count,
-                min_rest_hours=8,
-                emergency_mode=False,
-                created_at=datetime.now()
-            )
-            session.add(master_shavzak)
-            session.flush()
-        else:
-            # עדכן את טווח התאריכים אם נדרש
-            if start_date < master_shavzak.start_date:
-                print(f"⚠️ משנה start_date מ-{master_shavzak.start_date} ל-{start_date} - נמחק את כל המשימות הקיימות")
-                master_shavzak.start_date = start_date
-                start_date_changed = True
-
-            end_date_needed = start_date + timedelta(days=days_count)
-            current_end_date = master_shavzak.start_date + timedelta(days=master_shavzak.days_count)
-            if end_date_needed > current_end_date:
-                master_shavzak.days_count = (end_date_needed - master_shavzak.start_date).days
-
-            session.flush()
 
         # 🐛 תיקון: אם start_date השתנה, מחק את כל המשימות הקיימות (לא רק בטווח החדש)
         # כי המשימות הישנות עכשיו יש להן day שגוי יחסית ל-start_date החדש
@@ -746,11 +746,11 @@ def ml_regenerate_schedule(current_user):
             return True
 
         # יצירת משימות
-        # 🐛 תיקון: צריך לחשב את day_start כאן, לפני יצירת המשימות
-        # כדי שהמשימות יישמרו עם ה-day הנכון יחסית ל-master_shavzak.start_date
+        # 🐛 תיקון: צריך לחשב את day_start כאן, shavzak כבר הוגדר למעלה
+        # כדי שהמשימות יישמרו עם ה-day הנכון יחסית ל-shavzak.start_date
         temp_day_start = 0
-        if master_shavzak:
-            temp_day_start = (start_date - master_shavzak.start_date).days
+        if shavzak:
+            temp_day_start = (start_date - shavzak.start_date).days
 
         all_assignments = []
         for day in range(days_count):

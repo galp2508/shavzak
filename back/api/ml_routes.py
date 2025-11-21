@@ -197,9 +197,17 @@ def ml_smart_schedule(current_user):
             return True
 
         # יצירת משימות
+        # 🐛 תיקון: צריך לחשב את day_start כאן, לפני יצירת המשימות
+        # כדי שהמשימות יישמרו עם ה-day הנכון יחסית ל-master_shavzak.start_date
+        temp_day_start = 0
+        if master_shavzak:
+            temp_day_start = (start_date - master_shavzak.start_date).days
+
         all_assignments = []
         for day in range(days_count):
             current_date = start_date + timedelta(days=day)
+            # 🐛 תיקון: השתמש ב-temp_day_start + day כדי שהמשימות יישמרו נכון!
+            actual_day = temp_day_start + day
 
             for template in templates:
                 for slot in range(template.times_per_day):
@@ -211,7 +219,7 @@ def ml_smart_schedule(current_user):
                     assign_data = {
                         'name': template.name,
                         'type': template.assignment_type,
-                        'day': day,
+                        'day': actual_day,  # 🐛 תיקון: השתמש ב-actual_day!
                         'start_hour': start_hour,
                         'length_in_hours': template.length_in_hours,
                         'commanders_needed': template.commanders_needed,
@@ -738,9 +746,17 @@ def ml_regenerate_schedule(current_user):
             return True
 
         # יצירת משימות
+        # 🐛 תיקון: צריך לחשב את day_start כאן, לפני יצירת המשימות
+        # כדי שהמשימות יישמרו עם ה-day הנכון יחסית ל-master_shavzak.start_date
+        temp_day_start = 0
+        if master_shavzak:
+            temp_day_start = (start_date - master_shavzak.start_date).days
+
         all_assignments = []
         for day in range(days_count):
             current_date = start_date + timedelta(days=day)
+            # 🐛 תיקון: השתמש ב-temp_day_start + day כדי שהמשימות יישמרו נכון!
+            actual_day = temp_day_start + day
 
             for template in templates:
                 for slot in range(template.times_per_day):
@@ -752,7 +768,7 @@ def ml_regenerate_schedule(current_user):
                     assign_data = {
                         'name': template.name,
                         'type': template.assignment_type,
-                        'day': day,
+                        'day': actual_day,  # 🐛 תיקון: השתמש ב-actual_day!
                         'start_hour': start_hour,
                         'length_in_hours': template.length_in_hours,
                         'commanders_needed': template.commanders_needed,

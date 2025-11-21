@@ -11,6 +11,8 @@ Smart Scheduler - ML-Based Assignment System
 
 import numpy as np
 import json
+import math
+import random
 from datetime import datetime, timedelta
 from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
@@ -63,6 +65,431 @@ class SmartScheduler:
 
         if len(self.rejected_assignments) > self.MAX_REJECTED_ASSIGNMENTS:
             self.rejected_assignments = self.rejected_assignments[-self.MAX_REJECTED_ASSIGNMENTS:]
+
+    # ============================================
+    # ML ENHANCEMENTS - שיפורי למידה
+    # ============================================
+
+    def calculate_adaptive_weights(self, context: Dict) -> Dict:
+        """
+        חישוב משקלים דינמיים לפי הקשר
+
+        Args:
+            context: {
+                'day_of_week': 0-6,
+                'week_number': 1-52,
+                'workload_level': 'low'/'medium'/'high',
+                'approval_rate': 0-1
+            }
+
+        Returns:
+            dict: משקלים מותאמים
+        """
+        weights = {
+            'rest': 2.0,
+            'workload': 1.5,
+            'pattern': 3.0,
+            'feedback': 4.0,
+            'block': 10.0,
+            'mahlaka': 0.5
+        }
+
+        # התאמה לפי יום בשבוע
+        day_of_week = context.get('day_of_week', 0)
+        if day_of_week == 4:  # יום שישי
+            weights['rest'] *= 0.7  # פחות חשוב
+            weights['block'] *= 1.3  # יותר חשוב לסיים נקי
+        elif day_of_week == 0:  # יום ראשון
+            weights['rest'] *= 1.2  # חשוב יותר להתחיל טרי
+
+        # התאמה לפי רמת עומס
+        workload_level = context.get('workload_level', 'medium')
+        if workload_level == 'high':
+            weights['workload'] *= 2.0  # הרבה יותר חשוב!
+            weights['rest'] *= 1.3
+        elif workload_level == 'low':
+            weights['workload'] *= 0.7
+
+        # התאמה לפי ביצועי המודל
+        approval_rate = context.get('approval_rate', 0.7)
+        if approval_rate < 0.6:
+            weights['feedback'] *= 1.5  # תקשיב יותר למשתמש!
+            weights['pattern'] *= 0.8   # הדפוסים הנוכחיים לא טובים
+        elif approval_rate > 0.85:
+            weights['feedback'] *= 0.9
+            weights['pattern'] *= 1.2   # הדפוסים עובדים טוב!
+
+        return weights
+
+    def _calculate_feedback_weight(self, feedback: Dict) -> float:
+        """
+        חישוב משקל לפידבק לפי איכותו
+
+        Returns: משקל 0-1
+        """
+        weight = 1.0
+
+        # 1. Time decay - פידבק ישן פחות רלוונטי
+        try:
+            feedback_age_days = (datetime.now() -
+                                datetime.fromisoformat(feedback['timestamp'])).days
+            time_weight = math.exp(-feedback_age_days / 90)  # decay after 90 days
+            weight *= time_weight
+        except:
+            pass  # אם אין timestamp, השתמש במשקל 1.0
+
+        # 2. User authority - מי נתן את הפידבק
+        user_role = feedback.get('user_role', 'חייל')
+        role_weights = {
+            'מפ': 1.0,    # משקל מלא
+            'ממ': 0.8,
+            'מכ': 0.6,
+            'סמל': 0.4,
+            'חייל': 0.3
+        }
+        weight *= role_weights.get(user_role, 0.5)
+
+        # 3. Consistency - האם זה עקבי עם פידבקים אחרים?
+        soldier_id = feedback.get('soldier_id')
+        task_type = feedback.get('task_type')
+        rating = feedback.get('rating')
+
+        if soldier_id and task_type:
+            similar_feedbacks = [f for f in self.user_feedback
+                                if f.get('soldier_id') == soldier_id
+                                and f.get('task_type') == task_type]
+
+            if len(similar_feedbacks) > 3:
+                recent_feedbacks = similar_feedbacks[-5:]
+                same_rating = sum(1 for f in recent_feedbacks
+                                 if f.get('rating') == rating)
+                consistency = same_rating / len(recent_feedbacks)
+                weight *= (0.5 + 0.5 * consistency)  # 0.5-1.0
+
+        return max(0.1, min(1.0, weight))
+
+    def extract_temporal_features(self, task: Dict, soldier: Dict,
+                                  schedules: Dict) -> Dict:
+        """
+        חילוץ פיצ'רים מתקדמים
+
+        Returns: dictionary של פיצ'רים
+        """
+        features = {}
+
+        # 1. Day of week effects
+        day_of_week = task['day'] % 7
+        features['day_of_week'] = day_of_week
+        features['is_friday'] = (day_of_week == 4)
+        features['is_weekend'] = (day_of_week >= 5)
+        features['is_monday'] = (day_of_week == 0)
+
+        # 2. Time of day effects
+        hour = task['start_hour']
+        features['is_night'] = (hour >= 22 or hour <= 6)
+        features['is_prime_time'] = (8 <= hour <= 16)
+        features['hour'] = hour
+
+        # 3. Soldier fatigue patterns
+        soldier_id = soldier['id']
+        if soldier_id in schedules:
+            recent_tasks = [t for t in schedules[soldier_id]
+                           if task['day'] - t[0] <= 3]  # last 3 days
+            features['recent_workload'] = sum(t[2] - t[1] for t in recent_tasks)
+            features['consecutive_days'] = len(set(t[0] for t in recent_tasks))
+        else:
+            features['recent_workload'] = 0
+            features['consecutive_days'] = 0
+
+        # 4. Task difficulty (מבוסס על היסטוריה)
+        task_type = task['type']
+        rejection_rate = self._get_task_rejection_rate(task_type)
+        features['task_difficulty'] = rejection_rate
+
+        # 5. Mahlaka synergy
+        mahlaka_id = soldier.get('mahlaka_id')
+        if mahlaka_id:
+            mahlaka_success_rate = self._get_mahlaka_success_rate(
+                mahlaka_id, task_type
+            )
+            features['mahlaka_synergy'] = mahlaka_success_rate
+        else:
+            features['mahlaka_synergy'] = 0.5
+
+        return features
+
+    def _get_task_rejection_rate(self, task_type: str) -> float:
+        """חישוב שיעור דחיות למשימה מסוג זה"""
+        task_feedbacks = [f for f in self.user_feedback
+                         if f.get('task_type') == task_type]
+
+        if not task_feedbacks:
+            return 0.3  # ברירת מחדל - קושי בינוני
+
+        rejections = sum(1 for f in task_feedbacks
+                        if f.get('rating') == 'rejected')
+        return rejections / len(task_feedbacks)
+
+    def _get_mahlaka_success_rate(self, mahlaka_id: int, task_type: str) -> float:
+        """חישוב שיעור הצלחה של מחלקה במשימות מסוג זה"""
+        mahlaka_feedbacks = []
+
+        # מצא פידבקים של חיילים מהמחלקה הזאת במשימות מסוג זה
+        for feedback in self.user_feedback:
+            # נצטרך לקשר soldier_id למחלקה - נעשה זאת בצורה פשוטה
+            if feedback.get('task_type') == task_type:
+                mahlaka_feedbacks.append(feedback)
+
+        if not mahlaka_feedbacks:
+            return 0.5  # ברירת מחדל
+
+        approvals = sum(1 for f in mahlaka_feedbacks
+                       if f.get('rating') == 'approved')
+        return approvals / len(mahlaka_feedbacks)
+
+    def calculate_soldier_score_with_confidence(self, soldier: Dict, task: Dict,
+                                               schedules: Dict,
+                                               mahlaka_workload: Dict,
+                                               all_soldiers: List[Dict] = None) -> Tuple[float, float]:
+        """
+        חישוב ציון + רמת ביטחון
+
+        Returns: (score, confidence)
+            score: ציון
+            confidence: ביטחון 0-1 (0=אין מושג, 1=בטוח מאוד)
+        """
+        score = self.calculate_soldier_score(soldier, task, schedules,
+                                             mahlaka_workload, all_soldiers)
+
+        # חישוב ביטחון
+        confidence_factors = []
+
+        # 1. כמה נתונים יש על החייל הזה
+        soldier_id = soldier['id']
+        task_type = task['type']
+        key = f"{soldier_id}_{task_type}"
+
+        if key in self.learned_patterns:
+            pattern = self.learned_patterns[key]
+            # ככל שיותר דוגמאות, יותר ביטחון
+            data_confidence = min(1.0, pattern['count'] / 20.0)
+            confidence_factors.append(data_confidence)
+        else:
+            confidence_factors.append(0.1)  # ביטחון נמוך
+
+        # 2. עקביות הפידבקים
+        relevant_feedbacks = [f for f in self.user_feedback
+                             if f.get('soldier_id') == soldier_id
+                             and f.get('task_type') == task_type]
+
+        if len(relevant_feedbacks) > 0:
+            approvals = sum(1 for f in relevant_feedbacks
+                           if f.get('rating') == 'approved')
+            rejections = sum(1 for f in relevant_feedbacks
+                            if f.get('rating') == 'rejected')
+            consistency = max(approvals, rejections) / len(relevant_feedbacks)
+            confidence_factors.append(consistency)
+
+        # 3. עדכניות הנתונים
+        if relevant_feedbacks:
+            try:
+                latest = max(relevant_feedbacks,
+                           key=lambda f: datetime.fromisoformat(f['timestamp']))
+                days_ago = (datetime.now() -
+                           datetime.fromisoformat(latest['timestamp'])).days
+                recency_confidence = math.exp(-days_ago / 30)
+                confidence_factors.append(recency_confidence)
+            except:
+                pass
+
+        # ביטחון כולל = ממוצע
+        confidence = np.mean(confidence_factors) if confidence_factors else 0.1
+
+        return score, confidence
+
+    def select_soldier_with_exploration(self, scored_soldiers: List[Tuple],
+                                       epsilon: float = 0.1) -> Dict:
+        """
+        בחירת חייל עם איזון exploration-exploitation
+
+        Args:
+            scored_soldiers: רשימה של (soldier, score)
+            epsilon: סיכוי ל-exploration (0.1 = 10%)
+
+        Returns:
+            חייל נבחר
+        """
+        if not scored_soldiers:
+            return None
+
+        if random.random() < epsilon and len(scored_soldiers) > 1:
+            # Exploration - בחר רנדומלי מה-top 5
+            top_5 = scored_soldiers[:min(5, len(scored_soldiers))]
+            return random.choice(top_5)[0]
+        else:
+            # Exploitation - בחר הטוב ביותר
+            return scored_soldiers[0][0]
+
+    def select_multiple_with_exploration(self, scored_soldiers: List[Tuple],
+                                        count: int, epsilon: float = 0.05) -> List[Dict]:
+        """
+        בחירת מספר חיילים עם exploration קל
+
+        Args:
+            scored_soldiers: רשימה של (soldier, score)
+            count: כמה חיילים לבחור
+            epsilon: סיכוי ל-exploration (0.05 = 5%)
+
+        Returns:
+            רשימת חיילים נבחרים
+        """
+        if not scored_soldiers or count == 0:
+            return []
+
+        selected = []
+
+        # בחר את הראשון תמיד באופן חכם (exploration)
+        if random.random() < epsilon and len(scored_soldiers) > count:
+            # exploration - ערבב מעט את הסדר
+            top_candidates = scored_soldiers[:min(count * 2, len(scored_soldiers))]
+            # בחר את הראשון רנדומלי מה-top candidates
+            first = random.choice(top_candidates)[0]
+            selected.append(first)
+            # המשך לבחור את השאר לפי סדר (פחות הראשון)
+            remaining = [s for s in scored_soldiers if s[0]['id'] != first['id']]
+            selected.extend([s[0] for s in remaining[:count-1]])
+        else:
+            # exploitation - בחר את הטובים ביותר
+            selected = [s[0] for s in scored_soldiers[:count]]
+
+        return selected
+
+    def explain_soldier_selection(self, soldier: Dict, task: Dict,
+                                  schedules: Dict, mahlaka_workload: Dict,
+                                  all_soldiers: List[Dict] = None) -> Dict:
+        """
+        הסבר מפורט למה בחרנו בחייל הזה
+
+        Returns: {
+            'soldier_name': str,
+            'total_score': float,
+            'breakdown': List[Dict],
+            'confidence': float,
+            'recommendation': str
+        }
+        """
+        soldier_id = soldier['id']
+        breakdown = []
+        total = 0
+
+        # 1. תפקיד
+        if soldier.get('role') == 'מכ':
+            contribution = 1000.0
+            breakdown.append({
+                'factor': '👑 תפקיד מכ',
+                'contribution': contribution,
+                'explanation': 'מכים מקבלים עדיפות גבוהה'
+            })
+            total += contribution
+
+        # 2. מנוחה
+        rest_hours = self._calculate_rest_hours(
+            schedules.get(soldier_id, []),
+            task['day'],
+            task['start_hour']
+        )
+        contribution = rest_hours * 2.0
+        breakdown.append({
+            'factor': '😴 מנוחה',
+            'contribution': contribution,
+            'explanation': f'{rest_hours:.1f} שעות מאז המשימה האחרונה'
+        })
+        total += contribution
+
+        # 3. עומס
+        workload = self._calculate_workload(schedules.get(soldier_id, []))
+        contribution = -workload * 1.5
+        breakdown.append({
+            'factor': '💼 עומס עבודה',
+            'contribution': contribution,
+            'explanation': f'{workload:.1f} שעות עבודה השבוע'
+        })
+        total += contribution
+
+        # 4. ניסיון מדפוסים
+        pattern_score = self._get_pattern_score(soldier, task)
+        contribution = pattern_score * 3.0
+        key = f"{soldier_id}_{task['type']}"
+        if key in self.learned_patterns:
+            count = self.learned_patterns[key]['count']
+            success = self.learned_patterns[key]['success_rate']
+            breakdown.append({
+                'factor': '📚 ניסיון',
+                'contribution': contribution,
+                'explanation': f'{count} משימות מסוג {task["type"]}, {success*100:.0f}% הצלחה'
+            })
+        else:
+            breakdown.append({
+                'factor': '📚 ניסיון',
+                'contribution': contribution,
+                'explanation': 'אין נתונים קודמים'
+            })
+        total += contribution
+
+        # 5. פידבק
+        feedback_score = self._get_feedback_score(soldier, task)
+        contribution = feedback_score * 4.0
+        breakdown.append({
+            'factor': '👍 פידבק משתמשים',
+            'contribution': contribution,
+            'explanation': f'{feedback_score:+.0f} (חיובי-שלילי)'
+        })
+        total += contribution
+
+        # 6. לבנה
+        block_score = self._get_block_consistency_score(
+            soldier, task, schedules, all_soldiers
+        )
+        contribution = block_score * 10.0
+        if block_score > 0:
+            block_num = task["start_hour"]//8
+            explanation = f'המחלקה כבר בלבנה {block_num * 8}-{(block_num + 1) * 8}'
+        elif block_score < 0:
+            explanation = 'מחלקה אחרת כבר בלבנה - עונש על ערבוב'
+        else:
+            explanation = 'אין עדיין משימות בלבנה זו'
+
+        breakdown.append({
+            'factor': '🧱 עקביות לבנה',
+            'contribution': contribution,
+            'explanation': explanation
+        })
+        total += contribution
+
+        # חישוב confidence
+        _, confidence = self.calculate_soldier_score_with_confidence(
+            soldier, task, schedules, mahlaka_workload, all_soldiers
+        )
+
+        # המלצה
+        if confidence > 0.8 and total > 100:
+            recommendation = 'בחירה מצוינת ✅'
+        elif confidence > 0.6:
+            recommendation = 'בחירה טובה ✓'
+        elif confidence > 0.4:
+            recommendation = 'בחירה סבירה ⚠️ (כדאי לבדוק)'
+        else:
+            recommendation = '⚠️ ביטחון נמוך - אנא בדוק ידנית!'
+
+        return {
+            'soldier_name': soldier.get('name', 'לא ידוע'),
+            'soldier_id': soldier_id,
+            'soldier_role': soldier.get('role', 'לא ידוע'),
+            'total_score': round(total, 1),
+            'breakdown': breakdown,
+            'confidence': round(confidence, 2),
+            'recommendation': recommendation
+        }
 
     # ============================================
     # HARD CONSTRAINTS - אילוצים קשיחים
@@ -530,25 +957,33 @@ class SmartScheduler:
                     self.learned_patterns[key]['success_rate'] + 0.15)
 
     def _learn_from_feedback(self, feedback: Dict):
-        """למד מפידבק בודד"""
+        """
+        למד מפידבק בודד עם Weighted Learning
+        משתמש במשקלי זמן ומשקל סמכות משתמש
+        """
         task_type = feedback['task_type']
         soldiers = feedback['soldier_id']
         rating = feedback['rating']
 
-        # עדכן דפוסים
+        # חשב משקל הפידבק (לפי זמן וסמכות משתמש)
+        feedback_weight = self._calculate_feedback_weight(feedback)
+
+        # עדכן דפוסים עם משקל דינמי
         for soldier_id in soldiers:
             key = f"{soldier_id}_{task_type}"
             if key not in self.learned_patterns:
                 self.learned_patterns[key] = {'count': 0, 'success_rate': 0.5}
 
-            # אם אושר - שפר את הציון
+            # אם אושר - שפר את הציון (לפי משקל הפידבק)
             if rating == 'approved':
+                improvement = 0.1 * feedback_weight
                 self.learned_patterns[key]['success_rate'] = min(1.0,
-                    self.learned_patterns[key]['success_rate'] + 0.1)
-            # אם נדחה - הורד את הציון
+                    self.learned_patterns[key]['success_rate'] + improvement)
+            # אם נדחה - הורד את הציון (לפי משקל הפידבק)
             elif rating == 'rejected':
+                penalty = 0.2 * feedback_weight
                 self.learned_patterns[key]['success_rate'] = max(0.0,
-                    self.learned_patterns[key]['success_rate'] - 0.2)
+                    self.learned_patterns[key]['success_rate'] - penalty)
 
     # ============================================
     # ASSIGNMENT LOGIC - לוגיקת שיבוץ
@@ -647,9 +1082,13 @@ class SmartScheduler:
                     scored_soldiers.sort(key=lambda x: x[1], reverse=True)
                     scored_drivers.sort(key=lambda x: x[1], reverse=True)
 
-                    # בחר הטובים ביותר
-                    selected_commanders = [c[0] for c in scored_commanders[:commanders_needed]]
-                    selected_soldiers = [s[0] for s in scored_soldiers[:soldiers_needed]]
+                    # בחר הטובים ביותר עם exploration קל (5%)
+                    selected_commanders = self.select_multiple_with_exploration(
+                        scored_commanders, commanders_needed, epsilon=0.05
+                    )
+                    selected_soldiers = self.select_multiple_with_exploration(
+                        scored_soldiers, soldiers_needed, epsilon=0.05
+                    )
 
                     # עדכן עומס מחלקה
                     mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
@@ -697,9 +1136,13 @@ class SmartScheduler:
         scored_soldiers.sort(key=lambda x: x[1], reverse=True)
         scored_drivers.sort(key=lambda x: x[1], reverse=True)
 
-        # בחר הטובים ביותר - לפי הדרישות מהתבנית
-        selected_commanders = [c[0] for c in scored_commanders[:commanders_needed]]
-        selected_soldiers = [s[0] for s in scored_soldiers[:soldiers_needed]]
+        # בחר הטובים ביותר עם exploration - לפי הדרישות מהתבנית
+        selected_commanders = self.select_multiple_with_exploration(
+            scored_commanders, commanders_needed, epsilon=0.05
+        )
+        selected_soldiers = self.select_multiple_with_exploration(
+            scored_soldiers, soldiers_needed, epsilon=0.05
+        )
 
         # עדכן עומס מחלקה
         mahlaka_id = selected_commanders[0].get('mahlaka_id') if selected_commanders else None
@@ -721,7 +1164,7 @@ class SmartScheduler:
 
     def _assign_guard(self, task: Dict, all_soldiers: List[Dict],
                      schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
-        """שיבוץ שמירה - 1 לוחם, המתאים ביותר לפי ML"""
+        """שיבוץ שמירה - 1 לוחם, המתאים ביותר לפי ML + Exploration"""
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
 
         # סינון לפי זמינות
@@ -737,8 +1180,8 @@ class SmartScheduler:
                  for s in available]
         scored.sort(key=lambda x: x[1], reverse=True)
 
-        # בחר הטוב ביותר
-        selected = scored[0][0]
+        # בחר עם exploration (10% סיכוי לנסות חייל אחר)
+        selected = self.select_soldier_with_exploration(scored, epsilon=0.1)
 
         return {
             'soldiers': [selected['id']],

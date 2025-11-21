@@ -100,19 +100,19 @@ const SmartSchedule = () => {
   };
 
   const generateSmartSchedule = async () => {
-    if (!window.confirm('האם אתה בטוח שברצונך ליצור שיבוץ חכם עם AI? זה עשוי לקחת כמה שניות.')) {
+    if (!window.confirm('האם אתה בטוח שברצונך ליצור שיבוץ חכם עם AI ליומיים הבאים?')) {
       return;
     }
 
     setIsGenerating(true);
     try {
+      // התחל מהיום הנוכחי (לא מתחילת שבוע)
       const startDate = new Date(currentDate);
-      startDate.setDate(startDate.getDate() - currentDate.getDay()); // תחילת שבוע
 
       const response = await api.post('/ml/smart-schedule', {
         pluga_id: user.pluga_id,
         start_date: startDate.toISOString().split('T')[0],
-        days_count: 7
+        days_count: 2  // 2 ימים במקום 7
       });
 
       // הצג מידע על משימות שלא הצליחו
@@ -122,7 +122,8 @@ const SmartSchedule = () => {
         toast.success(`🤖 ${response.data.message}`);
       }
 
-      loadSchedule(currentDate);
+      // טען את השיבוץ החדש
+      await loadSchedule(currentDate);
       loadMLStats();
     } catch (error) {
       toast.error(error.response?.data?.error || 'שגיאה ביצירת שיבוץ חכם');

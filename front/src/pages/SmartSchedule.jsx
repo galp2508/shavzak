@@ -4,7 +4,7 @@ import api from '../services/api';
 import {
   Calendar, ChevronLeft, ChevronRight, Clock, Users,
   RefreshCw, Brain, ThumbsUp, ThumbsDown, Upload,
-  AlertTriangle, TrendingUp, Award, Zap, Shield, Edit
+  AlertTriangle, TrendingUp, Award, Zap, Shield, Edit, ArrowLeftRight
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
@@ -25,6 +25,7 @@ const SmartSchedule = () => {
   const [showManualAssignModal, setShowManualAssignModal] = useState(false);
   const [rejectedAssignment, setRejectedAssignment] = useState(null);
   const [editingAssignment, setEditingAssignment] = useState(null);
+  const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
 
   // 🐛 Debug logging
   useEffect(() => {
@@ -199,6 +200,71 @@ const SmartSchedule = () => {
     } catch (error) {
       toast.error('שגיאה בשליחת פידבק');
       console.error('Manual assignment error:', error);
+    }
+  };
+
+  // Swap handler - החלפה בין משימות
+  const handleSwapClick = (assignment, e) => {
+    e.stopPropagation(); // מנע פתיחת modal של עריכה
+
+    if (!selectedForSwap) {
+      // בחירת משימה ראשונה להחלפה
+      setSelectedForSwap(assignment);
+      toast.info(`נבחרה משימה: ${assignment.name}. לחץ על כפתור החלפה במשימה נוספת`, {
+        autoClose: 3000,
+        icon: '🔄'
+      });
+    } else if (selectedForSwap.id === assignment.id) {
+      // ביטול הבחירה - לחיצה על אותה משימה שוב
+      setSelectedForSwap(null);
+      toast.info('הבחירה בוטלה', {
+        icon: '❌'
+      });
+    } else {
+      // החלפה בין שתי המשימות
+      swapAssignments(selectedForSwap, assignment);
+    }
+  };
+
+  const swapAssignments = async (assignment1, assignment2) => {
+    try {
+      // החלף בין start_hour ו-name של שתי המשימות
+      const updates = [
+        {
+          id: assignment1.id,
+          start_hour: assignment2.start_hour,
+          name: assignment2.name
+        },
+        {
+          id: assignment2.id,
+          start_hour: assignment1.start_hour,
+          name: assignment1.name
+        }
+      ];
+
+      // עדכן את שתי המשימות
+      await Promise.all(updates.map(update =>
+        api.patch(`/assignments/${update.id}/time`, {
+          start_hour: update.start_hour,
+          name: update.name
+        })
+      ));
+
+      toast.success('המשימות הוחלפו בהצלחה! 🔄', {
+        icon: '✅'
+      });
+
+      // נקה את מצב ההחלפה
+      setSelectedForSwap(null);
+
+      // רענן את הנתונים
+      loadSchedule(currentDate);
+    } catch (error) {
+      console.error('Error swapping assignments:', error);
+      toast.error(error.response?.data?.error || 'שגיאה בהחלפת המשימות');
+
+      // נקה את מצב ההחלפה גם במקרה של שגיאה
+      setSelectedForSwap(null);
     }
   };
 
@@ -589,10 +655,14 @@ const SmartSchedule = () => {
                               const topPosition = (startHour / 24) * 100;
                               const height = (lengthInHours / 24) * 100;
 
+                              // בדוק אם משימה זו נבחרה להחלפה
+                              const isSelectedForSwap = selectedForSwap && selectedForSwap.id === assignment.id;
+                              const swapClass = isSelectedForSwap ? 'ring-4 ring-yellow-500 shadow-yellow-500/50 animate-pulse' : '';
+
                               return (
                                 <div
                                   key={assignment.id}
-                                  className="absolute rounded-lg shadow-md overflow-hidden group cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-[1.02] transform border"
+                                  className={`absolute rounded-lg shadow-md overflow-visible group cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-[1.02] transform border ${swapClass}`}
                                   style={{
                                     top: `calc(${topPosition}% + 2px)`,
                                     height: `calc(${height}% - 4px)`,
@@ -604,28 +674,43 @@ const SmartSchedule = () => {
                                 >
                                   {/* Assignment Content */}
                                   <div className="p-2 h-full flex flex-col text-white backdrop-blur-sm relative">
-                                    {/* Feedback and Edit Buttons */}
+                                    {/* Swap Button - תמיד גלוי */}
+                                    {(user.role === 'מפ' || user.role === 'ממ') && (
+                                      <button
+                                        onClick={(e) => handleSwapClick(assignment, e)}
+                                        className={`absolute bottom-1 right-1 rounded-md p-1.5 transition-all duration-200 z-10 pointer-events-auto shadow-lg ${
+                                          isSelectedForSwap
+                                            ? 'bg-yellow-500 text-white animate-pulse scale-110'
+                                            : 'bg-white/40 hover:bg-yellow-400 hover:text-white opacity-70 hover:opacity-100 hover:scale-105'
+                                        }`}
+                                        title={isSelectedForSwap ? "לחץ שוב לביטול או לחץ על משימה אחרת להחלפה" : "החלף משימה זו עם אחרת"}
+                                      >
+                                        <ArrowLeftRight className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+
+                                    {/* Feedback and Edit Buttons - תמיד גלויים */}
                                     {(user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
-                                      <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
+                                      <div className="absolute top-1 left-1 z-10 flex gap-1 pointer-events-auto">
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleFeedback(assignment.id, 'approved');
                                           }}
-                                          className="bg-green-500 hover:bg-green-600 rounded p-1 text-white"
-                                          title="שיבוץ מעולה"
+                                          className="bg-gradient-to-br from-green-400 to-emerald-600 hover:from-green-500 hover:to-emerald-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform"
+                                          title="אישור שיבוץ - המערכת תלמד מהפידבק"
                                         >
-                                          <ThumbsUp size={14} />
+                                          <ThumbsUp className="w-3.5 h-3.5" />
                                         </button>
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleFeedback(assignment.id, 'rejected');
                                           }}
-                                          className="bg-red-500 hover:bg-red-600 rounded p-1 text-white"
-                                          title="שיבוץ לא טוב"
+                                          className="bg-gradient-to-br from-red-400 to-rose-600 hover:from-red-500 hover:to-rose-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform"
+                                          title="דחיית שיבוץ - המערכת תלמד מהפידבק"
                                         >
-                                          <ThumbsDown size={14} />
+                                          <ThumbsDown className="w-3.5 h-3.5" />
                                         </button>
                                         <button
                                           onClick={(e) => {
@@ -633,10 +718,10 @@ const SmartSchedule = () => {
                                             setEditingAssignment(assignment);
                                             setShowManualAssignModal(true);
                                           }}
-                                          className="bg-blue-500 hover:bg-blue-600 rounded p-1 text-white"
+                                          className="bg-gradient-to-br from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform"
                                           title="ערוך משימה"
                                         >
-                                          <Edit size={14} />
+                                          <Edit className="w-3.5 h-3.5" />
                                         </button>
                                       </div>
                                     )}

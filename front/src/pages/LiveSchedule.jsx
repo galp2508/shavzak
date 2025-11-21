@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap, ArrowLeftRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Constraints from './Constraints';
 import AssignmentModal from '../components/AssignmentModal';
@@ -18,6 +18,7 @@ const LiveSchedule = () => {
   const [isGenerating, setIsGenerating] = useState(false); // מצב יצירת שיבוץ AI
   const [feedbackGiven, setFeedbackGiven] = useState({}); // מעקב אחרי פידבקים שניתנו {assignmentId: 'approved'/'rejected'}
   const [mlStats, setMlStats] = useState(null); // סטטיסטיקות ML
+  const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
 
   useEffect(() => {
     // התחל עם מחר
@@ -262,6 +263,71 @@ const LiveSchedule = () => {
 
   const handleAssignmentSave = () => {
     loadSchedule(currentDate);
+  };
+
+  // Swap handler - החלפה בין משימות
+  const handleSwapClick = (assignment, e) => {
+    e.stopPropagation(); // מנע פתיחת modal של עריכה
+
+    if (!selectedForSwap) {
+      // בחירת משימה ראשונה להחלפה
+      setSelectedForSwap(assignment);
+      toast.info(`נבחרה משימה: ${assignment.name}. לחץ על כפתור החלפה במשימה נוספת`, {
+        autoClose: 3000,
+        icon: '🔄'
+      });
+    } else if (selectedForSwap.id === assignment.id) {
+      // ביטול הבחירה - לחיצה על אותה משימה שוב
+      setSelectedForSwap(null);
+      toast.info('הבחירה בוטלה', {
+        icon: '❌'
+      });
+    } else {
+      // החלפה בין שתי המשימות
+      swapAssignments(selectedForSwap, assignment);
+    }
+  };
+
+  const swapAssignments = async (assignment1, assignment2) => {
+    try {
+      // החלף בין start_hour ו-name של שתי המשימות
+      const updates = [
+        {
+          id: assignment1.id,
+          start_hour: assignment2.start_hour,
+          name: assignment2.name
+        },
+        {
+          id: assignment2.id,
+          start_hour: assignment1.start_hour,
+          name: assignment1.name
+        }
+      ];
+
+      // עדכן את שתי המשימות
+      await Promise.all(updates.map(update =>
+        api.patch(`/assignments/${update.id}/time`, {
+          start_hour: update.start_hour,
+          name: update.name
+        })
+      ));
+
+      toast.success('המשימות הוחלפו בהצלחה! 🔄', {
+        icon: '✅'
+      });
+
+      // נקה את מצב ההחלפה
+      setSelectedForSwap(null);
+
+      // רענן את הנתונים
+      loadSchedule(currentDate);
+    } catch (error) {
+      console.error('Error swapping assignments:', error);
+      toast.error(error.response?.data?.error || 'שגיאה בהחלפת המשימות');
+
+      // נקה את מצב ההחלפה גם במקרה של שגיאה
+      setSelectedForSwap(null);
+    }
   };
 
   if (loading && !scheduleData) {
@@ -659,10 +725,13 @@ const LiveSchedule = () => {
                             // בדוק אם יש פידבק
                             const feedbackStatus = feedbackGiven[assignment.id];
                             const hasFeedback = feedbackStatus === 'approved' || feedbackStatus === 'rejected';
+                            const isSelectedForSwap = selectedForSwap && selectedForSwap.id === assignment.id;
                             const feedbackClass = feedbackStatus === 'approved'
                               ? 'ring-4 ring-green-400 shadow-green-400/50'
                               : feedbackStatus === 'rejected'
                               ? 'ring-4 ring-red-400 shadow-red-400/50'
+                              : isSelectedForSwap
+                              ? 'ring-4 ring-yellow-500 shadow-yellow-500/50 animate-pulse'
                               : '';
 
                             return (
@@ -708,8 +777,23 @@ const LiveSchedule = () => {
                                     </div>
                                   )}
 
-                                  {/* Feedback Buttons - תמיד גלויים למשימות AI */}
-                                  {assignment.is_ai_generated && !hasFeedback && (user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
+                                  {/* Swap Button - תמיד גלוי */}
+                                  {(user.role === 'מפ' || user.role === 'ממ') && (
+                                    <button
+                                      onClick={(e) => handleSwapClick(assignment, e)}
+                                      className={`absolute bottom-1 right-1 rounded-md p-1.5 transition-all duration-200 z-10 pointer-events-auto shadow-lg ${
+                                        isSelectedForSwap
+                                          ? 'bg-yellow-500 text-white animate-pulse scale-110'
+                                          : 'bg-white/40 hover:bg-yellow-400 hover:text-white opacity-70 hover:opacity-100 hover:scale-105'
+                                      }`}
+                                      title={isSelectedForSwap ? "לחץ שוב לביטול או לחץ על משימה אחרת להחלפה" : "החלף משימה זו עם אחרת"}
+                                    >
+                                      <ArrowLeftRight className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+
+                                  {/* Feedback Buttons - תמיד גלויים לכל המשימות */}
+                                  {!hasFeedback && (user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
                                     <div className="absolute top-1 left-1 z-10 flex gap-1 pointer-events-auto">
                                       <button
                                         onClick={(e) => {
@@ -717,7 +801,7 @@ const LiveSchedule = () => {
                                           handleFeedback(assignment.id, 'approved');
                                         }}
                                         className="bg-gradient-to-br from-green-400 to-emerald-600 hover:from-green-500 hover:to-emerald-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform"
-                                        title="אישור שיבוץ"
+                                        title="אישור שיבוץ - המערכת תלמד מהפידבק"
                                       >
                                         <ThumbsUp className="w-3.5 h-3.5" />
                                       </button>
@@ -727,7 +811,7 @@ const LiveSchedule = () => {
                                           handleFeedback(assignment.id, 'rejected');
                                         }}
                                         className="bg-gradient-to-br from-red-400 to-rose-600 hover:from-red-500 hover:to-rose-700 text-white p-1.5 rounded-full shadow-lg transition-all duration-200 hover:scale-110 transform"
-                                        title="דחיית שיבוץ"
+                                        title="דחיית שיבוץ - המערכת תלמד מהפידבק"
                                       >
                                         <ThumbsDown className="w-3.5 h-3.5" />
                                       </button>

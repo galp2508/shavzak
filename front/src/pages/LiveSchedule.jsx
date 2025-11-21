@@ -290,9 +290,11 @@ const LiveSchedule = () => {
   };
 
   const navigateDay = (days) => {
-    const newDate = new Date(currentDate);
-    newDate.setDate(newDate.getDate() + days);
-    setCurrentDate(newDate);
+    setCurrentDate(prevDate => {
+      const newDate = new Date(prevDate);
+      newDate.setDate(newDate.getDate() + days);
+      return newDate;
+    });
   };
 
   const generateSmartSchedule = async () => {

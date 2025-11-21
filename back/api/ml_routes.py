@@ -171,27 +171,21 @@ def ml_smart_schedule(current_user):
 
         # פונקציה לבדיקת זמינות
         def is_soldier_available(soldier_data, check_date):
+            """בודק אם חייל זמין ביום מסוים, תוך התחשבות בנוכחות, התש"ב 2 וסטטוס"""
+            # בדוק סטטוס החייל - חיילים שלא בבסיס לא זמינים
             status_type = soldier_data.get('status_type', 'בבסיס')
-            status_start = soldier_data.get('status_start_date')
-            status_end = soldier_data.get('status_end_date')
 
-            # חיילים בריתוק או בסבב קו לא זמינים (בדוק גם טווח תאריכים)
-            if status_type in ['ריתוק', 'בסבב קו', 'גימלים', 'בקשת יציאה']:
-                # אם יש טווח תאריכים - בדוק שהתאריך בטווח
-                if status_start and status_end:
-                    if status_start <= check_date <= status_end:
-                        return False
-                elif status_start and not status_end:
-                    # אם יש רק תאריך התחלה - חייל לא זמין מהתאריך ואילך
-                    if check_date >= status_start:
-                        return False
-                else:
-                    # אם אין טווח תאריכים מוגדר - חייל לא זמין בכלל
-                    return False
+            # רשימת סטטוסים שמונעים שיבוץ
+            unavailable_statuses = ['ריתוק', 'לא בבסיס', 'חופשה', 'מילואים', 'גימלים', 'בסבב קו', 'בקשת יציאה']
 
+            if status_type in unavailable_statuses:
+                return False
+
+            # בדוק אם התאריך באי זמינות רגילה
             if check_date in soldier_data.get('unavailable_dates', []):
                 return False
 
+            # בדוק התש"ב 2 - ימים קבועים שהחייל לא זמין
             hatash_2_days = soldier_data.get('hatash_2_days')
             if hatash_2_days:
                 day_of_week = check_date.weekday()
@@ -691,27 +685,21 @@ def ml_regenerate_schedule(current_user):
 
         # פונקציה לבדיקת זמינות
         def is_soldier_available(soldier_data, check_date):
+            """בודק אם חייל זמין ביום מסוים, תוך התחשבות בנוכחות, התש"ב 2 וסטטוס"""
+            # בדוק סטטוס החייל - חיילים שלא בבסיס לא זמינים
             status_type = soldier_data.get('status_type', 'בבסיס')
-            status_start = soldier_data.get('status_start_date')
-            status_end = soldier_data.get('status_end_date')
 
-            # חיילים בריתוק או בסבב קו לא זמינים (בדוק גם טווח תאריכים)
-            if status_type in ['ריתוק', 'בסבב קו', 'גימלים', 'בקשת יציאה']:
-                # אם יש טווח תאריכים - בדוק שהתאריך בטווח
-                if status_start and status_end:
-                    if status_start <= check_date <= status_end:
-                        return False
-                elif status_start and not status_end:
-                    # אם יש רק תאריך התחלה - חייל לא זמין מהתאריך ואילך
-                    if check_date >= status_start:
-                        return False
-                else:
-                    # אם אין טווח תאריכים מוגדר - חייל לא זמין בכלל
-                    return False
+            # רשימת סטטוסים שמונעים שיבוץ
+            unavailable_statuses = ['ריתוק', 'לא בבסיס', 'חופשה', 'מילואים', 'גימלים', 'בסבב קו', 'בקשת יציאה']
 
+            if status_type in unavailable_statuses:
+                return False
+
+            # בדוק אם התאריך באי זמינות רגילה
             if check_date in soldier_data.get('unavailable_dates', []):
                 return False
 
+            # בדוק התש"ב 2 - ימים קבועים שהחייל לא זמין
             hatash_2_days = soldier_data.get('hatash_2_days')
             if hatash_2_days:
                 day_of_week = check_date.weekday()

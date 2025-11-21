@@ -166,9 +166,14 @@ def generate_shavzak(shavzak_id, current_user):
 
         # פונקציה לבדיקת זמינות חייל ביום מסוים
         def is_soldier_available(soldier_data, check_date):
-            """בודק אם חייל זמין ביום מסוים, תוך התחשבות בהתש"ב 2 וריתוק"""
-            # אם החייל בריתוק, הוא לא זמין (ריתוק מבטל הכל)
-            if soldier_data.get('status_type') == 'ריתוק':
+            """בודק אם חייל זמין ביום מסוים, תוך התחשבות בנוכחות, התש"ב 2 וסטטוס"""
+            # בדוק סטטוס החייל - חיילים שלא בבסיס לא זמינים
+            status_type = soldier_data.get('status_type', 'בבסיס')
+
+            # רשימת סטטוסים שמונעים שיבוץ
+            unavailable_statuses = ['ריתוק', 'לא בבסיס', 'חופשה', 'מילואים', 'גימלים', 'בסבב קו', 'בקשת יציאה']
+
+            if status_type in unavailable_statuses:
                 return False
 
             # בדוק אם התאריך באי זמינות רגילה
@@ -1065,9 +1070,14 @@ def get_live_schedule(pluga_id, current_user):
 
                     # פונקציה לבדיקת זמינות חייל ביום מסוים
                     def is_soldier_available(soldier_data, check_date):
-                        """בודק אם חייל זמין ביום מסוים, תוך התחשבות בהתש"ב 2 וריתוק"""
-                        # אם החייל בריתוק, הוא לא זמין (ריתוק מבטל הכל)
-                        if soldier_data.get('status_type') == 'ריתוק':
+                        """בודק אם חייל זמין ביום מסוים, תוך התחשבות בנוכחות, התש"ב 2 וסטטוס"""
+                        # בדוק סטטוס החייל - חיילים שלא בבסיס לא זמינים
+                        status_type = soldier_data.get('status_type', 'בבסיס')
+
+                        # רשימת סטטוסים שמונעים שיבוץ
+                        unavailable_statuses = ['ריתוק', 'לא בבסיס', 'חופשה', 'מילואים', 'גימלים', 'בסבב קו', 'בקשת יציאה']
+
+                        if status_type in unavailable_statuses:
                             return False
 
                         # בדוק אם התאריך באי זמינות רגילה

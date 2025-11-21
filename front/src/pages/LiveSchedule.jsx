@@ -386,7 +386,7 @@ const LiveSchedule = () => {
     if (soldiers.length === 0) return '#FBBF24'; // צהוב כברירת מחדל אם אין חיילים
 
     // סנן רק חיילים שאינם נהגים - נהגים לא קובעים את צבע המשימה
-    const nonDriverSoldiers = soldiers.filter(s => s.role_in_assignment !== 'driver');
+    const nonDriverSoldiers = soldiers.filter(s => s.role_in_assignment !== 'נהג');
 
     // אם אין חיילים שאינם נהגים, השתמש בצהוב
     if (nonDriverSoldiers.length === 0) return '#FBBF24';

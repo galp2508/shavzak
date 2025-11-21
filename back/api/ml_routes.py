@@ -149,6 +149,8 @@ def ml_smart_schedule(current_user):
                     'unavailable_dates': unavailable_dates,
                     'hatash_2_days': soldier.hatash_2_days,
                     'status_type': status.status_type if status else 'בבסיס',
+                    'status_start_date': status.start_date if status else None,
+                    'status_end_date': status.end_date if status else None,
                     'mahlaka_id': mahlaka.id
                 }
 
@@ -170,10 +172,22 @@ def ml_smart_schedule(current_user):
         # פונקציה לבדיקת זמינות
         def is_soldier_available(soldier_data, check_date):
             status_type = soldier_data.get('status_type', 'בבסיס')
+            status_start = soldier_data.get('status_start_date')
+            status_end = soldier_data.get('status_end_date')
 
-            # חיילים בריתוק או בסבב קו לא זמינים
-            if status_type in ['ריתוק', 'בסבב קו']:
-                return False
+            # חיילים בריתוק או בסבב קו לא זמינים (בדוק גם טווח תאריכים)
+            if status_type in ['ריתוק', 'בסבב קו', 'גימלים', 'בקשת יציאה']:
+                # אם יש טווח תאריכים - בדוק שהתאריך בטווח
+                if status_start and status_end:
+                    if status_start <= check_date <= status_end:
+                        return False
+                elif status_start and not status_end:
+                    # אם יש רק תאריך התחלה - חייל לא זמין מהתאריך ואילך
+                    if check_date >= status_start:
+                        return False
+                else:
+                    # אם אין טווח תאריכים מוגדר - חייל לא זמין בכלל
+                    return False
 
             if check_date in soldier_data.get('unavailable_dates', []):
                 return False
@@ -655,6 +669,8 @@ def ml_regenerate_schedule(current_user):
                     'unavailable_dates': unavailable_dates,
                     'hatash_2_days': soldier.hatash_2_days,
                     'status_type': status.status_type if status else 'בבסיס',
+                    'status_start_date': status.start_date if status else None,
+                    'status_end_date': status.end_date if status else None,
                     'mahlaka_id': mahlaka.id
                 }
 
@@ -676,10 +692,22 @@ def ml_regenerate_schedule(current_user):
         # פונקציה לבדיקת זמינות
         def is_soldier_available(soldier_data, check_date):
             status_type = soldier_data.get('status_type', 'בבסיס')
+            status_start = soldier_data.get('status_start_date')
+            status_end = soldier_data.get('status_end_date')
 
-            # חיילים בריתוק או בסבב קו לא זמינים
-            if status_type in ['ריתוק', 'בסבב קו']:
-                return False
+            # חיילים בריתוק או בסבב קו לא זמינים (בדוק גם טווח תאריכים)
+            if status_type in ['ריתוק', 'בסבב קו', 'גימלים', 'בקשת יציאה']:
+                # אם יש טווח תאריכים - בדוק שהתאריך בטווח
+                if status_start and status_end:
+                    if status_start <= check_date <= status_end:
+                        return False
+                elif status_start and not status_end:
+                    # אם יש רק תאריך התחלה - חייל לא זמין מהתאריך ואילך
+                    if check_date >= status_start:
+                        return False
+                else:
+                    # אם אין טווח תאריכים מוגדר - חייל לא זמין בכלל
+                    return False
 
             if check_date in soldier_data.get('unavailable_dates', []):
                 return False

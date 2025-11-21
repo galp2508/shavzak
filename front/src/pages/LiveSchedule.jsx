@@ -231,7 +231,7 @@ const LiveSchedule = () => {
     return { confidence, reasons, level };
   };
 
-  const loadSchedule = async (date) => {
+  const loadSchedule = async (date, skipAutoGenerate = false) => {
     setLoading(true);
     try {
       const dateStr = date.toISOString().split('T')[0];
@@ -244,7 +244,7 @@ const LiveSchedule = () => {
       const checkDate = new Date(date);
       checkDate.setHours(0, 0, 0, 0);
 
-      if (response.data.assignments && response.data.assignments.length === 0 && checkDate >= today && !isAutoGenerating) {
+      if (!skipAutoGenerate && response.data.assignments && response.data.assignments.length === 0 && checkDate >= today && !isAutoGenerating) {
         // אין שיבוץ ליום זה - בנה אוטומטית 2 ימים קדימה
         console.log(`📅 אין שיבוץ ל-${dateStr} - בונה אוטומטית 2 ימים קדימה`);
         await generateScheduleAutomatically(date);
@@ -286,9 +286,9 @@ const LiveSchedule = () => {
         days_count: 2
       });
 
-      // רענן את התצוגה בשקט (בלי הודעה)
+      // רענן את התצוגה בשקט (בלי הודעה) - דלג על יצירה אוטומטית נוספת
       if (response.data) {
-        await loadSchedule(currentDate);
+        await loadSchedule(currentDate, true);
         console.log('✅ שיבוץ אוטומטי הושלם');
       }
     } catch (error) {

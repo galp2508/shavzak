@@ -52,7 +52,7 @@ const AssignmentModal = ({
         setSelectedSoldiers(assignment.soldiers.map(s => ({
           soldier_id: s.id,
           name: s.name,
-          role: s.role_in_assignment || 'soldier',
+          role: s.role_in_assignment || 'חייל',
           soldier_role: s.role
         })));
       }
@@ -139,7 +139,7 @@ const AssignmentModal = ({
     setSelectedSoldiers(prev => [...prev, {
       soldier_id: soldier.id,
       name: soldier.name,
-      role: 'soldier',
+      role: 'חייל',
       soldier_role: soldier.role
     }]);
   };
@@ -325,9 +325,9 @@ const AssignmentModal = ({
                         onChange={(e) => updateSoldierRole(soldier.soldier_id, e.target.value)}
                         className="input-field py-1 text-sm"
                       >
-                        <option value="commander">מפקד</option>
-                        <option value="driver">נהג</option>
-                        <option value="soldier">חייל</option>
+                        <option value="מפקד">מפקד</option>
+                        <option value="נהג">נהג</option>
+                        <option value="חייל">חייל</option>
                       </select>
 
                       <button

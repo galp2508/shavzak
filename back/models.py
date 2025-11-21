@@ -241,7 +241,6 @@ class Assignment(Base):
     length_in_hours = Column(Integer, nullable=False)
 
     assigned_mahlaka_id = Column(Integer, ForeignKey('mahalkot.id'), nullable=True)
-    is_ai_generated = Column(Boolean, default=False)  # האם המשימה נוצרה ע"י AI
 
     shavzak = relationship("Shavzak", back_populates="assignments")
     assigned_mahlaka = relationship("Mahlaka")

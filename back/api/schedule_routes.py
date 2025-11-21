@@ -1231,8 +1231,7 @@ def get_live_schedule(pluga_id, current_user):
                                     day=assign_data['day'],
                                     start_hour=assign_data['start_hour'],
                                     length_in_hours=assign_data['length_in_hours'],
-                                    assigned_mahlaka_id=result.get('mahlaka_id'),
-                                    is_ai_generated=True  # סימון שהמשימה נוצרה ע"י AI
+                                    assigned_mahlaka_id=result.get('mahlaka_id')
                                 )
                                 session.add(assignment)
                                 session.flush()
@@ -1416,7 +1415,6 @@ def get_live_schedule(pluga_id, current_user):
                 'start_hour': assignment.start_hour,
                 'length_in_hours': assignment.length_in_hours,
                 'assigned_mahlaka_id': assignment.assigned_mahlaka_id,
-                'is_ai_generated': assignment.is_ai_generated if hasattr(assignment, 'is_ai_generated') else False,
                 'soldiers': soldiers_list
             })
 

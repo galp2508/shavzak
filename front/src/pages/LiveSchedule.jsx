@@ -20,6 +20,8 @@ const LiveSchedule = () => {
   const [mlStats, setMlStats] = useState(null); // סטטיסטיקות ML
   const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
   const [isAutoGenerating, setIsAutoGenerating] = useState(false); // מצב יצירה אוטומטית - למניעת לולאות
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackAssignmentId, setFeedbackAssignmentId] = useState(null);
 
   useEffect(() => {
     // התחל עם מחר
@@ -341,8 +343,15 @@ const LiveSchedule = () => {
     }
   };
 
-  const handleFeedback = async (assignmentId, rating) => {
+  const handleFeedback = async (assignmentId, rating, reason = null, alternative = null) => {
     try {
+      // אם זה דחייה ואין סיבה, פתח מודל
+      if (rating === 'rejected' && !reason) {
+        setFeedbackAssignmentId(assignmentId);
+        setShowFeedbackModal(true);
+        return;
+      }
+
       // מצא את ה-shavzak_id (שיבוץ אוטומטי)
       const shavzakId = scheduleData?.shavzak_id;
       if (!shavzakId) {
@@ -350,12 +359,21 @@ const LiveSchedule = () => {
         return;
       }
 
-      const response = await api.post('/ml/feedback', {
+      const feedbackData = {
         assignment_id: assignmentId,
         shavzak_id: shavzakId,
         rating: rating,
         enable_auto_regeneration: false  // לא לרענן אוטומטית בשיבוץ חי
-      });
+      };
+
+      if (reason) {
+        feedbackData.changes = { 
+          feedback_text: reason,
+          alternative_suggestion: alternative
+        };
+      }
+
+      await api.post('/ml/feedback', feedbackData);
 
       // עדכן את ה-state של הפידבקים
       setFeedbackGiven(prev => ({
@@ -370,13 +388,32 @@ const LiveSchedule = () => {
           icon: '🎉'
         });
       } else if (rating === 'rejected') {
-        toast.info('❌ פידבק שלילי נשמר - המודל ישתפר!', {
-          autoClose: 3000,
-          icon: '📝'
-        });
+        // נסה לשבץ מחדש אוטומטית
+        toast.info('🔄 מנסה למצוא שיבוץ טוב יותר...', { autoClose: 2000 });
+        
+        try {
+            const regenResponse = await api.post('/ml/regenerate-assignment', { assignment_id: assignmentId });
+            
+            if (regenResponse.data.assignment) {
+                toast.success('✅ נמצא שיבוץ חלופי!', { icon: '🤖' });
+                
+                // עדכן את המשימה ב-state המקומי
+                setScheduleData(prev => {
+                    if (!prev) return prev;
+                    const newAssignments = prev.assignments.map(a => 
+                        a.id === assignmentId 
+                        ? { ...a, ...regenResponse.data.assignment } // עדכן שדות רלוונטיים
+                        : a
+                    );
+                    return { ...prev, assignments: newAssignments };
+                });
+            }
+        } catch (regenError) {
+            console.error('Regeneration error:', regenError);
+            toast.warning('לא נמצא שיבוץ חלופי אוטומטי - נסה לערוך ידנית', { autoClose: 5000 });
+        }
       }
 
-      // אין רענון אוטומטי בשיבוץ חי
       // עדכן סטטיסטיקות ML
       loadMLStats();
     } catch (error) {
@@ -1255,6 +1292,36 @@ const LiveSchedule = () => {
         />
       )}
 
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <FeedbackReasonModal
+          onClose={() => setShowFeedbackModal(false)}
+          onSubmit={(reason) => {
+            handleFeedback(feedbackAssignmentId, 'rejected', reason);
+            setShowFeedbackModal(false);
+          }}
+          onEdit={(reason) => {
+            // שלח פידבק
+            handleFeedback(feedbackAssignmentId, 'rejected', reason);
+            setShowFeedbackModal(false);
+            
+            // פתח עריכה
+            // חפש את המשימה ב-scheduleData
+            let assignment = null;
+            if (scheduleData?.assignments) {
+                assignment = scheduleData.assignments.find(a => a.id === feedbackAssignmentId);
+            }
+            
+            if (assignment) {
+                setEditingAssignment(assignment);
+                setShowAssignmentModal(true);
+            } else {
+                toast.error('לא ניתן לפתוח עריכה - המשימה לא נמצאה');
+            }
+          }}
+        />
+      )}
+
       {/* Assignment Modal */}
       {showAssignmentModal && (
         <AssignmentModal
@@ -1267,6 +1334,93 @@ const LiveSchedule = () => {
           onSave={handleAssignmentSave}
         />
       )}
+    </div>
+  );
+};
+
+// Feedback Reason Modal
+const FeedbackReasonModal = ({ onClose, onSubmit, onEdit }) => {
+  const [reason, setReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
+
+  const reasons = [
+    'מחלקה לא נמצאת (בבית)',
+    'לא בלבנה שלהם',
+    'חיילים לא מתאימים',
+    'חוסר במפקדים/נהגים',
+    'אחר'
+  ];
+
+  const handleSubmit = () => {
+    const finalReason = reason === 'אחר' ? customReason : reason;
+    if (!finalReason) return;
+    onSubmit(finalReason);
+  };
+
+  const handleEdit = () => {
+    const finalReason = reason === 'אחר' ? customReason : reason;
+    if (!finalReason) return;
+    onEdit(finalReason);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-fadeIn">
+        <h3 className="text-xl font-bold text-gray-900 mb-4">למה השיבוץ לא טוב?</h3>
+        <p className="text-gray-600 mb-4 text-sm">
+          הסבר קצר יעזור למערכת ללמוד ולהשתפר לפעם הבאה.
+        </p>
+
+        <div className="space-y-2 mb-4">
+          {reasons.map((r) => (
+            <label key={r} className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="radio"
+                name="reason"
+                value={r}
+                checked={reason === r}
+                onChange={(e) => setReason(e.target.value)}
+                className="w-4 h-4 text-purple-600"
+              />
+              <span className="text-gray-700">{r}</span>
+            </label>
+          ))}
+        </div>
+
+        {reason === 'אחר' && (
+          <textarea
+            value={customReason}
+            onChange={(e) => setCustomReason(e.target.value)}
+            placeholder="פרט את הסיבה..."
+            className="w-full p-3 border rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 outline-none"
+            rows={2}
+          />
+        )}
+
+        <div className="flex flex-col gap-3 mt-6">
+          <div className="flex gap-3">
+            <button
+              onClick={handleSubmit}
+              disabled={!reason || (reason === 'אחר' && !customReason)}
+              className="flex-1 btn-primary"
+            >
+              שלח פידבק
+            </button>
+            <button onClick={onClose} className="flex-1 btn-secondary">
+              ביטול
+            </button>
+          </div>
+
+          <button
+            onClick={handleEdit}
+            disabled={!reason || (reason === 'אחר' && !customReason)}
+            className="w-full bg-purple-100 text-purple-700 hover:bg-purple-200 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <Edit size={18} />
+            שלח פידבק וערוך שיבוץ
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

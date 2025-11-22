@@ -158,10 +158,16 @@ def generate_shavzak(shavzak_id, current_user):
                     'mahlaka_id': mahlaka.id  # חשוב ל-ML!
                 }
 
-                # 🐛 תיקון: כל חייל מופיע רק ברשימה אחת כדי למנוע כפילויות
-                if soldier.role in ['ממ', 'מכ', 'סמל']:
+                # 🐛 תיקון: מפקדים תמיד ברשימת מפקדים
+                is_commander = soldier.role in ['ממ', 'מכ', 'סמל']
+                is_driver = 'נהג' in cert_list
+
+                if is_commander:
                     commanders.append(soldier_data)
-                elif 'נהג' in cert_list:
+                    # מפקד-נהג גם ברשימת נהגים (למקרים שצריך מפקד+נהג)
+                    if is_driver:
+                        drivers.append(soldier_data)
+                elif is_driver:
                     drivers.append(soldier_data)
                 else:
                     regular_soldiers.append(soldier_data)
@@ -1060,12 +1066,18 @@ def get_live_schedule(pluga_id, current_user):
                                 'status_type': status.status_type if status else 'בבסיס'
                             }
 
-                            # 🐛 תיקון: כל חייל מופיע רק ברשימה אחת כדי למנוע כפילויות
+                            # 🐛 תיקון: מפקדים תמיד ברשימת מפקדים
+                            is_commander = soldier.role in ['ממ', 'מכ', 'סמל']
+                            is_driver = 'נהג' in cert_list
+
                             # מפקדים
-                            if soldier.role in ['ממ', 'מכ', 'סמל']:
+                            if is_commander:
                                 commanders.append(soldier_data)
+                                # מפקד-נהג גם ברשימת נהגים (למקרים שצריך מפקד+נהג)
+                                if is_driver:
+                                    drivers.append(soldier_data)
                             # נהגים - רק לפי הסמכה
-                            elif 'נהג' in cert_list:
+                            elif is_driver:
                                 drivers.append(soldier_data)
                             # כל מי שלא מפקד - חיילים רגילים
                             else:

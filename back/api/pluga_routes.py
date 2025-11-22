@@ -16,6 +16,8 @@ from auth import (
     can_edit_mahlaka, can_view_mahlaka
 )
 from .utils import get_db, build_user_response
+# ייבוא לוגיקת השיבוץ החכם
+from .ml_routes import run_smart_scheduling
 
 pluga_bp = Blueprint('pluga', __name__)
 
@@ -353,9 +355,9 @@ def list_mahalkot(pluga_id, current_user):
 # ASSIGNMENT TEMPLATES
 # ============================================================================
 
-def _trigger_schedule_regeneration(session, pluga_id):
+def _trigger_schedule_regeneration(session, pluga_id, user_id=None):
     """
-    מחיקת השיבוץ האוטומטי כדי לגרום ליצירה מחדש
+    יצירה מחדש של השיבוץ האוטומטי
     נקראת אוטומטית כאשר משתנות תבניות משימות או מחלקות
     """
     try:
@@ -365,22 +367,30 @@ def _trigger_schedule_regeneration(session, pluga_id):
         ).first()
 
         if master_shavzak:
-            # מחק את כל המשימות
-            assignments = session.query(Assignment).filter(
-                Assignment.shavzak_id == master_shavzak.id
-            ).all()
-
-            for assignment in assignments:
-                session.query(AssignmentSoldier).filter(
-                    AssignmentSoldier.assignment_id == assignment.id
-                ).delete()
-                session.delete(assignment)
-
-            print(f"🔄 השיבוץ האוטומטי נמחק ({len(assignments)} משימות) - ייווצר מחדש בטעינה הבאה")
-            return len(assignments)
+            print(f"🔄 מפעיל יצירה מחדש של שיבוץ אוטומטי (ID: {master_shavzak.id})")
+            
+            # הרצת לוגיקת השיבוץ החכם
+            # הפונקציה run_smart_scheduling כבר מטפלת במחיקת המשימות הישנות
+            result = run_smart_scheduling(
+                session=session,
+                pluga_id=pluga_id,
+                start_date=master_shavzak.start_date,
+                days_count=master_shavzak.days_count,
+                user_id=user_id or master_shavzak.created_by
+            )
+            
+            if 'error' in result:
+                print(f"⚠️ שגיאה ביצירה מחדש: {result['error']}")
+                return 0
+                
+            success_count = int(result.get('message', '0').split()[1]) if 'message' in result else 0
+            print(f"✅ שיבוץ נוצר מחדש בהצלחה: {success_count} משימות")
+            return success_count
+            
         return 0
     except Exception as e:
-        print(f"⚠️ שגיאה במחיקת השיבוץ האוטומטי: {str(e)}")
+        print(f"⚠️ שגיאה קריטית ביצירה מחדש של השיבוץ: {str(e)}")
+        traceback.print_exc()
         # לא נעצור את התהליך - רק נדווח
         return 0
 
@@ -417,7 +427,7 @@ def create_assignment_template(pluga_id, current_user):
         session.commit()
 
         # מחק את השיבוץ האוטומטי כדי שייווצר מחדש עם התבנית החדשה
-        _trigger_schedule_regeneration(session, pluga_id)
+        _trigger_schedule_regeneration(session, pluga_id, current_user.get('user_id'))
         session.commit()
 
         return jsonify({
@@ -519,7 +529,7 @@ def update_assignment_template(template_id, current_user):
         session.commit()
 
         # מחק את השיבוץ האוטומטי כדי שייווצר מחדש עם התבנית המעודכנת
-        _trigger_schedule_regeneration(session, template.pluga_id)
+        _trigger_schedule_regeneration(session, template.pluga_id, current_user.get('user_id'))
         session.commit()
 
         return jsonify({
@@ -559,7 +569,7 @@ def delete_assignment_template(template_id, current_user):
         session.commit()
 
         # מחק את השיבוץ האוטומטי כדי שייווצר מחדש ללא התבנית שנמחקה
-        _trigger_schedule_regeneration(session, pluga_id)
+        _trigger_schedule_regeneration(session, pluga_id, current_user.get('user_id'))
         session.commit()
 
         return jsonify({'message': 'תבנית נמחקה בהצלחה'}), 200

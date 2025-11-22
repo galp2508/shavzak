@@ -13,7 +13,7 @@ import numpy as np
 import json
 import math
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
 import pickle
@@ -56,6 +56,14 @@ class SmartScheduler:
             'user_rejections': 0,
             'manual_changes': 0
         }
+
+        # העדפות שעות - נלמד משינויי משתמש
+        # מפתח: f"{soldier_id}_{hour}" -> ציון (חיובי/שלילי)
+        self.hour_preferences = defaultdict(float)
+
+        # העדפות לכידות מחלקתית - נלמד משינויי משתמש
+        # מפתח: soldier_id -> ציון (כמה חשוב לחייל להיות עם המחלקה שלו)
+        self.mahlaka_cohesion_preferences = defaultdict(float)
 
     def _cleanup_history(self):
         """ניקוי היסטוריה למניעת memory leak - שומר רק X רשומות אחרונות"""
@@ -499,17 +507,60 @@ class SmartScheduler:
     # ============================================
 
     def check_availability(self, soldier: Dict, day: int, start_hour: int,
-                          length: int, schedules: Dict) -> bool:
+                          length: int, schedules: Dict, task_date: Optional[date] = None,
+                          min_rest_override: Optional[int] = None) -> bool:
         """
         בדיקת זמינות חייל - אילוץ קשיח
 
         בודק:
         1. לא משובץ בו זמנית (אי-כפילות)
-        2. מנוחה מינימלית (16 שעות ללבנות)
+        2. מנוחה מינימלית (16 שעות ללבנות, או לפי override)
         3. אי-זמינות (חופשות, ריתוק, התש"ב)
+        4. שעת חזרה (אם חוזר ביום זה - זמין רק מ-12:00)
         """
         soldier_id = soldier['id']
         end_hour = start_hour + length
+        
+        # קבע שעות מנוחה מינימליות (ברירת מחדל או דריסה)
+        min_rest = min_rest_override if min_rest_override is not None else self.min_rest_hours
+
+        # בדיקת שעת חזרה (12:00 Rule)
+        if task_date:
+            # 1. בדיקת תאריך חזרה מפורש (סטטוס)
+            return_date = soldier.get('return_date')
+            if return_date:
+                # המר למחרוזת אם צריך (למרות שצריך להיות date)
+                if isinstance(return_date, str):
+                    return_date = datetime.strptime(return_date, '%Y-%m-%d').date()
+                
+                if task_date == return_date:
+                    if start_hour < 12:
+                        # print(f"🚫 {soldier['name']} חוזר היום ({task_date}) וזמין רק מ-12:00")
+                        return False
+
+            # 2. בדיקת חזרה מסבב יציאה (מחזורי)
+            home_round_date = soldier.get('home_round_date')
+            if home_round_date:
+                if isinstance(home_round_date, str):
+                    home_round_date = datetime.strptime(home_round_date, '%Y-%m-%d').date()
+                
+                days_diff = (task_date - home_round_date).days
+                if days_diff >= 0:
+                    cycle_type = soldier.get('cycle_type', '17-4') # ברירת מחדל
+                    
+                    is_cycle_return = False
+                    if cycle_type == '11-3':
+                        # 3 ימים בבית (0,1,2), יום 3 הוא יום החזרה
+                        if (days_diff % 14) == 3:
+                            is_cycle_return = True
+                    else: # 17-4
+                        # 4 ימים בבית (0,1,2,3), יום 4 הוא יום החזרה
+                        if (days_diff % 21) == 4:
+                            is_cycle_return = True
+                    
+                    if is_cycle_return and start_hour < 12:
+                        # print(f"🚫 {soldier['name']} חוזר מסבב היום ({task_date}) וזמין רק מ-12:00")
+                        return False
 
         # בדיקת חפיפה - אסור שחייל יהיה משובץ פעמיים באותו זמן
         if soldier_id in schedules:
@@ -517,7 +568,7 @@ class SmartScheduler:
                 # בדוק חפיפה בזמן
                 if assign_day == day:
                     if not (end_hour <= assign_start or start_hour >= assign_end):
-                        print(f"⚠️  חייל {soldier_id} כבר משובץ ביום {day} בשעה {assign_start}-{assign_end}")
+                        # print(f"⚠️  חייל {soldier_id} כבר משובץ ביום {day} בשעה {assign_start}-{assign_end}")
                         return False  # חפיפה! חייל משובץ פעמיים
 
         # בדיקת מנוחה מינימלית (16 שעות ללבנות - 2 לבנות של 8 שעות)
@@ -530,7 +581,7 @@ class SmartScheduler:
             if last_day == day:
                 # אותו יום
                 hours_since = start_hour - last_end
-                if hours_since < self.min_rest_hours:
+                if hours_since < min_rest:
                     return False  # מנוחה לא מספקת
             else:
                 # ימים שונים - חשב מנוחה כוללת
@@ -539,7 +590,7 @@ class SmartScheduler:
                 hours_from_midnight = start_hour
                 total_rest = hours_until_midnight + hours_between_days + hours_from_midnight
 
-                if total_rest < self.min_rest_hours:
+                if total_rest < min_rest:
                     return False  # מנוחה לא מספקת בין ימים
 
         # בדיקת הסמכות (אם נדרש)
@@ -599,6 +650,10 @@ class SmartScheduler:
         pattern_score = self._get_pattern_score(soldier, task)
         score += pattern_score * 3.0
 
+        # 3.5 העדפות שעות (נלמד משינויים)
+        hour_pref = self.hour_preferences.get(f"{soldier_id}_{task['start_hour']}", 0.0)
+        score += hour_pref * 5.0  # משקל גבוה להעדפות שעות אישיות
+
         # 4. העדפות מחלקה - רוטציה הוגנת
         mahlaka_id = soldier.get('mahlaka_id')
         if mahlaka_id and mahlaka_id in mahlaka_workload:
@@ -611,7 +666,12 @@ class SmartScheduler:
 
         # 6. עקביות לבנה - מחלקה תופסת לבנה שלמה (8 שעות)
         block_consistency_score = self._get_block_consistency_score(soldier, task, schedules, all_soldiers)
-        score += block_consistency_score * 10.0  # משקל מאוד גבוה ללבנה!
+        
+        # התחשבות בהעדפה אישית ללכידות מחלקתית (נלמד משינויים)
+        # אם המשתמש הזיז את החייל בעבר כדי להיות עם המחלקה, נגדיל את החשיבות של זה
+        cohesion_factor = 1.0 + self.mahlaka_cohesion_preferences.get(soldier_id, 0.0)
+        
+        score += block_consistency_score * 10.0 * cohesion_factor  # משקל מאוד גבוה ללבנה!
 
         return score
 
@@ -747,12 +807,12 @@ class SmartScheduler:
 
         # אם המחלקה שלנו כבר בלבנה - בונוס גדול!
         if soldier_mahlaka in mahalkot_in_block:
-            # ככל שיותר משימות למחלקה זו בלבנה, יותר בונוס
+            # ככל שיותר משימות, יותר בונוס
             return 50.0 * mahalkot_in_block[soldier_mahlaka]
 
-        # אם יש מחלקה אחרת בלבנה - עונש על ערבוב מחלקות
-        # עונש כבד מאוד כדי למנוע ערבוב!
-        return -1000.0
+        # אם יש מחלקה אחרת בלבנה - אין עונש, רק בונוס למי שבלבנה
+        # זה מאפשר רוטציה הוגנת בין כל המחלקות
+        return 0
 
     # ============================================
     # LEARNING - למידה מדוגמאות
@@ -811,10 +871,10 @@ class SmartScheduler:
 
     def train_from_examples(self, examples: List[Dict]):
         """לומד מרשימת דוגמאות"""
-        print(f"🎓 מאמן מודל מ-{len(examples)} דוגמאות...")
+        # print(f"🎓 מאמן מודל מ-{len(examples)} דוגמאות...")
         for example in examples:
             self.train_from_example(example)
-        print(f"✅ אימון הושלם! נלמדו {len(self.learned_patterns)} דפוסים")
+        # print(f"✅ אימון הושלם! נלמדו {len(self.learned_patterns)} דפוסים")
         # ניקוי היסטוריה
         self._cleanup_history()
 
@@ -941,6 +1001,23 @@ class SmartScheduler:
         זה מלמד את המודל מה המשתמש באמת רוצה
         """
         task_type = original_assignment['type']
+        original_hour = original_assignment.get('start_hour')
+        new_hour = changes.get('start_hour')
+
+        # אם המשתמש שינה שעה - למד העדפות שעות
+        if new_hour is not None and original_hour != new_hour:
+            # עבור כל החיילים בשיבוץ החדש (או הישן אם לא השתנו)
+            # נניח שהחיילים ב-changes['new_soldiers'] הם הרלוונטיים, או אלו שב-original אם לא השתנו
+            relevant_soldiers = changes.get('new_soldiers', original_assignment.get('soldiers', []))
+            
+            for soldier_id in relevant_soldiers:
+                # העדפה לשעה החדשה
+                self.hour_preferences[f"{soldier_id}_{new_hour}"] += 0.5
+                # עונש לשעה הישנה
+                self.hour_preferences[f"{soldier_id}_{original_hour}"] -= 0.3
+                
+                # למד שהחייל הזה מעדיף להיות עם המחלקה שלו (הנחה חזקה לפי בקשת המשתמש)
+                self.mahlaka_cohesion_preferences[soldier_id] += 0.5
 
         # אם המשתמש החליף חיילים
         if 'new_soldiers' in changes and 'old_soldiers' in changes:
@@ -951,6 +1028,10 @@ class SmartScheduler:
                     self.learned_patterns[key] = {'count': 0, 'success_rate': 0.5}
                 self.learned_patterns[key]['success_rate'] = max(0.0,
                     self.learned_patterns[key]['success_rate'] - 0.15)
+                
+                # גם למד שהחייל הזה כנראה לא מתאים לשעה הזו
+                if original_hour is not None:
+                    self.hour_preferences[f"{soldier_id}_{original_hour}"] -= 0.2
 
             # העלה ציון לחיילים החדשים
             for soldier_id in changes['new_soldiers']:
@@ -959,6 +1040,14 @@ class SmartScheduler:
                     self.learned_patterns[key] = {'count': 0, 'success_rate': 0.5}
                 self.learned_patterns[key]['success_rate'] = min(1.0,
                     self.learned_patterns[key]['success_rate'] + 0.15)
+                
+                # למד שהחייל הזה מתאים לשעה הזו (או החדשה אם שונתה)
+                target_hour = new_hour if new_hour is not None else original_hour
+                if target_hour is not None:
+                    self.hour_preferences[f"{soldier_id}_{target_hour}"] += 0.2
+                    
+                    # למד שהחייל הזה מעדיף להיות עם המחלקה שלו
+                    self.mahlaka_cohesion_preferences[soldier_id] += 0.5
 
     def _learn_from_feedback(self, feedback: Dict):
         """
@@ -988,6 +1077,87 @@ class SmartScheduler:
                 penalty = 0.2 * feedback_weight
                 self.learned_patterns[key]['success_rate'] = max(0.0,
                     self.learned_patterns[key]['success_rate'] - penalty)
+
+    # ============================================
+    # PERSISTENCE - שמירה וטעינה
+    # ============================================
+
+    def save_model(self, filepath: str):
+        """שמור את המודל לקובץ"""
+        model_data = {
+            'learned_patterns': self.learned_patterns,
+            'soldier_preferences': dict(self.soldier_preferences),
+            'mahlaka_patterns': dict(self.mahlaka_patterns),
+            'hour_preferences': dict(self.hour_preferences),
+            'mahlaka_cohesion_preferences': dict(self.mahlaka_cohesion_preferences),
+            'user_feedback': self.user_feedback,
+            'stats': self.stats,
+            'training_examples_count': len(self.training_examples)
+        }
+
+        with open(filepath, 'wb') as f:
+            pickle.dump(model_data, f)
+
+        # print(f"💾 מודל נשמר ל-{filepath}")
+
+    def load_model(self, filepath: str):
+        """טען מודל מקובץ"""
+        if not os.path.exists(filepath):
+            # print(f"⚠️ קובץ מודל לא נמצא: {filepath}")
+            return False
+
+        with open(filepath, 'rb') as f:
+            model_data = pickle.load(f)
+
+        self.learned_patterns = model_data['learned_patterns']
+        self.soldier_preferences = defaultdict(lambda: defaultdict(int),
+                                              model_data['soldier_preferences'])
+        self.mahlaka_patterns = defaultdict(lambda: defaultdict(int),
+                                           model_data['mahlaka_patterns'])
+        self.hour_preferences = defaultdict(float, model_data.get('hour_preferences', {}))
+        self.mahlaka_cohesion_preferences = defaultdict(float, model_data.get('mahlaka_cohesion_preferences', {}))
+        self.user_feedback = model_data['user_feedback']
+        self.stats = model_data['stats']
+
+        # print(f"✅ מודל נטען מ-{filepath}")
+        # print(f"   📊 {model_data['training_examples_count']} דוגמאות אימון")
+        # print(f"   🎯 {len(self.learned_patterns)} דפוסים נלמדו")
+
+        return True
+
+    def get_stats(self) -> Dict:
+        """קבל סטטיסטיקות על הביצועים"""
+        total = self.stats['total_assignments']
+        if total == 0:
+            approval_rate = 0
+        else:
+            approval_rate = (self.stats['user_approvals'] / total) * 100
+
+        return {
+            **self.stats,
+            'approval_rate': approval_rate,
+            'patterns_learned': len(self.learned_patterns),
+            'feedback_count': len(self.user_feedback)
+        }
+
+    def get_available_soldiers_with_fallback(self, candidates: List[Dict], task: Dict, schedules: Dict, min_rest_fallback: int = 8) -> List[Dict]:
+        """
+        קבלת רשימת חיילים זמינים עם מנגנון fallback
+        אם אין חיילים זמינים עם מנוחה מלאה, מנסה עם מנוחה מקוצרת
+        """
+        # ניסיון 1: אילוצים רגילים (ברירת מחדל)
+        available = [s for s in candidates
+                    if self.check_availability(s, task['day'], task['start_hour'],
+                                             task['length_in_hours'], schedules, task.get('date'))]
+        
+        if not available:
+            # ניסיון 2: אילוצים מקלים (fallback)
+            # print(f"⚠️ {task['name']} יום {task['day']}: אין חיילים זמינים עם מנוחה מלאה - מנסה עם {min_rest_fallback} שעות")
+            available = [s for s in candidates
+                        if self.check_availability(s, task['day'], task['start_hour'],
+                                                 task['length_in_hours'], schedules, task.get('date'),
+                                                 min_rest_override=min_rest_fallback)]
+        return available
 
     # ============================================
     # ASSIGNMENT LOGIC - לוגיקת שיבוץ
@@ -1035,21 +1205,19 @@ class SmartScheduler:
         drivers_needed = task.get('drivers_needed', 0)
         same_mahlaka_required = task.get('same_mahlaka_required', False)
 
+        if drivers_needed > 0:
+             all_base_drivers = [s['name'] for s in all_soldiers if self.is_driver(s)]
+             # print(f"DEBUG: All Drivers in Base: {all_base_drivers}")
+
         # הפרד לפי תפקידים
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         drivers = [s for s in all_soldiers if self.is_driver(s)]
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
 
-        # סינון לפי זמינות (אילוץ קשיח)
-        available_commanders = [c for c in commanders
-                               if self.check_availability(c, task['day'], task['start_hour'],
-                                                        task['length_in_hours'], schedules)]
-        available_drivers = [d for d in drivers
-                           if self.check_availability(d, task['day'], task['start_hour'],
-                                                    task['length_in_hours'], schedules)]
-        available_soldiers = [s for s in soldiers
-                            if self.check_availability(s, task['day'], task['start_hour'],
-                                                     task['length_in_hours'], schedules)]
+        # סינון לפי זמינות (אילוץ קשיח עם fallback)
+        available_commanders = self.get_available_soldiers_with_fallback(commanders, task, schedules)
+        available_drivers = self.get_available_soldiers_with_fallback(drivers, task, schedules)
+        available_soldiers = self.get_available_soldiers_with_fallback(soldiers, task, schedules)
 
         # אם דרוש שיבוץ מאותה מחלקה - נסה למצוא מחלקה שיכולה לספק את כל הדרישות
         if same_mahlaka_required:
@@ -1062,7 +1230,6 @@ class SmartScheduler:
             # נסה כל מחלקה לפי סדר עומס (פחות -> יותר), אבל תן עדיפות למחלקה שכבר בלבנה!
             def get_mahlaka_priority(mid):
                 # בדוק אם המחלקה הזו כבר משובצת בלבנה הנוכחית
-                block_score = 0
                 task_start = task['start_hour']
                 block = task_start // 8
                 block_start = block * 8
@@ -1070,14 +1237,13 @@ class SmartScheduler:
                 
                 # ספור כמה משימות יש למחלקה הזו בלבנה הזו
                 tasks_in_block = 0
-                for _, schedule in schedules.items():
-                    for assign_day, assign_start, _, _, _ in schedule:
-                        if assign_day == task['day'] and assign_start >= block_start and assign_start < block_end:
-                            # אנחנו צריכים לדעת של מי ה-schedule הזה. 
-                            # זה קצת יקר לחפש את החייל כל פעם, אבל נניח שזה בסדר לכמות קטנה
-                            # אופטימיזציה: נשתמש ב-all_soldiers כדי למצוא את המחלקה
-                            soldier = next((s for s in all_soldiers if s['id'] == _), None)
-                            if soldier and soldier.get('mahlaka_id') == mid:
+                # אופטימיזציה: בנה מפה של soldier_id -> mahlaka_id פעם אחת בחוץ אם אפשר, אבל כאן זה מקומי
+                soldier_map = {s['id']: s.get('mahlaka_id') for s in all_soldiers}
+                
+                for s_id, schedule in schedules.items():
+                    if soldier_map.get(s_id) == mid:
+                        for assign_day, assign_start, assign_end, assign_name, assign_type in schedule:
+                            if assign_day == task['day'] and assign_start >= block_start and assign_start < block_end:
                                 tasks_in_block += 1
                 
                 # אם יש משימות בלבנה - תן עדיפות עליונה (ציון שלילי נמוך = ראשון במיון)
@@ -1091,23 +1257,19 @@ class SmartScheduler:
             sorted_mahalkot = sorted(mahlaka_ids, key=lambda mid: (get_mahlaka_priority(mid), random.random()))
 
             for mahlaka_id in sorted_mahalkot:
-                # סנן רק חיילים מהמחלקה הזאת
                 mahlaka_commanders = [c for c in available_commanders if c.get('mahlaka_id') == mahlaka_id]
-                mahlaka_drivers = [d for d in available_drivers if d.get('mahlaka_id') == mahlaka_id]
+                # נהגים לא חייבים להיות מאותה מחלקה
                 mahlaka_soldiers = [s for s in available_soldiers if s.get('mahlaka_id') == mahlaka_id]
 
-                # בדוק אם המחלקה יכולה לספק את כל הדרישות
                 if (len(mahlaka_commanders) >= commanders_needed and
-                    (drivers_needed == 0 or len(mahlaka_drivers) >= drivers_needed) and
                     len(mahlaka_soldiers) >= soldiers_needed):
 
-                    # ניקוד וסידור לפי ML
                     scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
                                         for c in mahlaka_commanders]
                     scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
                                       for s in mahlaka_soldiers]
                     scored_drivers = [(d, self.calculate_soldier_score(d, task, schedules, mahlaka_workload, all_soldiers))
-                                     for d in mahlaka_drivers]
+                                     for d in available_drivers]
 
                     # מיון לפי ציון
                     scored_commanders.sort(key=lambda x: x[1], reverse=True)
@@ -1132,13 +1294,19 @@ class SmartScheduler:
                     }
 
                     if drivers_needed > 0:
-                        selected_drivers = [d[0] for d in scored_drivers[:drivers_needed]]
-                        result['drivers'] = [d['id'] for d in selected_drivers]
+                        # נסה לבחור נהגים, אם אין - לא נורא
+                        num_drivers_to_take = min(drivers_needed, len(scored_drivers))
+                        if num_drivers_to_take > 0:
+                            selected_drivers = [d[0] for d in scored_drivers[:num_drivers_to_take]]
+                            result['drivers'] = [d['id'] for d in selected_drivers]
+                        else:
+                            # print(f"⚠️ סיור יום {task['day']}: משובץ ללא נהג (אין נהגים זמינים)")
+                            result['drivers'] = []
 
                     return result
 
             # לא מצאנו מחלקה שיכולה לספק את כל הדרישות
-            print(f"❌ סיור יום {task['day']}: אין מחלקה שיכולה לספק את כל הדרישות")
+            # print(f"❌ סיור יום {task['day']}: אין מחלקה שיכולה לספק את כל הדרישות")
             return None
 
         # אם לא דרוש אותה מחלקה - התנהג כמו קודם
@@ -1146,13 +1314,14 @@ class SmartScheduler:
         missing = []
         if len(available_commanders) < commanders_needed:
             missing.append(f"מפקדים ({len(available_commanders)}/{commanders_needed})")
-        if drivers_needed > 0 and len(available_drivers) < drivers_needed:
-            missing.append(f"נהגים ({len(available_drivers)}/{drivers_needed})")
+        # נהגים - לא חוסם
+        # if drivers_needed > 0 and len(available_drivers) < drivers_needed:
+        #    missing.append(f"נהגים ({len(available_drivers)}/{drivers_needed})")
         if len(available_soldiers) < soldiers_needed:
             missing.append(f"חיילים ({len(available_soldiers)}/{soldiers_needed})")
 
         if missing:
-            print(f"❌ סיור יום {task['day']}: חסרים - {', '.join(missing)}")
+            # print(f"❌ סיור יום {task['day']}: חסרים - {', '.join(missing)}")
             return None
 
         # ניקוד וסידור לפי ML (כולל all_soldiers לחישוב לבנה)
@@ -1187,10 +1356,14 @@ class SmartScheduler:
             'mahlaka_id': mahlaka_id
         }
 
-        # נהגים - לפי הדרישה בתבנית
+        # נהגים - לפי הדרישה בתבנית (אופציונלי אם חסר)
         if drivers_needed > 0:
-            selected_drivers = [d[0] for d in scored_drivers[:drivers_needed]]
-            result['drivers'] = [d['id'] for d in selected_drivers]
+            num_drivers_to_take = min(drivers_needed, len(scored_drivers))
+            if num_drivers_to_take > 0:
+                selected_drivers = [d[0] for d in scored_drivers[:num_drivers_to_take]]
+                result['drivers'] = [d['id'] for d in selected_drivers]
+            else:
+                result['drivers'] = []
 
         return result
 
@@ -1199,10 +1372,8 @@ class SmartScheduler:
         """שיבוץ שמירה - 1 לוחם, המתאים ביותר לפי ML + Exploration"""
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
 
-        # סינון לפי זמינות
-        available = [s for s in soldiers
-                    if self.check_availability(s, task['day'], task['start_hour'],
-                                             task['length_in_hours'], schedules)]
+        # סינון לפי זמינות (עם fallback)
+        available = self.get_available_soldiers_with_fallback(soldiers, task, schedules)
 
         if not available:
             return None
@@ -1232,16 +1403,10 @@ class SmartScheduler:
         drivers = [s for s in all_soldiers if self.is_driver(s)]
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
 
-        # סינון
-        available_commanders = [c for c in commanders
-                               if self.check_availability(c, task['day'], task['start_hour'],
-                                                        task['length_in_hours'], schedules)]
-        available_drivers = [d for d in drivers
-                           if self.check_availability(d, task['day'], task['start_hour'],
-                                                    task['length_in_hours'], schedules)]
-        available_soldiers = [s for s in soldiers
-                            if self.check_availability(s, task['day'], task['start_hour'],
-                                                     task['length_in_hours'], schedules)]
+        # סינון (עם fallback)
+        available_commanders = self.get_available_soldiers_with_fallback(commanders, task, schedules)
+        available_drivers = self.get_available_soldiers_with_fallback(drivers, task, schedules)
+        available_soldiers = self.get_available_soldiers_with_fallback(soldiers, task, schedules)
 
         # אם דרוש שיבוץ מאותה מחלקה
         if same_mahlaka_required:
@@ -1265,7 +1430,7 @@ class SmartScheduler:
                 
                 for s_id, schedule in schedules.items():
                     if soldier_map.get(s_id) == mid:
-                        for assign_day, assign_start, _, _, _ in schedule:
+                        for assign_day, assign_start, assign_end, assign_name, assign_type in schedule:
                             if assign_day == task['day'] and assign_start >= block_start and assign_start < block_end:
                                 tasks_in_block += 1
                 
@@ -1281,17 +1446,17 @@ class SmartScheduler:
 
             for mahlaka_id in sorted_mahalkot:
                 mahlaka_commanders = [c for c in available_commanders if c.get('mahlaka_id') == mahlaka_id]
-                mahlaka_drivers = [d for d in available_drivers if d.get('mahlaka_id') == mahlaka_id]
+                # נהגים לא חייבים להיות מאותה מחלקה
                 mahlaka_soldiers = [s for s in available_soldiers if s.get('mahlaka_id') == mahlaka_id]
 
                 if (len(mahlaka_commanders) >= 1 and
-                    (drivers_needed == 0 or len(mahlaka_drivers) >= drivers_needed) and
                     len(mahlaka_soldiers) >= soldiers_needed):
 
                     scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
                                         for c in mahlaka_commanders]
+                    # נהגים מכל המחלקות
                     scored_drivers = [(d, self.calculate_soldier_score(d, task, schedules, mahlaka_workload, all_soldiers))
-                                     for d in mahlaka_drivers]
+                                     for d in available_drivers]
                     scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
                                       for s in mahlaka_soldiers]
 
@@ -1308,11 +1473,15 @@ class SmartScheduler:
                     }
 
                     if drivers_needed > 0:
-                        result['drivers'] = [d[0]['id'] for d in scored_drivers[:drivers_needed]]
+                        num_drivers_to_take = min(drivers_needed, len(scored_drivers))
+                        if num_drivers_to_take > 0:
+                            result['drivers'] = [d[0]['id'] for d in scored_drivers[:num_drivers_to_take]]
+                        else:
+                            result['drivers'] = []
 
                     return result
 
-            print(f"❌ כוננות א' יום {task['day']}: אין מחלקה שיכולה לספק את כל הדרישות")
+            # print(f"❌ כוננות א' יום {task['day']}: אין מחלקה שיכולה לספק את כל הדרישות")
             return None
 
         # אם לא דרוש אותה מחלקה
@@ -1326,7 +1495,7 @@ class SmartScheduler:
             missing.append(f"חיילים ({len(available_soldiers)}/{soldiers_needed})")
 
         if missing:
-            print(f"❌ כוננות א' יום {task['day']}: חסרים - {', '.join(missing)}")
+            # print(f"❌ כוננות א' יום {task['day']}: חסרים - {', '.join(missing)}")
             return None
 
         # ניקוד (כולל all_soldiers לחישוב לבנה)
@@ -1351,28 +1520,25 @@ class SmartScheduler:
             'mahlaka_id': mahlaka_id
         }
 
-        # נהגים - לפי הדרישה בתבנית
         if drivers_needed > 0:
             result['drivers'] = [d[0]['id'] for d in scored_drivers[:drivers_needed]]
+        else:
+            result['drivers'] = []
 
         return result
 
     def _assign_standby_b(self, task: Dict, all_soldiers: List[Dict],
                          schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
-        """כוננות ב' - מפקד + חיילים (גמיש)"""
-        # תיקון: השתמש במספר החיילים מהתבנית
-        soldiers_needed = task.get('soldiers_needed', 3)
+        """כוננות ב' - מפקד + חיילים (ללא נהג)"""
+        soldiers_needed = task.get('soldiers_needed', 5)
         same_mahlaka_required = task.get('same_mahlaka_required', False)
 
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
 
-        available_commanders = [c for c in commanders
-                               if self.check_availability(c, task['day'], task['start_hour'],
-                                                        task['length_in_hours'], schedules)]
-        available_soldiers = [s for s in soldiers
-                            if self.check_availability(s, task['day'], task['start_hour'],
-                                                     task['length_in_hours'], schedules)]
+        # סינון (עם fallback)
+        available_commanders = self.get_available_soldiers_with_fallback(commanders, task, schedules)
+        available_soldiers = self.get_available_soldiers_with_fallback(soldiers, task, schedules)
 
         # אם דרוש שיבוץ מאותה מחלקה
         if same_mahlaka_required:
@@ -1381,13 +1547,16 @@ class SmartScheduler:
                 if s.get('mahlaka_id'):
                     mahlaka_ids.add(s['mahlaka_id'])
 
-            sorted_mahalkot = sorted(mahlaka_ids, key=lambda m: mahlaka_workload.get(m, 0))
+            # נסה כל מחלקה לפי סדר עומס
+            sorted_mahalkot = sorted(mahlaka_ids, key=lambda mid: (mahlaka_workload.get(mid, 0), random.random()))
 
             for mahlaka_id in sorted_mahalkot:
                 mahlaka_commanders = [c for c in available_commanders if c.get('mahlaka_id') == mahlaka_id]
                 mahlaka_soldiers = [s for s in available_soldiers if s.get('mahlaka_id') == mahlaka_id]
 
-                if len(mahlaka_commanders) >= 1 and len(mahlaka_soldiers) >= soldiers_needed:
+                if (len(mahlaka_commanders) >= 1 and
+                    len(mahlaka_soldiers) >= soldiers_needed):
+
                     scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
                                         for c in mahlaka_commanders]
                     scored_soldiers = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
@@ -1404,12 +1573,12 @@ class SmartScheduler:
                         'mahlaka_id': mahlaka_id
                     }
 
-            print(f"❌ כוננות ב' יום {task['day']}: אין מחלקה שיכולה לספק את כל הדרישות")
+            # print(f"❌ כוננות ב' יום {task['day']}: אין מחלקה שיכולה לספק את כל הדרישות")
             return None
 
         # אם לא דרוש אותה מחלקה
         if not available_commanders or len(available_soldiers) < soldiers_needed:
-            print(f"⚠️  כוננות ב' יום {task['day']}: חסרים - מפקדים: {len(available_commanders)}, חיילים: {len(available_soldiers)}/{soldiers_needed}")
+            # print(f"⚠️  כוננות ב' יום {task['day']}: חסרים - מפקדים: {len(available_commanders)}, חיילים: {len(available_soldiers)}/{soldiers_needed}")
             return None
 
         scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
@@ -1442,10 +1611,9 @@ class SmartScheduler:
 
         # אם התבנית לא מציינת הסמכה/תפקיד - כל אחד יכול
         if not cert_name:
-            available = [s for s in all_soldiers
-                        if not self.is_commander(s) and
-                           self.check_availability(s, task['day'], task['start_hour'],
-                                                 task['length_in_hours'], schedules)]
+            soldiers = [s for s in all_soldiers if not self.is_commander(s)]
+            available = self.get_available_soldiers_with_fallback(soldiers, task, schedules)
+            
             if not available:
                 return None
 
@@ -1462,16 +1630,16 @@ class SmartScheduler:
         # חשוב: רק חיילים רגילים (לא מפקדים) יכולים לשמש בחמ"ל
         certified = [s for s in all_soldiers
                     if not self.is_commander(s) and
-                       self.has_certification(s, cert_name) and
-                       self.check_availability(s, task['day'], task['start_hour'],
-                                             task['length_in_hours'], schedules)]
+                       self.has_certification(s, cert_name)]
+        
+        available = self.get_available_soldiers_with_fallback(certified, task, schedules)
 
-        if not certified:
-            print(f"❌ {task['name']} יום {task['day']}: אין חייל (לא מפקד!) מוסמך '{cert_name}' (אילוץ קשיח)")
+        if not available:
+            # print(f"❌ {task['name']} יום {task['day']}: אין חייל (לא מפקד!) מוסמך '{cert_name}' (אילוץ קשיח)")
             return None
 
         scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
-                 for s in certified]
+                 for s in available]
         scored.sort(key=lambda x: x[1], reverse=True)
 
         selected = scored[0][0]
@@ -1487,12 +1655,10 @@ class SmartScheduler:
         num_needed = task.get('soldiers_needed', task.get('needs_soldiers', 1))
 
         soldiers = [s for s in all_soldiers if not self.is_commander(s)]
-        available = [s for s in soldiers
-                    if self.check_availability(s, task['day'], task['start_hour'],
-                                             task['length_in_hours'], schedules)]
+        available = self.get_available_soldiers_with_fallback(soldiers, task, schedules)
 
         if len(available) < num_needed:
-            print(f"⚠️  תורן מטבח יום {task['day']}: חסרים חיילים (צריך {num_needed}, זמינים {len(available)})")
+            # print(f"⚠️  תורן מטבח יום {task['day']}: חסרים חיילים (צריך {num_needed}, זמינים {len(available)})")
             return None
 
         scored = [(s, self.calculate_soldier_score(s, task, schedules, mahlaka_workload, all_soldiers))
@@ -1508,61 +1674,4 @@ class SmartScheduler:
         return {
             'soldiers': [s['id'] for s in selected],
             'mahlaka_id': mahlaka_id
-        }
-
-    # ============================================
-    # PERSISTENCE - שמירה וטעינה
-    # ============================================
-
-    def save_model(self, filepath: str):
-        """שמור את המודל לקובץ"""
-        model_data = {
-            'learned_patterns': self.learned_patterns,
-            'soldier_preferences': dict(self.soldier_preferences),
-            'mahlaka_patterns': dict(self.mahlaka_patterns),
-            'user_feedback': self.user_feedback,
-            'stats': self.stats,
-            'training_examples_count': len(self.training_examples)
-        }
-
-        with open(filepath, 'wb') as f:
-            pickle.dump(model_data, f)
-
-        print(f"💾 מודל נשמר ל-{filepath}")
-
-    def load_model(self, filepath: str):
-        """טען מודל מקובץ"""
-        if not os.path.exists(filepath):
-            print(f"⚠️ קובץ מודל לא נמצא: {filepath}")
-            return False
-
-        with open(filepath, 'rb') as f:
-            model_data = pickle.load(f)
-
-        self.learned_patterns = model_data['learned_patterns']
-        self.soldier_preferences = defaultdict(lambda: defaultdict(int),
-                                              model_data['soldier_preferences'])
-        self.mahlaka_patterns = defaultdict(lambda: defaultdict(int),
-                                           model_data['mahlaka_patterns'])
-        self.user_feedback = model_data['user_feedback']
-        self.stats = model_data['stats']
-
-        print(f"✅ מודל נטען מ-{filepath}")
-        print(f"   📊 {model_data['training_examples_count']} דוגמאות אימון")
-        print(f"   🎯 {len(self.learned_patterns)} דפוסים נלמדו")
-        return True
-
-    def get_stats(self) -> Dict:
-        """קבל סטטיסטיקות על הביצועים"""
-        total = self.stats['total_assignments']
-        if total == 0:
-            approval_rate = 0
-        else:
-            approval_rate = (self.stats['user_approvals'] / total) * 100
-
-        return {
-            **self.stats,
-            'approval_rate': approval_rate,
-            'patterns_learned': len(self.learned_patterns),
-            'feedback_count': len(self.user_feedback)
         }

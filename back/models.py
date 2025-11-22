@@ -1,7 +1,7 @@
 """
 Database Models for Shavzak System
 """
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Date, Index
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Date, Index, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
@@ -411,7 +411,17 @@ class ConstraintFeedback(Base):
 
 def init_db(db_path='shavzak.db'):
     """אתחול מסד הנתונים"""
-    engine = create_engine(f'sqlite:///{db_path}', echo=False)
+    # הגדלת timeout ל-30 שניות (במקום 5 ברירת מחדל)
+    engine = create_engine(f'sqlite:///{db_path}', echo=False, connect_args={'timeout': 30})
+    
+    # הפעלת WAL mode לביצועים טובים יותר ומניעת נעילות
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
+
     Base.metadata.create_all(engine)
     return engine
 

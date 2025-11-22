@@ -111,398 +111,19 @@ def ml_smart_schedule(current_user):
 
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
 
-        # טען נתונים
-        mahalkot = session.query(Mahlaka).filter_by(pluga_id=pluga_id).all()
-        templates = session.query(AssignmentTemplate).filter_by(pluga_id=pluga_id).all()
+        # הרצת הלוגיקה המופרדת
+        result = run_smart_scheduling(
+            session=session,
+            pluga_id=pluga_id,
+            start_date=start_date,
+            days_count=days_count,
+            user_id=current_user.get('user_id')
+        )
 
-        if not templates:
-            return jsonify({'error': 'אין תבניות משימות במערכת'}), 400
+        if 'error' in result:
+            return jsonify({'error': result['error']}), result.get('status', 500)
 
-        # בנה מבנה נתונים - 🚀 אופטימיזציה: טעינה מקדימה של כל הנתונים
-        # טוען את כל החיילים עם כל הנתונים הקשורים בשאילתה אחת במקום מאות שאילתות!
-        all_soldiers_query = session.query(Soldier).options(
-            selectinload(Soldier.certifications),
-            selectinload(Soldier.unavailable_dates),
-            selectinload(Soldier.current_status)
-        ).join(Mahlaka).filter(Mahlaka.pluga_id == pluga_id).all()
-
-        # בנה מילון מהיר לפי mahlaka_id
-        soldiers_by_mahlaka = {}
-        for soldier in all_soldiers_query:
-            if soldier.mahlaka_id not in soldiers_by_mahlaka:
-                soldiers_by_mahlaka[soldier.mahlaka_id] = []
-            soldiers_by_mahlaka[soldier.mahlaka_id].append(soldier)
-
-        mahalkot_data = []
-        for mahlaka in mahalkot:
-            soldiers = soldiers_by_mahlaka.get(mahlaka.id, [])
-
-            commanders = []
-            drivers = []
-            regular_soldiers = []
-
-            for soldier in soldiers:
-                # 🚀 בדיקת זמינות - נתונים כבר טעונים!
-                unavailable_dates = [
-                    u.date for u in soldier.unavailable_dates
-                    if u.date >= start_date and u.date < start_date + timedelta(days=days_count)
-                ]
-
-                cert_list = [c.certification_name for c in soldier.certifications]
-                status = soldier.current_status
-
-                if status and status.status_type != 'בבסיס':
-                    print(f"DEBUG RAW STATUS: {soldier.name} - '{status.status_type}'")
-
-                soldier_data = {
-                    'id': soldier.id,
-                    'name': soldier.name,
-                    'role': soldier.role,
-                    'kita': soldier.kita,
-                    'certifications': cert_list,
-                    'unavailable_dates': unavailable_dates,
-                    'hatash_2_days': soldier.hatash_2_days,
-                    'home_round_date': soldier.home_round_date,
-                    'status_type': status.status_type if status else 'בבסיס',
-                    'status_start_date': status.start_date if status else None,
-                    'status_end_date': status.end_date if status else None,
-                    'mahlaka_id': mahlaka.id
-                }
-
-                # כל חייל מופיע רק ברשימה אחת
-                if soldier.role in ['ממ', 'מכ', 'סמל']:
-                    commanders.append(soldier_data)
-                elif 'נהג' in cert_list:
-                    drivers.append(soldier_data)
-                else:
-                    regular_soldiers.append(soldier_data)
-
-            mahalkot_data.append({
-                'id': mahlaka.id,
-                'number': mahlaka.number,
-                'commanders': commanders,
-                'drivers': drivers,
-                'soldiers': regular_soldiers
-            })
-
-        # פונקציה לבדיקת זמינות
-        def is_soldier_available(soldier_data, check_date):
-            """בודק אם חייל זמין ביום מסוים, תוך התחשבות בנוכחות, התש"ב 2 וסטטוס"""
-            # בדוק סטטוס החייל - חיילים שלא בבסיס לא זמינים
-            status_type = soldier_data.get('status_type', 'בבסיס')
-            if status_type: status_type = status_type.strip() # נקה רווחים
-            
-            status_start = soldier_data.get('status_start_date')
-            status_end = soldier_data.get('status_end_date')
-
-            unavailable_statuses = ['ריתוק', 'לא בבסיס', 'חופשה', 'מילואים', 'גימלים', 'בסבב קו', 'בקשת יציאה']
-
-            if status_type in unavailable_statuses:
-                # אם יש תאריכים, בדוק אם התאריך נופל בטווח
-                if status_start and status_end:
-                    # המר תאריכים ל-date אם הם מחרוזות
-                    if isinstance(status_start, str): status_start = datetime.strptime(status_start, '%Y-%m-%d').date()
-                    if isinstance(status_end, str): status_end = datetime.strptime(status_end, '%Y-%m-%d').date()
-                    
-                    if status_start <= check_date <= status_end:
-                        print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: סטטוס {status_type} ({status_start} - {status_end})")
-                        return False
-                    # אחרת - הסטטוס לא תקף לתאריך זה -> זמין (אלא אם יש משהו אחר)
-                else:
-                    # אין תאריכים - הנח שהסטטוס תקף תמיד
-                    print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: סטטוס {status_type} (תמיד)")
-                    return False
-            elif status_type != 'בבסיס':
-                # הדפס סטטוסים לא מוכרים לדיבאג
-                # print(f"⚠️ סטטוס לא מוכר ל-{soldier_data['name']}: '{status_type}'")
-                pass
-
-            # בדוק אם התאריך באי זמינות רגילה
-            if check_date in soldier_data.get('unavailable_dates', []):
-                print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: תאריך אי-זמינות רשום")
-                return False
-
-            # בדוק התש"ב 2 - ימים קבועים שהחייל לא זמין
-            hatash_2_days = soldier_data.get('hatash_2_days')
-            if hatash_2_days:
-                day_of_week = check_date.weekday()
-                day_of_week = (day_of_week + 1) % 7
-                hatash_days_list = hatash_2_days.split(',')
-                if str(day_of_week) in hatash_days_list:
-                    print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: התש\"ב 2 (יום {day_of_week})")
-                    return False
-
-            # בדוק סבב יציאה (אם מוגדר)
-            # אם תאריך סבב היציאה מוגדר, נחשב אם החייל בבית או בסבב קו
-            home_round_date = soldier_data.get('home_round_date')
-            if home_round_date:
-                if isinstance(home_round_date, str):
-                    home_round_date = datetime.strptime(home_round_date, '%Y-%m-%d').date()
-                
-                # חישוב ימים מאז תחילת הסבב
-                days_diff = (check_date - home_round_date).days
-                if days_diff >= 0:
-                    # ברירת מחדל: סבב קו (17-4)
-                    # כרגע אין שדה cycle_type במסד הנתונים, אז כולם 17-4
-                    cycle_type = soldier_data.get('cycle_type', '17-4')
-                    
-                    if cycle_type == '11-3':
-                        # תיקון: הנח שהסבב מתחיל בבית (כמו ב-17-4)
-                        # 3 ימים בית, 11 ימים בסיס
-                        if (days_diff % 14) < 3:
-                            print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: סבב 11-3 (בבית)")
-                            return False
-                    else:
-                        # בדיקה: סבב קו (17-4) - 4 ימים ראשונים הם סבב קו
-                        if (days_diff % 21) < 4:
-                            print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: סבב 17-4 (בבית)")
-                            return False
-
-            return True
-
-        # חפש או צור Shavzak "מאסטר" לפלוגה
-        master_shavzak = session.query(Shavzak).filter(
-            Shavzak.pluga_id == pluga_id,
-            Shavzak.name == 'שיבוץ אוטומטי'
-        ).first()
-
-        start_date_changed = False  # האם start_date השתנה
-
-        if not master_shavzak:
-            # צור Shavzak מאסטר
-            master_shavzak = Shavzak(
-                name='שיבוץ אוטומטי',
-                pluga_id=pluga_id,
-                created_by=current_user.get('user_id'),
-                start_date=start_date,
-                days_count=days_count,
-                min_rest_hours=8,
-                emergency_mode=False,
-                created_at=datetime.now()
-            )
-            session.add(master_shavzak)
-            session.flush()
-        else:
-            # עדכן את טווח התאריכים אם נדרש
-            if start_date < master_shavzak.start_date:
-                print(f"⚠️ משנה start_date מ-{master_shavzak.start_date} ל-{start_date} - נמחק את כל המשימות הקיימות")
-                master_shavzak.start_date = start_date
-                start_date_changed = True
-
-            end_date_needed = start_date + timedelta(days=days_count)
-            current_end_date = master_shavzak.start_date + timedelta(days=master_shavzak.days_count)
-            if end_date_needed > current_end_date:
-                master_shavzak.days_count = (end_date_needed - master_shavzak.start_date).days
-
-            session.flush()
-
-        # יצירת משימות
-        # 🐛 תיקון: צריך לחשב את day_start כאן, אחרי הגדרת master_shavzak
-        # כדי שהמשימות יישמרו עם ה-day הנכון יחסית ל-master_shavzak.start_date
-        temp_day_start = 0
-        if master_shavzak:
-            temp_day_start = (start_date - master_shavzak.start_date).days
-
-        all_assignments = []
-        for day in range(days_count):
-            current_date = start_date + timedelta(days=day)
-            # 🐛 תיקון: השתמש ב-temp_day_start + day כדי שהמשימות יישמרו נכון!
-            actual_day = temp_day_start + day
-
-            for template in templates:
-                for slot in range(template.times_per_day):
-                    if template.start_hour is not None:
-                        start_hour = template.start_hour + (slot * template.length_in_hours)
-                    else:
-                        start_hour = slot * template.length_in_hours
-
-                    assign_data = {
-                        'name': template.name,
-                        'type': template.assignment_type,
-                        'day': actual_day,  # 🐛 תיקון: השתמש ב-actual_day!
-                        'start_hour': start_hour,
-                        'length_in_hours': template.length_in_hours,
-                        'commanders_needed': template.commanders_needed,
-                        'drivers_needed': template.drivers_needed,
-                        'soldiers_needed': template.soldiers_needed,
-                        'same_mahlaka_required': template.same_mahlaka_required,
-                        'requires_certification': template.requires_certification,
-                        'date': current_date
-                    }
-
-                    all_assignments.append(assign_data)
-
-        # מיון
-        def assignment_priority(assign):
-            is_standby = assign['type'] in ['כוננות א', 'כוננות ב']
-            priority = 1 if is_standby else 0
-            return (assign['day'], assign['start_hour'], priority)
-
-        all_assignments.sort(key=assignment_priority)
-
-        # 🐛 תיקון: אם start_date השתנה, מחק את כל המשימות הקיימות (לא רק בטווח החדש)
-        # כי המשימות הישנות עכשיו יש להן day שגוי יחסית ל-start_date החדש
-        if start_date_changed:
-            print("🗑️ מוחק את כל המשימות הקיימות כי start_date השתנה")
-            days_to_delete = session.query(Assignment.day).filter(
-                Assignment.shavzak_id == master_shavzak.id
-            ).distinct().all()
-            days_to_delete = [d[0] for d in days_to_delete]
-        else:
-            # מחק את כל המשימות מהתאריך הזה והלאה
-            # זה מבטיח שלא יישארו שאריות של שיבוצים ישנים שעלולים להתנגש או לבלבל
-            day_start = (start_date - master_shavzak.start_date).days
-            
-            # מצא את כל הימים שיש בהם משימות מהיום והלאה
-            days_to_delete = session.query(Assignment.day).filter(
-                Assignment.shavzak_id == master_shavzak.id,
-                Assignment.day >= day_start
-            ).distinct().all()
-            days_to_delete = [d[0] for d in days_to_delete]
-
-        # מחק גם את החיילים המשובצים למשימות האלה
-        if days_to_delete:
-            assignments_to_delete = session.query(Assignment).filter(
-                Assignment.shavzak_id == master_shavzak.id,
-                Assignment.day.in_(days_to_delete)
-            ).all()
-
-            for assignment in assignments_to_delete:
-                session.query(AssignmentSoldier).filter(
-                    AssignmentSoldier.assignment_id == assignment.id
-                ).delete()
-                # השתמש ב-expunge כדי להסיר את האובייקט מה-session לפני המחיקה מה-DB
-                # זה מונע את השגיאה: Identity map already had an identity...
-                session.expunge(assignment)
-
-            session.query(Assignment).filter(
-                Assignment.shavzak_id == master_shavzak.id,
-                Assignment.day.in_(days_to_delete)
-            ).delete(synchronize_session=False)
-            session.commit()
-
-        # הרצת ML
-        schedules = {}
-        mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
-
-        all_commanders = [c for m in mahalkot_data for c in m['commanders']]
-        all_drivers = [d for m in mahalkot_data for d in m['drivers']]
-        all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]
-
-        created_assignments = []
-
-        failed_assignments = []  # עקוב אחר משימות שלא השתבצו
-
-        for assign_data in all_assignments:
-            current_date = assign_data['date']
-
-            # סינון לפי זמינות
-            available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
-            available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
-            available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
-
-            all_available = available_commanders + available_drivers + available_soldiers
-
-            # DEBUG: Print available soldiers
-            print(f"🔍 DEBUG: Available for {assign_data['name']} ({current_date}): {[s['name'] for s in all_available]}")
-
-            # הרץ ML
-            result = smart_scheduler.assign_task(assign_data, all_available, schedules, mahlaka_workload)
-
-            if result:
-                # עדכן schedules
-                for role_key in ['commanders', 'drivers', 'soldiers']:
-                    if role_key in result:
-                        for soldier_id in result[role_key]:
-                            if soldier_id not in schedules:
-                                schedules[soldier_id] = []
-                            schedules[soldier_id].append((
-                                assign_data['day'],
-                                assign_data['start_hour'],
-                                assign_data['start_hour'] + assign_data['length_in_hours'],
-                                assign_data['name'],
-                                assign_data['type']
-                            ))
-
-                created_assignments.append({
-                    **assign_data,
-                    'result': result
-                })
-
-                # שמור את המשימה למסד הנתונים
-                assignment = Assignment(
-                    shavzak_id=master_shavzak.id,
-                    name=assign_data['name'],
-                    assignment_type=assign_data['type'],
-                    day=assign_data['day'],
-                    start_hour=assign_data['start_hour'],
-                    length_in_hours=assign_data['length_in_hours'],
-                    assigned_mahlaka_id=result.get('mahlaka_id')
-                )
-                session.add(assignment)
-                session.flush()
-
-                # הוסף חיילים למשימה
-                for role_key in ['commanders', 'drivers', 'soldiers']:
-                    if role_key in result:
-                        role_name = 'מפקד' if role_key == 'commanders' else ('נהג' if role_key == 'drivers' else 'חייל')
-                        for soldier_id in result[role_key]:
-                            assign_soldier = AssignmentSoldier(
-                                assignment_id=assignment.id,
-                                soldier_id=soldier_id,
-                                role_in_assignment=role_name
-                            )
-                            session.add(assign_soldier)
-
-            else:
-                # משימה לא השתבצה - שמור לדיווח
-                failed_assignments.append(assign_data)
-                print(f"❌ לא הצלחתי לשבץ: {assign_data['name']} ({assign_data['type']}) יום {assign_data['day']} שעה {assign_data['start_hour']}")
-
-        # שמור הכל למסד הנתונים
-        session.commit()
-
-        # 🐛 Debug: וודא שהמשימות נשמרו בפועל
-        saved_assignments_count = session.query(Assignment).filter(
-            Assignment.shavzak_id == master_shavzak.id
-        ).count()
-        print(f"🔍 DEBUG: שמרתי {len(created_assignments)} משימות, מצאתי במסד {saved_assignments_count} משימות")
-
-        # בדוק משימות לפי day
-        for day in range(days_count):
-            day_assignments = session.query(Assignment).filter(
-                Assignment.shavzak_id == master_shavzak.id,
-                Assignment.day == day
-            ).count()
-            print(f"🔍 DEBUG: יום {day}: {day_assignments} משימות")
-
-        smart_scheduler.stats['total_assignments'] += len(created_assignments)
-        smart_scheduler.stats['successful_assignments'] += len(created_assignments)
-        smart_scheduler.save_model(ML_MODEL_PATH)
-
-        # הכן הודעה עם סטטוס
-        total_attempted = len(all_assignments)
-        success_count = len(created_assignments)
-        failed_count = len(failed_assignments)
-
-        message = f'נוצרו {success_count} משימות בהצלחה'
-        if failed_count > 0:
-            message += f' ({failed_count} משימות לא הצליחו להישבץ)'
-            print(f"\n📊 סיכום: {success_count}/{total_attempted} משימות שובצו בהצלחה")
-            print(f"⚠️  משימות שלא השתבצו:")
-            for failed in failed_assignments:
-                print(f"   - {failed['name']} ({failed['type']}) יום {failed['day']}")
-
-        return jsonify({
-            'message': message,
-            'assignments': created_assignments,
-            'stats': smart_scheduler.get_stats(),
-            'failed_assignments': [
-                {'name': f['name'], 'type': f['type'], 'day': f['day'], 'start_hour': f['start_hour']}
-                for f in failed_assignments
-            ],
-            'success_rate': f"{(success_count / total_attempted * 100):.1f}%" if total_attempted > 0 else "0%"
-        }), 200
+        return jsonify(result), 200
 
     except Exception as e:
         print(f"🔴 שגיאה ביצירת שיבוץ חכם: {str(e)}")
@@ -792,6 +413,7 @@ def ml_regenerate_schedule(current_user):
                     'status_type': status.status_type if status else 'בבסיס',
                     'status_start_date': status.start_date if status else None,
                     'status_end_date': status.end_date if status else None,
+                    'return_date': status.return_date if status else None,
                     'mahlaka_id': mahlaka.id
                 }
 
@@ -1011,3 +633,344 @@ def ml_regenerate_schedule(current_user):
         return jsonify({'error': str(e)}), 500
     finally:
         session.close()
+
+
+def run_smart_scheduling(session, pluga_id, start_date, days_count, user_id):
+    """
+    הרצת לוגיקת השיבוץ החכם (מופרד מה-route כדי לאפשר קריאה מפונקציות אחרות)
+    """
+    # טען נתונים
+    mahalkot = session.query(Mahlaka).filter_by(pluga_id=pluga_id).all()
+    templates = session.query(AssignmentTemplate).filter_by(pluga_id=pluga_id).all()
+
+    if not templates:
+        return {'error': 'אין תבניות משימות במערכת', 'status': 400}
+
+    # בנה מבנה נתונים - 🚀 אופטימיזציה: טעינה מקדימה של כל הנתונים
+    all_soldiers_query = session.query(Soldier).options(
+        selectinload(Soldier.certifications),
+        selectinload(Soldier.unavailable_dates),
+        selectinload(Soldier.current_status)
+    ).join(Mahlaka).filter(Mahlaka.pluga_id == pluga_id).all()
+
+    # בנה מילון מהיר לפי mahlaka_id
+    soldiers_by_mahlaka = {}
+    for soldier in all_soldiers_query:
+        if soldier.mahlaka_id not in soldiers_by_mahlaka:
+            soldiers_by_mahlaka[soldier.mahlaka_id] = []
+        soldiers_by_mahlaka[soldier.mahlaka_id].append(soldier)
+
+    mahalkot_data = []
+    for mahlaka in mahalkot:
+        soldiers = soldiers_by_mahlaka.get(mahlaka.id, [])
+
+        commanders = []
+        drivers = []
+        regular_soldiers = []
+
+        for soldier in soldiers:
+            # 🚀 בדיקת זמינות - נתונים כבר טעונים!
+            unavailable_dates = [
+                u.date for u in soldier.unavailable_dates
+                if u.date >= start_date and u.date < start_date + timedelta(days=days_count)
+            ]
+
+            cert_list = [c.certification_name for c in soldier.certifications]
+            status = soldier.current_status
+
+            soldier_data = {
+                'id': soldier.id,
+                'name': soldier.name,
+                'role': soldier.role,
+                'kita': soldier.kita,
+                'certifications': cert_list,
+                'unavailable_dates': unavailable_dates,
+                'hatash_2_days': soldier.hatash_2_days,
+                'home_round_date': soldier.home_round_date,
+                'status_type': status.status_type if status else 'בבסיס',
+                'status_start_date': status.start_date if status else None,
+                'status_end_date': status.end_date if status else None,
+                'return_date': status.return_date if status else None,
+                'mahlaka_id': mahlaka.id
+            }
+
+            # כל חייל מופיע רק ברשימה אחת
+            if soldier.role in ['ממ', 'מכ', 'סמל']:
+                commanders.append(soldier_data)
+            elif 'נהג' in cert_list:
+                drivers.append(soldier_data)
+            else:
+                regular_soldiers.append(soldier_data)
+
+        mahalkot_data.append({
+            'id': mahlaka.id,
+            'number': mahlaka.number,
+            'commanders': commanders,
+            'drivers': drivers,
+            'soldiers': regular_soldiers
+        })
+
+    # פונקציה לבדיקת זמינות
+    def is_soldier_available(soldier_data, check_date):
+        """בודק אם חייל זמין ביום מסוים, תוך התחשבות בנוכחות, התש"ב 2 וסטטוס"""
+        # בדוק סטטוס החייל - חיילים שלא בבסיס לא זמינים
+        status_type = soldier_data.get('status_type', 'בבסיס')
+        if status_type: status_type = status_type.strip() # נקה רווחים
+        
+        status_start = soldier_data.get('status_start_date')
+        status_end = soldier_data.get('status_end_date')
+        return_date = soldier_data.get('return_date')
+
+        unavailable_statuses = ['ריתוק', 'לא בבסיס', 'חופשה', 'מילואים', 'גימלים', 'בסבב קו', 'בקשת יציאה']
+
+        if status_type in unavailable_statuses:
+            # אם יש תאריכים, בדוק אם התאריך נופל בטווח
+            if status_start and status_end:
+                # המר תאריכים ל-date אם הם מחרוזות
+                if isinstance(status_start, str): status_start = datetime.strptime(status_start, '%Y-%m-%d').date()
+                if isinstance(status_end, str): status_end = datetime.strptime(status_end, '%Y-%m-%d').date()
+                if return_date and isinstance(return_date, str): return_date = datetime.strptime(return_date, '%Y-%m-%d').date()
+                
+                # אם זה יום החזרה - החייל זמין (חלקית, יטופל ב-SmartScheduler)
+                if return_date and check_date == return_date:
+                    return True
+
+                if status_start <= check_date <= status_end:
+                    # print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: סטטוס {status_type} ({status_start} - {status_end})")
+                    return False
+            else:
+                # אין תאריכים - הנח שהסטטוס תקף תמיד
+                # print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: סטטוס {status_type} (תמיד)")
+                return False
+        
+        # בדוק אם התאריך באי זמינות רגילה
+        if check_date in soldier_data.get('unavailable_dates', []):
+            # print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: תאריך אי-זמינות רשום")
+            return False
+
+        # בדוק התש"ב 2 - ימים קבועים שהחייל לא זמין
+        hatash_2_days = soldier_data.get('hatash_2_days')
+        if hatash_2_days:
+            day_of_week = check_date.weekday()
+            day_of_week = (day_of_week + 1) % 7
+            hatash_days_list = hatash_2_days.split(',')
+            if str(day_of_week) in hatash_days_list:
+                # print(f"🚫 {soldier_data['name']} לא זמין ב-{check_date}: התש\"ב 2 (יום {day_of_week})")
+                return False
+
+        # בדוק סבב יציאה (אם מוגדר)
+        home_round_date = soldier_data.get('home_round_date')
+        if home_round_date:
+            if isinstance(home_round_date, str):
+                home_round_date = datetime.strptime(home_round_date, '%Y-%m-%d').date()
+            
+            days_diff = (check_date - home_round_date).days
+            if days_diff >= 0:
+                cycle_type = soldier_data.get('cycle_type', '17-4')
+                if cycle_type == '11-3':
+                    if (days_diff % 14) < 3:
+                        return False
+                else:
+                    if (days_diff % 21) < 4:
+                        return False
+
+        return True
+
+    # חפש או צור Shavzak "מאסטר" לפלוגה
+    master_shavzak = session.query(Shavzak).filter(
+        Shavzak.pluga_id == pluga_id,
+        Shavzak.name == 'שיבוץ אוטומטי'
+    ).first()
+
+    start_date_changed = False
+
+    if not master_shavzak:
+        master_shavzak = Shavzak(
+            name='שיבוץ אוטומטי',
+            pluga_id=pluga_id,
+            created_by=user_id,
+            start_date=start_date,
+            days_count=days_count,
+            min_rest_hours=8,
+            emergency_mode=False,
+            created_at=datetime.now()
+        )
+        session.add(master_shavzak)
+        session.flush()
+    else:
+        if start_date < master_shavzak.start_date:
+            master_shavzak.start_date = start_date
+            start_date_changed = True
+
+        end_date_needed = start_date + timedelta(days=days_count)
+        current_end_date = master_shavzak.start_date + timedelta(days=master_shavzak.days_count)
+        if end_date_needed > current_end_date:
+            master_shavzak.days_count = (end_date_needed - master_shavzak.start_date).days
+
+        session.flush()
+
+    # יצירת משימות
+    temp_day_start = 0
+    if master_shavzak:
+        temp_day_start = (start_date - master_shavzak.start_date).days
+
+    all_assignments = []
+    for day in range(days_count):
+        current_date = start_date + timedelta(days=day)
+        actual_day = temp_day_start + day
+
+        for template in templates:
+            for slot in range(template.times_per_day):
+                if template.start_hour is not None:
+                    start_hour = template.start_hour + (slot * template.length_in_hours)
+                else:
+                    start_hour = slot * template.length_in_hours
+
+                assign_data = {
+                    'name': template.name,
+                    'type': template.assignment_type,
+                    'day': actual_day,
+                    'start_hour': start_hour,
+                    'length_in_hours': template.length_in_hours,
+                    'commanders_needed': template.commanders_needed,
+                    'drivers_needed': template.drivers_needed,
+                    'soldiers_needed': template.soldiers_needed,
+                    'same_mahlaka_required': template.same_mahlaka_required,
+                    'requires_certification': template.requires_certification,
+                    'date': current_date
+                }
+
+                all_assignments.append(assign_data)
+
+    # מיון
+    def assignment_priority(assign):
+        is_standby = assign['type'] in ['כוננות א', 'כוננות ב']
+        priority = 1 if is_standby else 0
+        return (assign['day'], assign['start_hour'], priority)
+
+    all_assignments.sort(key=assignment_priority)
+
+    # מחיקת משימות קיימות
+    if start_date_changed:
+        days_to_delete = session.query(Assignment.day).filter(
+            Assignment.shavzak_id == master_shavzak.id
+        ).distinct().all()
+        days_to_delete = [d[0] for d in days_to_delete]
+    else:
+        day_start = (start_date - master_shavzak.start_date).days
+        days_to_delete = session.query(Assignment.day).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day >= day_start
+        ).distinct().all()
+        days_to_delete = [d[0] for d in days_to_delete]
+
+    if days_to_delete:
+        assignments_to_delete = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day.in_(days_to_delete)
+        ).all()
+
+        for assignment in assignments_to_delete:
+            session.query(AssignmentSoldier).filter(
+                AssignmentSoldier.assignment_id == assignment.id
+            ).delete()
+            session.expunge(assignment)
+
+        session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day.in_(days_to_delete)
+        ).delete(synchronize_session=False)
+        session.commit()
+
+    # הרצת ML
+    schedules = {}
+    mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
+
+    all_commanders = [c for m in mahalkot_data for c in m['commanders']]
+    all_drivers = [d for m in mahalkot_data for d in m['drivers']]
+    all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]
+
+    created_assignments = []
+    failed_assignments = []
+
+    for assign_data in all_assignments:
+        current_date = assign_data['date']
+
+        available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
+        available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
+        available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
+
+        all_available = available_commanders + available_drivers + available_soldiers
+
+        result = smart_scheduler.assign_task(assign_data, all_available, schedules, mahlaka_workload)
+
+        # אם לא נמצא שיבוץ - צור משימה ריקה
+        if not result:
+            # print(f"⚠️ לא נמצא שיבוץ למשימה {assign_data['name']} ביום {assign_data['day']} שעה {assign_data['start_hour']} - יוצר משימה ריקה")
+            result = {
+                'commanders': [],
+                'drivers': [],
+                'soldiers': [],
+                'mahlaka_id': None
+            }
+            # הוסף לרשימת הכשלונות רק לצורך סטטיסטיקה/דיווח, אבל המשימה תיווצר
+            failed_assignments.append(assign_data)
+
+        # עדכן את ה-schedules רק אם יש חיילים (במקרה של הצלחה)
+        for role_key in ['commanders', 'drivers', 'soldiers']:
+            if role_key in result:
+                for soldier_id in result[role_key]:
+                    if soldier_id not in schedules:
+                        schedules[soldier_id] = []
+                    schedules[soldier_id].append((
+                        assign_data['day'],
+                        assign_data['start_hour'],
+                        assign_data['start_hour'] + assign_data['length_in_hours'],
+                        assign_data['name'],
+                        assign_data['type']
+                    ))
+
+        created_assignments.append({
+            **assign_data,
+            'result': result
+        })
+
+        assignment = Assignment(
+            shavzak_id=master_shavzak.id,
+            name=assign_data['name'],
+            assignment_type=assign_data['type'],
+            day=assign_data['day'],
+            start_hour=assign_data['start_hour'],
+            length_in_hours=assign_data['length_in_hours'],
+            assigned_mahlaka_id=result.get('mahlaka_id')
+        )
+        session.add(assignment)
+        session.flush()
+
+        for role_key in ['commanders', 'drivers', 'soldiers']:
+            if role_key in result:
+                role_name = 'מפקד' if role_key == 'commanders' else ('נהג' if role_key == 'drivers' else 'חייל')
+                for soldier_id in result[role_key]:
+                    assign_soldier = AssignmentSoldier(
+                        assignment_id=assignment.id,
+                        soldier_id=soldier_id,
+                        role_in_assignment=role_name
+                    )
+                    session.add(assign_soldier)
+
+    session.commit()
+    
+    smart_scheduler.stats['total_assignments'] += len(created_assignments)
+    smart_scheduler.stats['successful_assignments'] += len(created_assignments)
+    smart_scheduler.save_model(ML_MODEL_PATH)
+
+    return {
+        'message': f'נוצרו {len(created_assignments)} משימות בהצלחה',
+        'assignments': created_assignments,
+        'stats': smart_scheduler.get_stats(),
+        'failed_assignments': [
+            {'name': f['name'], 'type': f['type'], 'day': f['day'], 'start_hour': f['start_hour']}
+            for f in failed_assignments
+        ],
+        'success_rate': f"{(len(created_assignments) / len(all_assignments) * 100):.1f}%" if all_assignments else "0%"
+    }

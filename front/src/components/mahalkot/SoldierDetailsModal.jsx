@@ -1,191 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import api from '../services/api';
-import { Shield, Plus, Users, Trash2, Edit, X, UserCheck } from 'lucide-react';
-import ROLES from '../constants/roles';
+import api from '../../services/api';
+import { Shield, X, Users, Plus, Edit } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { SoldierStatusBadge, StatusChangeModal } from '../components/SoldierStatusBadge';
-import MahlakaModal from '../components/mahalkot/MahlakaModal';
-import SoldiersModal from '../components/mahalkot/SoldiersModal';
+import { HOME_ROUND_DAYS } from '../../constants/config';
 
-const Mahalkot = () => {
-  const { user } = useAuth();
-  const [mahalkot, setMahalkot] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [showSoldiersModal, setShowSoldiersModal] = useState(false);
-  const [selectedMahlaka, setSelectedMahlaka] = useState(null);
-  const [soldiers, setSoldiers] = useState([]);
-
-  useEffect(() => {
-    // Reload mahalkot when the user's pluga_id changes (after creating a pluga)
-    loadMahalkot();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.pluga_id]);
-
-  const loadMahalkot = async () => {
-    try {
-      if (!user?.pluga_id) {
-        // אין פלוגה משוייכת — לא ניתן לטעון מחלקות
-        setMahalkot([]);
-        setLoading(false);
-        return;
-      }
-      const response = await api.get(`/plugot/${user.pluga_id}/mahalkot`);
-      setMahalkot(response.data.mahalkot || []);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error loading mahalkot:', error);
-      toast.error('שגיאה בטעינת מחלקות');
-      setLoading(false);
-    }
-  };
-
-  const deleteMahlaka = async (mahlakaId) => {
-    if (!window.confirm('בטוח שברצונך למחוק את המחלקה? פעולה זו תמחק גם את כל החיילים שבתוכה.')) return;
-
-    try {
-      await api.delete(`/mahalkot/${mahlakaId}`);
-      toast.success('המחלקה נמחקה');
-      loadMahalkot();
-    } catch (error) {
-      console.error('Delete mahlaka error', error);
-      toast.error(error.response?.data?.error || 'שגיאה במחיקת המחלקה');
-    }
-  };
-
-  const loadSoldiers = async (mahlakaId) => {
-    try {
-      const response = await api.get(`/mahalkot/${mahlakaId}/soldiers`);
-      setSoldiers(response.data.soldiers || []);
-    } catch (error) {
-      console.error('Error loading soldiers:', error);
-      toast.error('שגיאה בטעינת חיילים');
-    }
-  };
-
-  const openSoldiersModal = async (mahlaka) => {
-    setSelectedMahlaka(mahlaka);
-    await loadSoldiers(mahlaka.id);
-    setShowSoldiersModal(true);
-  };
-
-  const deleteSoldier = async (soldierId) => {
-    if (!window.confirm('בטוח שברצונך למחוק את החייל?')) return;
-
-    try {
-      await api.delete(`/soldiers/${soldierId}`);
-      toast.success('החייל נמחק בהצלחה');
-      await loadSoldiers(selectedMahlaka.id);
-      loadMahalkot();
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'שגיאה במחיקת חייל');
-    }
-  };
-
-  if (loading) {
-    return <div className="flex items-center justify-center h-64"><div className="spinner"></div></div>;
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">מחלקות</h1>
-          <p className="text-gray-600 mt-1">{mahalkot.length} מחלקות</p>
-        </div>
-                {user.role === 'מפ' && (
-          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
-            <Plus size={20} />
-            <span>הוסף מחלקה</span>
-          </button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {mahalkot.map((mahlaka) => (
-          <div
-            key={mahlaka.id}
-            className="card hover:shadow-lg transition-shadow cursor-pointer"
-            style={{ borderTop: `4px solid ${mahlaka.color}` }}
-            onClick={() => openSoldiersModal(mahlaka)}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="bg-gray-100 p-3 rounded-lg" style={{ backgroundColor: `${mahlaka.color}20` }}>
-                <Shield className="w-8 h-8" style={{ color: mahlaka.color }} />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="badge badge-blue">{mahlaka.soldiers_count} חיילים</span>
-                {user.role === 'מפ' && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteMahlaka(mahlaka.id);
-                    }}
-                    className="btn-ghost text-red-600"
-                    title="מחק מחלקה"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                )}
-              </div>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">מחלקה {mahlaka.number}</h3>
-            <div className="flex items-center gap-2 text-gray-600">
-              <Users size={16} />
-              <span className="text-sm">{mahlaka.soldiers_count} לוחמים</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {mahalkot.length === 0 && (
-        <div className="text-center py-12">
-          <Shield className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">אין מחלקות במערכת</p>
-        </div>
-      )}
-
-      {showModal && (
-        <MahlakaModal
-          plugaId={user.pluga_id}
-          onClose={() => setShowModal(false)}
-          onSave={() => {
-            setShowModal(false);
-            loadMahalkot();
-          }}
-        />
-      )}
-
-      {showSoldiersModal && selectedMahlaka && (
-        <SoldiersModal
-          mahlaka={selectedMahlaka}
-          soldiers={soldiers}
-          onClose={() => {
-            setShowSoldiersModal(false);
-            setSelectedMahlaka(null);
-            setSoldiers([]);
-          }}
-          onDelete={deleteSoldier}
-          onRefresh={() => {
-            loadSoldiers(selectedMahlaka.id);
-            loadMahalkot();
-          }}
-        />
-      )}
-    </div>
-  );
-};
-
-// roles imported from constants
-
-
-
-
-
-
-
-// Soldier Details Modal Component
 const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
   const [availableRoles, setAvailableRoles] = useState([]);
   const [showAddCertModal, setShowAddCertModal] = useState(false);
@@ -257,24 +75,33 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
     }
   };
 
-  // חישוב סבב יציאה נוכחי (כל 21 יום)
+  // חישוב סבב יציאה נוכחי
   const calculateCurrentRound = () => {
     if (!soldier.home_round_date) return null;
 
     const homeRoundDate = new Date(soldier.home_round_date);
     const today = new Date();
-    const diffTime = Math.abs(today - homeRoundDate);
+    today.setHours(0, 0, 0, 0);
+    homeRoundDate.setHours(0, 0, 0, 0);
+
+    const diffTime = today.getTime() - homeRoundDate.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    const roundNumber = Math.floor(diffDays / 21);
-    const daysIntoCurrentRound = diffDays % 21;
+    
+    // Calculate round number and days into round
+    // We use floor for round number to handle negative days correctly
+    const roundNumber = Math.floor(diffDays / HOME_ROUND_DAYS);
+    
+    // Calculate positive modulo for days into round
+    const daysIntoCurrentRound = ((diffDays % HOME_ROUND_DAYS) + HOME_ROUND_DAYS) % HOME_ROUND_DAYS;
+    
     const nextRoundDate = new Date(homeRoundDate);
-    nextRoundDate.setDate(nextRoundDate.getDate() + ((roundNumber + 1) * 21));
+    nextRoundDate.setDate(nextRoundDate.getDate() + ((roundNumber + 1) * HOME_ROUND_DAYS));
 
     return {
-      roundNumber: roundNumber + 1,
+      roundNumber: roundNumber + 1, // Display 1-based round number
       daysIntoRound: daysIntoCurrentRound,
       nextRoundDate: nextRoundDate.toLocaleDateString('he-IL'),
-      daysUntilNextRound: 21 - daysIntoCurrentRound
+      daysUntilNextRound: HOME_ROUND_DAYS - daysIntoCurrentRound
     };
   };
 
@@ -405,7 +232,7 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-700">יום בסבב:</span>
-                  <span className="font-bold text-military-700">{currentRound.daysIntoRound + 1} מתוך 21</span>
+                  <span className="font-bold text-military-700">{currentRound.daysIntoRound + 1} מתוך {HOME_ROUND_DAYS}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-700">ימים עד סבב הבא:</span>
@@ -584,4 +411,4 @@ const SoldierDetailsModal = ({ soldier, onClose, onEdit }) => {
   );
 };
 
-export default Mahalkot;
+export default SoldierDetailsModal;

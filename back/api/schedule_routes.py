@@ -154,6 +154,7 @@ def generate_shavzak(shavzak_id, current_user):
                     'certifications': cert_list,
                     'unavailable_dates': unavailable_dates,
                     'hatash_2_days': soldier.hatash_2_days,
+                    'home_round_date': soldier.home_round_date,
                     'status_type': status.status_type if status else 'בבסיס',
                     'mahlaka_id': mahlaka.id  # חשוב ל-ML!
                 }
@@ -199,6 +200,31 @@ def generate_shavzak(shavzak_id, current_user):
                 hatash_days_list = hatash_2_days.split(',')
                 if str(day_of_week) in hatash_days_list:
                     return False
+
+            # בדוק סבב יציאה (אם מוגדר)
+            # אם תאריך סבב היציאה מוגדר, נחשב אם החייל בבית או בסבב קו
+            home_round_date = soldier_data.get('home_round_date')
+            if home_round_date:
+                if isinstance(home_round_date, str):
+                    home_round_date = datetime.strptime(home_round_date, '%Y-%m-%d').date()
+                
+                # חישוב ימים מאז תחילת הסבב
+                days_diff = (check_date - home_round_date).days
+                if days_diff >= 0:
+                    # ברירת מחדל: סבב קו (17-4)
+                    # כרגע אין שדה cycle_type במסד הנתונים, אז כולם 17-4
+                    cycle_type = soldier_data.get('cycle_type', '17-4')
+                    
+                    if cycle_type == '11-3':
+                        # בדיקה: יציאות הביתה (11-3)
+                        cycle_day_14 = days_diff % 14
+                        if cycle_day_14 >= 11:
+                            return False # בבית - לא זמין
+                    else:
+                        # בדיקה: סבב קו (17-4) - 4 ימים ראשונים הם סבב קו
+                        cycle_day_21 = days_diff % 21
+                        if cycle_day_21 < 4:
+                            return False # בסבב קו - לא זמין
 
             return True
 
@@ -1101,6 +1127,31 @@ def get_live_schedule(pluga_id, current_user):
                             hatash_days_list = hatash_2_days.split(',')
                             if str(day_of_week) in hatash_days_list:
                                 return False
+
+                        # בדוק סבב יציאה (אם מוגדר)
+                        # אם תאריך סבב היציאה מוגדר, נחשב אם החייל בבית או בסבב קו
+                        home_round_date = soldier_data.get('home_round_date')
+                        if home_round_date:
+                            if isinstance(home_round_date, str):
+                                home_round_date = datetime.strptime(home_round_date, '%Y-%m-%d').date()
+                            
+                            # חישוב ימים מאז תחילת הסבב
+                            days_diff = (check_date - home_round_date).days
+                            if days_diff >= 0:
+                                # ברירת מחדל: סבב קו (17-4)
+                                # כרגע אין שדה cycle_type במסד הנתונים, אז כולם 17-4
+                                cycle_type = soldier_data.get('cycle_type', '17-4')
+                                
+                                if cycle_type == '11-3':
+                                    # בדיקה: יציאות הביתה (11-3)
+                                    cycle_day_14 = days_diff % 14
+                                    if cycle_day_14 >= 11:
+                                        return False # בבית - לא זמין
+                                else:
+                                    # בדיקה: סבב קו (17-4) - 4 ימים ראשונים הם סבב קו
+                                    cycle_day_21 = days_diff % 21
+                                    if cycle_day_21 < 4:
+                                        return False # בסבב קו - לא זמין
 
                         return True
 

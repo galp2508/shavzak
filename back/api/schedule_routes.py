@@ -12,6 +12,7 @@ from models import (
     Soldier, UnavailableDate, Certification, AssignmentTemplate,
     SoldierStatus, SchedulingConstraint
 )
+from sqlalchemy.orm import joinedload, selectinload
 from auth import (
     token_required, role_required,
     can_create_shavzak, can_view_shavzak, can_view_pluga, can_edit_pluga,
@@ -112,30 +113,38 @@ def generate_shavzak(shavzak_id, current_user):
         if not templates:
             return jsonify({'error': 'לא קיימות תבניות משימות'}), 400
 
-        # יצירת מבנה נתונים
+        # יצירת מבנה נתונים - אופטימיזציה: טעינה מקדימה של כל הנתונים
+        # 🚀 תיקון ביצועים: טוען את כל החיילים עם כל הנתונים הקשורים בשאילתה אחת!
+        all_soldiers_query = session.query(Soldier).options(
+            selectinload(Soldier.certifications),
+            selectinload(Soldier.unavailable_dates),
+            selectinload(Soldier.current_status)
+        ).join(Mahlaka).filter(Mahlaka.pluga_id == pluga.id).all()
+
+        # בנה מילון מהיר לפי mahlaka_id
+        soldiers_by_mahlaka = {}
+        for soldier in all_soldiers_query:
+            if soldier.mahlaka_id not in soldiers_by_mahlaka:
+                soldiers_by_mahlaka[soldier.mahlaka_id] = []
+            soldiers_by_mahlaka[soldier.mahlaka_id].append(soldier)
+
         mahalkot_data = []
         for mahlaka in mahalkot:
-            soldiers = session.query(Soldier).filter_by(mahlaka_id=mahlaka.id).all()
+            soldiers = soldiers_by_mahlaka.get(mahlaka.id, [])
 
             commanders = []
             drivers = []
             regular_soldiers = []
 
             for soldier in soldiers:
-                # בדיקת זמינות
-                unavailable = session.query(UnavailableDate).filter(
-                    UnavailableDate.soldier_id == soldier.id,
-                    UnavailableDate.date >= shavzak.start_date,
-                    UnavailableDate.date < shavzak.start_date + timedelta(days=shavzak.days_count)
-                ).all()
+                # 🚀 בדיקת זמינות - נתונים כבר טעונים!
+                unavailable_dates = [
+                    u.date for u in soldier.unavailable_dates
+                    if u.date >= shavzak.start_date and u.date < shavzak.start_date + timedelta(days=shavzak.days_count)
+                ]
 
-                unavailable_dates = [u.date for u in unavailable]
-
-                certifications = session.query(Certification).filter_by(soldier_id=soldier.id).all()
-                cert_list = [c.certification_name for c in certifications]
-
-                # קבל סטטוס נוכחי
-                status = session.query(SoldierStatus).filter_by(soldier_id=soldier.id).first()
+                cert_list = [c.certification_name for c in soldier.certifications]
+                status = soldier.current_status
 
                 soldier_data = {
                     'id': soldier.id,

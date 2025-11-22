@@ -165,11 +165,12 @@ def ml_smart_schedule(current_user):
                     'mahlaka_id': mahlaka.id
                 }
 
+                # 🐛 תיקון: כל חייל מופיע רק ברשימה אחת כדי למנוע כפילויות
                 if soldier.role in ['ממ', 'מכ', 'סמל']:
                     commanders.append(soldier_data)
-                if 'נהג' in cert_list:
+                elif 'נהג' in cert_list:
                     drivers.append(soldier_data)
-                if soldier.role not in ['ממ', 'מכ', 'סמל']:
+                else:
                     regular_soldiers.append(soldier_data)
 
             mahalkot_data.append({
@@ -724,11 +725,12 @@ def ml_regenerate_schedule(current_user):
                     'mahlaka_id': mahlaka.id
                 }
 
+                # 🐛 תיקון: כל חייל מופיע רק ברשימה אחת כדי למנוע כפילויות
                 if soldier.role in ['ממ', 'מכ', 'סמל']:
                     commanders.append(soldier_data)
-                if 'נהג' in cert_list:
+                elif 'נהג' in cert_list:
                     drivers.append(soldier_data)
-                if soldier.role not in ['ממ', 'מכ', 'סמל']:
+                else:
                     regular_soldiers.append(soldier_data)
 
             mahalkot_data.append({

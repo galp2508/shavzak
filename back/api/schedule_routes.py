@@ -158,11 +158,12 @@ def generate_shavzak(shavzak_id, current_user):
                     'mahlaka_id': mahlaka.id  # חשוב ל-ML!
                 }
 
+                # 🐛 תיקון: כל חייל מופיע רק ברשימה אחת כדי למנוע כפילויות
                 if soldier.role in ['ממ', 'מכ', 'סמל']:
                     commanders.append(soldier_data)
-                if 'נהג' in cert_list:
+                elif 'נהג' in cert_list:
                     drivers.append(soldier_data)
-                if soldier.role not in ['ממ', 'מכ', 'סמל']:
+                else:
                     regular_soldiers.append(soldier_data)
 
             mahalkot_data.append({
@@ -1059,14 +1060,15 @@ def get_live_schedule(pluga_id, current_user):
                                 'status_type': status.status_type if status else 'בבסיס'
                             }
 
+                            # 🐛 תיקון: כל חייל מופיע רק ברשימה אחת כדי למנוע כפילויות
                             # מפקדים
                             if soldier.role in ['ממ', 'מכ', 'סמל']:
                                 commanders.append(soldier_data)
                             # נהגים - רק לפי הסמכה
-                            if 'נהג' in cert_list:
+                            elif 'נהג' in cert_list:
                                 drivers.append(soldier_data)
                             # כל מי שלא מפקד - חיילים רגילים
-                            if soldier.role not in ['ממ', 'מכ', 'סמל']:
+                            else:
                                 regular_soldiers.append(soldier_data)
 
                         mahalkot_data.append({

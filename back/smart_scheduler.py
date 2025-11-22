@@ -1099,23 +1099,9 @@ class SmartScheduler:
                         'mahlaka_id': mahlaka_id
                     }
 
-                    # 🐛 תיקון: מפקד-נהג יכול למלא שני תפקידים
                     if drivers_needed > 0:
-                        # בדוק כמה מהמפקדים הם גם נהגים
-                        commander_ids = set(c['id'] for c in selected_commanders)
-                        commanders_who_are_drivers = [d for d in mahlaka_drivers if d['id'] in commander_ids]
-
-                        # הפחת מהדרישה את המפקדים-נהגים
-                        remaining_drivers_needed = max(0, drivers_needed - len(commanders_who_are_drivers))
-
-                        # בחר נהגים נוספים רק אם צריך (שאינם המפקדים)
-                        available_non_commander_drivers = [d for d in scored_drivers
-                                                          if d[0]['id'] not in commander_ids]
-                        selected_drivers = [d[0] for d in available_non_commander_drivers[:remaining_drivers_needed]]
-
-                        # הוסף את המפקדים-נהגים לרשימת הנהגים
-                        result['drivers'] = ([c['id'] for c in commanders_who_are_drivers] +
-                                           [d['id'] for d in selected_drivers])
+                        selected_drivers = [d[0] for d in scored_drivers[:drivers_needed]]
+                        result['drivers'] = [d['id'] for d in selected_drivers]
 
                     return result
 
@@ -1169,23 +1155,10 @@ class SmartScheduler:
             'mahlaka_id': mahlaka_id
         }
 
-        # 🐛 תיקון: מפקד-נהג יכול למלא שני תפקידים
+        # נהגים - לפי הדרישה בתבנית
         if drivers_needed > 0:
-            # בדוק כמה מהמפקדים הם גם נהגים
-            commander_ids = set(c['id'] for c in selected_commanders)
-            commanders_who_are_drivers = [d for d in available_drivers if d['id'] in commander_ids]
-
-            # הפחת מהדרישה את המפקדים-נהגים
-            remaining_drivers_needed = max(0, drivers_needed - len(commanders_who_are_drivers))
-
-            # בחר נהגים נוספים רק אם צריך (שאינם המפקדים)
-            available_non_commander_drivers = [d for d in scored_drivers
-                                              if d[0]['id'] not in commander_ids]
-            selected_drivers = [d[0] for d in available_non_commander_drivers[:remaining_drivers_needed]]
-
-            # הוסף את המפקדים-נהגים לרשימת הנהגים
-            result['drivers'] = ([c['id'] for c in commanders_who_are_drivers] +
-                               [d['id'] for d in selected_drivers])
+            selected_drivers = [d[0] for d in scored_drivers[:drivers_needed]]
+            result['drivers'] = [d['id'] for d in selected_drivers]
 
         return result
 
@@ -1269,28 +1242,14 @@ class SmartScheduler:
 
                     mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
 
-                    selected_commander = scored_commanders[0][0]
                     result = {
-                        'commanders': [selected_commander['id']],
+                        'commanders': [scored_commanders[0][0]['id']],
                         'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
                         'mahlaka_id': mahlaka_id
                     }
 
-                    # 🐛 תיקון: מפקד-נהג יכול למלא שני תפקידים
                     if drivers_needed > 0:
-                        # בדוק אם המפקד הוא גם נהג
-                        commander_is_driver = selected_commander['id'] in [d['id'] for d in mahlaka_drivers]
-
-                        if commander_is_driver:
-                            # המפקד גם נהג - הפחת אחד מהדרישה
-                            remaining_drivers_needed = max(0, drivers_needed - 1)
-                            # בחר נהגים נוספים (לא המפקד)
-                            other_drivers = [d for d in scored_drivers if d[0]['id'] != selected_commander['id']]
-                            result['drivers'] = ([selected_commander['id']] +
-                                               [d[0]['id'] for d in other_drivers[:remaining_drivers_needed]])
-                        else:
-                            # המפקד לא נהג - בחר נהגים רגילים
-                            result['drivers'] = [d[0]['id'] for d in scored_drivers[:drivers_needed]]
+                        result['drivers'] = [d[0]['id'] for d in scored_drivers[:drivers_needed]]
 
                     return result
 
@@ -1333,21 +1292,9 @@ class SmartScheduler:
             'mahlaka_id': mahlaka_id
         }
 
-        # 🐛 תיקון: מפקד-נהג יכול למלא שני תפקידים
+        # נהגים - לפי הדרישה בתבנית
         if drivers_needed > 0:
-            # בדוק אם המפקד הוא גם נהג
-            commander_is_driver = selected_commander['id'] in [d['id'] for d in available_drivers]
-
-            if commander_is_driver:
-                # המפקד גם נהג - הפחת אחד מהדרישה
-                remaining_drivers_needed = max(0, drivers_needed - 1)
-                # בחר נהגים נוספים (לא המפקד)
-                other_drivers = [d for d in scored_drivers if d[0]['id'] != selected_commander['id']]
-                result['drivers'] = ([selected_commander['id']] +
-                                   [d[0]['id'] for d in other_drivers[:remaining_drivers_needed]])
-            else:
-                # המפקד לא נהג - בחר נהגים רגילים
-                result['drivers'] = [d[0]['id'] for d in scored_drivers[:drivers_needed]]
+            result['drivers'] = [d[0]['id'] for d in scored_drivers[:drivers_needed]]
 
         return result
 

@@ -158,16 +158,10 @@ def generate_shavzak(shavzak_id, current_user):
                     'mahlaka_id': mahlaka.id  # חשוב ל-ML!
                 }
 
-                # 🐛 תיקון: מפקדים תמיד ברשימת מפקדים
-                is_commander = soldier.role in ['ממ', 'מכ', 'סמל']
-                is_driver = 'נהג' in cert_list
-
-                if is_commander:
+                # כל חייל מופיע רק ברשימה אחת
+                if soldier.role in ['ממ', 'מכ', 'סמל']:
                     commanders.append(soldier_data)
-                    # מפקד-נהג גם ברשימת נהגים (למקרים שצריך מפקד+נהג)
-                    if is_driver:
-                        drivers.append(soldier_data)
-                elif is_driver:
+                elif 'נהג' in cert_list:
                     drivers.append(soldier_data)
                 else:
                     regular_soldiers.append(soldier_data)
@@ -1066,20 +1060,11 @@ def get_live_schedule(pluga_id, current_user):
                                 'status_type': status.status_type if status else 'בבסיס'
                             }
 
-                            # 🐛 תיקון: מפקדים תמיד ברשימת מפקדים
-                            is_commander = soldier.role in ['ממ', 'מכ', 'סמל']
-                            is_driver = 'נהג' in cert_list
-
-                            # מפקדים
-                            if is_commander:
+                            # כל חייל מופיע רק ברשימה אחת
+                            if soldier.role in ['ממ', 'מכ', 'סמל']:
                                 commanders.append(soldier_data)
-                                # מפקד-נהג גם ברשימת נהגים (למקרים שצריך מפקד+נהג)
-                                if is_driver:
-                                    drivers.append(soldier_data)
-                            # נהגים - רק לפי הסמכה
-                            elif is_driver:
+                            elif 'נהג' in cert_list:
                                 drivers.append(soldier_data)
-                            # כל מי שלא מפקד - חיילים רגילים
                             else:
                                 regular_soldiers.append(soldier_data)
 

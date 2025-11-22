@@ -1087,7 +1087,8 @@ class SmartScheduler:
                 # אחרת, לפי עומס רגיל
                 return mahlaka_workload.get(mid, 0)
 
-            sorted_mahalkot = sorted(mahlaka_ids, key=get_mahlaka_priority)
+            # מיון עם רכיב אקראי לשבירת שוויון כדי למנוע העדפה קבועה של אותן מחלקות
+            sorted_mahalkot = sorted(mahlaka_ids, key=lambda mid: (get_mahlaka_priority(mid), random.random()))
 
             for mahlaka_id in sorted_mahalkot:
                 # סנן רק חיילים מהמחלקה הזאת
@@ -1275,7 +1276,8 @@ class SmartScheduler:
                 # אחרת, לפי עומס רגיל
                 return mahlaka_workload.get(mid, 0)
 
-            sorted_mahalkot = sorted(mahlaka_ids, key=get_mahlaka_priority)
+            # מיון עם רכיב אקראי לשבירת שוויון כדי למנוע העדפה קבועה של אותן מחלקות
+            sorted_mahalkot = sorted(mahlaka_ids, key=lambda mid: (get_mahlaka_priority(mid), random.random()))
 
             for mahlaka_id in sorted_mahalkot:
                 mahlaka_commanders = [c for c in available_commanders if c.get('mahlaka_id') == mahlaka_id]

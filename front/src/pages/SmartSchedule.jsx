@@ -26,6 +26,8 @@ const SmartSchedule = () => {
   const [rejectedAssignment, setRejectedAssignment] = useState(null);
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackAssignmentId, setFeedbackAssignmentId] = useState(null);
 
   // 🐛 Debug logging
   useEffect(() => {
@@ -133,14 +135,27 @@ const SmartSchedule = () => {
     }
   };
 
-  const handleFeedback = async (assignmentId, rating) => {
+  const handleFeedback = async (assignmentId, rating, reason = null) => {
     try {
-      const response = await api.post('/ml/feedback', {
+      // אם זה דחייה ואין סיבה, פתח מודל
+      if (rating === 'rejected' && !reason) {
+        setFeedbackAssignmentId(assignmentId);
+        setShowFeedbackModal(true);
+        return;
+      }
+
+      const feedbackData = {
         assignment_id: assignmentId,
         shavzak_id: currentShavzakId,
         rating: rating,
         enable_auto_regeneration: false  // לא יוצר אוטומטית - נותן אופציה לשבץ ידנית
-      });
+      };
+
+      if (reason) {
+        feedbackData.changes = { feedback_text: reason };
+      }
+
+      const response = await api.post('/ml/feedback', feedbackData);
 
       // הצג הודעה מהשרת
       toast.success(response.data.message);
@@ -791,6 +806,21 @@ const SmartSchedule = () => {
         />
       )}
 
+      {/* Feedback Reason Modal */}
+      {showFeedbackModal && (
+        <FeedbackReasonModal
+          onClose={() => {
+            setShowFeedbackModal(false);
+            setFeedbackAssignmentId(null);
+          }}
+          onSubmit={(reason) => {
+            handleFeedback(feedbackAssignmentId, 'rejected', reason);
+            setShowFeedbackModal(false);
+            setFeedbackAssignmentId(null);
+          }}
+        />
+      )}
+
       {/* Constraints Modal */}
       {showConstraints && (
         <Constraints
@@ -937,6 +967,76 @@ const UploadExamplesModal = ({ onClose, onUploadSuccess }) => {
             onClick={onClose}
             className="flex-1 btn-secondary"
           >
+            ביטול
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Feedback Reason Modal
+const FeedbackReasonModal = ({ onClose, onSubmit }) => {
+  const [reason, setReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
+
+  const reasons = [
+    'חיילים לא מתאימים',
+    'ערבוב מחלקות',
+    'תזמון לא טוב',
+    'חוסר במפקדים/נהגים',
+    'אחר'
+  ];
+
+  const handleSubmit = () => {
+    const finalReason = reason === 'אחר' ? customReason : reason;
+    if (!finalReason) return;
+    onSubmit(finalReason);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <h3 className="text-xl font-bold text-gray-900 mb-4">למה השיבוץ לא טוב?</h3>
+        <p className="text-gray-600 mb-4 text-sm">
+          הסבר קצר יעזור למערכת ללמוד ולהשתפר לפעם הבאה.
+        </p>
+
+        <div className="space-y-2 mb-4">
+          {reasons.map((r) => (
+            <label key={r} className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="radio"
+                name="reason"
+                value={r}
+                checked={reason === r}
+                onChange={(e) => setReason(e.target.value)}
+                className="w-4 h-4 text-purple-600"
+              />
+              <span className="text-gray-700">{r}</span>
+            </label>
+          ))}
+        </div>
+
+        {reason === 'אחר' && (
+          <textarea
+            value={customReason}
+            onChange={(e) => setCustomReason(e.target.value)}
+            placeholder="פרט את הסיבה..."
+            className="w-full p-3 border rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 outline-none"
+            rows={3}
+          />
+        )}
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={handleSubmit}
+            disabled={!reason || (reason === 'אחר' && !customReason)}
+            className="flex-1 btn-primary"
+          >
+            שלח פידבק
+          </button>
+          <button onClick={onClose} className="flex-1 btn-secondary">
             ביטול
           </button>
         </div>

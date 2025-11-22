@@ -154,6 +154,7 @@ def generate_shavzak(shavzak_id, current_user):
                     'certifications': cert_list,
                     'unavailable_dates': unavailable_dates,
                     'hatash_2_days': soldier.hatash_2_days,
+                    'home_round_date': soldier.home_round_date,
                     'status_type': status.status_type if status else 'בבסיס',
                     'mahlaka_id': mahlaka.id  # חשוב ל-ML!
                 }
@@ -198,6 +199,22 @@ def generate_shavzak(shavzak_id, current_user):
                 hatash_days_list = hatash_2_days.split(',')
                 if str(day_of_week) in hatash_days_list:
                     return False
+
+            # בדוק סבב יציאה (אם מוגדר) - ברירת מחדל 11-3
+            # אם תאריך סבב היציאה מוגדר, נחשב אם החייל בבית
+            home_round_date = soldier_data.get('home_round_date')
+            if home_round_date:
+                if isinstance(home_round_date, str):
+                    home_round_date = datetime.strptime(home_round_date, '%Y-%m-%d').date()
+                
+                # חישוב ימים מאז תחילת הסבב
+                days_diff = (check_date - home_round_date).days
+                if days_diff >= 0:
+                    # מחזור של 14 יום (11 בסיס + 3 בית)
+                    cycle_day = days_diff % 14
+                    # ימים 11, 12, 13 הם ימים בבית
+                    if cycle_day >= 11:
+                        return False
 
             return True
 

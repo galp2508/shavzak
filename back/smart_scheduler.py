@@ -31,9 +31,11 @@ class SmartScheduler:
         self.min_rest_hours = min_rest_hours
 
         # הגבלות גודל למניעת memory leak
-        self.MAX_TRAINING_EXAMPLES = 1000
-        self.MAX_FEEDBACK_HISTORY = 500
-        self.MAX_REJECTED_ASSIGNMENTS = 200
+        # בהתחלה נשמור היסטוריה קצרה (30) כדי שהמודל ילמד מהר משינויים אחרונים
+        # ולא יתקבע על דפוסים ישנים. בהמשך אפשר להגדיל.
+        self.MAX_TRAINING_EXAMPLES = 30 
+        self.MAX_FEEDBACK_HISTORY = 30
+        self.MAX_REJECTED_ASSIGNMENTS = 30
 
         # נתוני למידה
         self.training_examples = []  # דוגמאות שיבוץ טובות
@@ -90,7 +92,7 @@ class SmartScheduler:
             'workload': 1.5,
             'pattern': 3.0,
             'feedback': 4.0,
-            'block': 10.0,
+            'block': 20.0,  # משקל כפול ללבנות!
             'mahlaka': 0.5
         }
 
@@ -272,7 +274,8 @@ class SmartScheduler:
         if key in self.learned_patterns:
             pattern = self.learned_patterns[key]
             # ככל שיותר דוגמאות, יותר ביטחון
-            data_confidence = min(1.0, pattern['count'] / 20.0)
+            # שינינו ל-10 דוגמאות כדי לקבל ביטחון מלא מהר יותר (במקום 20)
+            data_confidence = min(1.0, pattern['count'] / 10.0)
             confidence_factors.append(data_confidence)
         else:
             confidence_factors.append(0.1)  # ביטחון נמוך
@@ -745,10 +748,11 @@ class SmartScheduler:
         # אם המחלקה שלנו כבר בלבנה - בונוס גדול!
         if soldier_mahlaka in mahalkot_in_block:
             # ככל שיותר משימות למחלקה זו בלבנה, יותר בונוס
-            return 20.0 * mahalkot_in_block[soldier_mahlaka]
+            return 50.0 * mahalkot_in_block[soldier_mahlaka]
 
         # אם יש מחלקה אחרת בלבנה - עונש על ערבוב מחלקות
-        return -15.0
+        # עונש כבד מאוד כדי למנוע ערבוב!
+        return -1000.0
 
     # ============================================
     # LEARNING - למידה מדוגמאות
@@ -1055,8 +1059,35 @@ class SmartScheduler:
                 if s.get('mahlaka_id'):
                     mahlaka_ids.add(s['mahlaka_id'])
 
-            # נסה כל מחלקה לפי סדר עומס (פחות -> יותר)
-            sorted_mahalkot = sorted(mahlaka_ids, key=lambda m: mahlaka_workload.get(m, 0))
+            # נסה כל מחלקה לפי סדר עומס (פחות -> יותר), אבל תן עדיפות למחלקה שכבר בלבנה!
+            def get_mahlaka_priority(mid):
+                # בדוק אם המחלקה הזו כבר משובצת בלבנה הנוכחית
+                block_score = 0
+                task_start = task['start_hour']
+                block = task_start // 8
+                block_start = block * 8
+                block_end = block_start + 8
+                
+                # ספור כמה משימות יש למחלקה הזו בלבנה הזו
+                tasks_in_block = 0
+                for _, schedule in schedules.items():
+                    for assign_day, assign_start, _, _, _ in schedule:
+                        if assign_day == task['day'] and assign_start >= block_start and assign_start < block_end:
+                            # אנחנו צריכים לדעת של מי ה-schedule הזה. 
+                            # זה קצת יקר לחפש את החייל כל פעם, אבל נניח שזה בסדר לכמות קטנה
+                            # אופטימיזציה: נשתמש ב-all_soldiers כדי למצוא את המחלקה
+                            soldier = next((s for s in all_soldiers if s['id'] == _), None)
+                            if soldier and soldier.get('mahlaka_id') == mid:
+                                tasks_in_block += 1
+                
+                # אם יש משימות בלבנה - תן עדיפות עליונה (ציון שלילי נמוך = ראשון במיון)
+                if tasks_in_block > 0:
+                    return -1000 - tasks_in_block # ככל שיש יותר משימות, יותר עדיפות
+                
+                # אחרת, לפי עומס רגיל
+                return mahlaka_workload.get(mid, 0)
+
+            sorted_mahalkot = sorted(mahlaka_ids, key=get_mahlaka_priority)
 
             for mahlaka_id in sorted_mahalkot:
                 # סנן רק חיילים מהמחלקה הזאת
@@ -1218,7 +1249,33 @@ class SmartScheduler:
                 if s.get('mahlaka_id'):
                     mahlaka_ids.add(s['mahlaka_id'])
 
-            sorted_mahalkot = sorted(mahlaka_ids, key=lambda m: mahlaka_workload.get(m, 0))
+            # נסה כל מחלקה לפי סדר עומס (פחות -> יותר), אבל תן עדיפות למחלקה שכבר בלבנה!
+            def get_mahlaka_priority(mid):
+                # בדוק אם המחלקה הזו כבר משובצת בלבנה הנוכחית
+                task_start = task['start_hour']
+                block = task_start // 8
+                block_start = block * 8
+                block_end = block_start + 8
+                
+                # ספור כמה משימות יש למחלקה הזו בלבנה הזו
+                tasks_in_block = 0
+                # אופטימיזציה: בנה מפה של soldier_id -> mahlaka_id פעם אחת בחוץ אם אפשר, אבל כאן זה מקומי
+                soldier_map = {s['id']: s.get('mahlaka_id') for s in all_soldiers}
+                
+                for s_id, schedule in schedules.items():
+                    if soldier_map.get(s_id) == mid:
+                        for assign_day, assign_start, _, _, _ in schedule:
+                            if assign_day == task['day'] and assign_start >= block_start and assign_start < block_end:
+                                tasks_in_block += 1
+                
+                # אם יש משימות בלבנה - תן עדיפות עליונה (ציון שלילי נמוך = ראשון במיון)
+                if tasks_in_block > 0:
+                    return -1000 - tasks_in_block # ככל שיש יותר משימות, יותר עדיפות
+                
+                # אחרת, לפי עומס רגיל
+                return mahlaka_workload.get(mid, 0)
+
+            sorted_mahalkot = sorted(mahlaka_ids, key=get_mahlaka_priority)
 
             for mahlaka_id in sorted_mahalkot:
                 mahlaka_commanders = [c for c in available_commanders if c.get('mahlaka_id') == mahlaka_id]

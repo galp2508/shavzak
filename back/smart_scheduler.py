@@ -508,7 +508,7 @@ class SmartScheduler:
 
     def check_availability(self, soldier: Dict, day: int, start_hour: int,
                           length: int, schedules: Dict, task_date: Optional[date] = None,
-                          min_rest_override: Optional[int] = None) -> bool:
+                          min_rest_override: Optional[int] = None, is_base_task: bool = False) -> bool:
         """
         בדיקת זמינות חייל - אילוץ קשיח
 
@@ -523,6 +523,11 @@ class SmartScheduler:
         
         # קבע שעות מנוחה מינימליות (ברירת מחדל או דריסה)
         min_rest = min_rest_override if min_rest_override is not None else self.min_rest_hours
+
+        # אם זו משימת בסיס, היא לא דורשת מנוחה לפניה (אלא אם כן יש חפיפה)
+        # אבל עדיין צריך לבדוק חפיפה
+        if is_base_task:
+            min_rest = 0
 
         # בדיקת שעת חזרה (12:00 Rule)
         if task_date:
@@ -564,7 +569,8 @@ class SmartScheduler:
 
         # בדיקת חפיפה - אסור שחייל יהיה משובץ פעמיים באותו זמן
         if soldier_id in schedules:
-            for assign_day, assign_start, assign_end, _, _ in schedules[soldier_id]:
+            for item in schedules[soldier_id]:
+                assign_day, assign_start, assign_end = item[:3]
                 # בדוק חפיפה בזמן
                 if assign_day == day:
                     if not (end_hour <= assign_start or start_hour >= assign_end):
@@ -575,23 +581,28 @@ class SmartScheduler:
         # לבנה = 8 שעות עבודה + 16 שעות מנוחה
         if soldier_id in schedules and schedules[soldier_id]:
             last_assign = max(schedules[soldier_id], key=lambda x: (x[0], x[2]))
-            last_day, _, last_end, _, _ = last_assign
+            last_day, _, last_end, _, _, is_last_base_task = last_assign if len(last_assign) == 6 else (*last_assign, False)
 
-            # חשב שעות מאז המשימה האחרונה
-            if last_day == day:
-                # אותו יום
-                hours_since = start_hour - last_end
-                if hours_since < min_rest:
-                    return False  # מנוחה לא מספקת
+            # אם המשימה האחרונה הייתה משימת בסיס, היא לא דורשת מנוחה אחריה
+            if is_last_base_task:
+                # עדיין צריך לבדוק חפיפה (שכבר נבדקה למעלה), אבל לא מנוחה
+                pass
             else:
-                # ימים שונים - חשב מנוחה כוללת
-                hours_until_midnight = 24 - last_end
-                hours_between_days = (day - last_day - 1) * 24
-                hours_from_midnight = start_hour
-                total_rest = hours_until_midnight + hours_between_days + hours_from_midnight
+                # חשב שעות מאז המשימה האחרונה
+                if last_day == day:
+                    # אותו יום
+                    hours_since = start_hour - last_end
+                    if hours_since < min_rest:
+                        return False  # מנוחה לא מספקת
+                else:
+                    # ימים שונים - חשב מנוחה כוללת
+                    hours_until_midnight = 24 - last_end
+                    hours_between_days = (day - last_day - 1) * 24
+                    hours_from_midnight = start_hour
+                    total_rest = hours_until_midnight + hours_between_days + hours_from_midnight
 
-                if total_rest < min_rest:
-                    return False  # מנוחה לא מספקת בין ימים
+                    if total_rest < min_rest:
+                        return False  # מנוחה לא מספקת בין ימים
 
         # בדיקת הסמכות (אם נדרש)
         # זה נבדק בשכבה גבוהה יותר
@@ -1148,7 +1159,8 @@ class SmartScheduler:
         # ניסיון 1: אילוצים רגילים (ברירת מחדל)
         available = [s for s in candidates
                     if self.check_availability(s, task['day'], task['start_hour'],
-                                             task['length_in_hours'], schedules, task.get('date'))]
+                                             task['length_in_hours'], schedules, task.get('date'),
+                                             is_base_task=task.get('is_base_task', False))]
         
         if not available:
             # ניסיון 2: אילוצים מקלים (fallback)
@@ -1156,7 +1168,8 @@ class SmartScheduler:
             available = [s for s in candidates
                         if self.check_availability(s, task['day'], task['start_hour'],
                                                  task['length_in_hours'], schedules, task.get('date'),
-                                                 min_rest_override=min_rest_fallback)]
+                                                 min_rest_override=min_rest_fallback,
+                                                 is_base_task=task.get('is_base_task', False))]
         return available
 
     # ============================================

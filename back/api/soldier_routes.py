@@ -445,6 +445,7 @@ def list_soldiers_by_mahlaka(mahlaka_id, current_user):
                 'name': soldier.name,
                 'role': soldier.role,
                 'kita': soldier.kita,
+                'mahlaka_id': soldier.mahlaka_id,
                 'certifications': cert_list,
                 'has_hatashab': soldier.has_hatashab,
                 'hatash_2_days': soldier.hatash_2_days,

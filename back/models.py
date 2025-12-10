@@ -208,6 +208,15 @@ class AssignmentTemplate(Base):
     requires_certification = Column(String(100), nullable=True)
     requires_senior_commander = Column(Boolean, default=False)
     reuse_soldiers_for_standby = Column(Boolean, default=False)  # האם לקחת חיילים שסיימו משימה לכוננות
+    
+    # תמיכה במשימות רב-יומיות
+    duration_days = Column(Integer, default=0)  # 0 = לפי שעות, >0 = מספר ימים
+    recurrence_interval = Column(Integer, default=1)  # חזרה כל X ימים (1 = כל יום)
+    start_day_offset = Column(Integer, default=0)  # התחלה ביום ה-X של השיבוץ
+
+    is_base_task = Column(Boolean, default=False)  # משימת בסיס (נחשבת כמנוחה)
+    can_split = Column(Boolean, default=False)  # האם ניתן לפצל את המשימה
+    is_skippable = Column(Boolean, default=False)  # האם ניתן לוותר על המשימה במקרה של חוסר כוח אדם
 
     pluga = relationship("Pluga", back_populates="assignment_templates")
 

@@ -1,10 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap, ArrowLeftRight } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap, ArrowLeftRight, Download, ZoomIn, ZoomOut, Eraser } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import html2canvas from 'html2canvas';
 import Constraints from './Constraints';
 import AssignmentModal from '../components/AssignmentModal';
+
+const SortableHeader = ({ name }) => {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: name });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    cursor: 'grab',
+    touchAction: 'none', // Important for PointerSensor
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300 select-none hover:bg-gray-200 active:cursor-grabbing"
+    >
+      {name}
+    </div>
+  );
+};
 
 const LiveSchedule = () => {
   const { user } = useAuth();
@@ -19,9 +44,142 @@ const LiveSchedule = () => {
   const [feedbackGiven, setFeedbackGiven] = useState({}); // מעקב אחרי פידבקים שניתנו {assignmentId: 'approved'/'rejected'}
   const [mlStats, setMlStats] = useState(null); // סטטיסטיקות ML
   const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
+  const [selectedSoldierForSwap, setSelectedSoldierForSwap] = useState(null); // חייל שנבחר להחלפה { soldier, assignment }
   const [isAutoGenerating, setIsAutoGenerating] = useState(false); // מצב יצירה אוטומטית - למניעת לולאות
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackAssignmentId, setFeedbackAssignmentId] = useState(null);
+  const [columnOrder, setColumnOrder] = useState(() => {
+    const savedOrder = localStorage.getItem('shavzakColumnOrder');
+    return savedOrder ? JSON.parse(savedOrder) : [];
+  });
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [touchStartDist, setTouchStartDist] = useState(null);
+  const [touchStartZoom, setTouchStartZoom] = useState(1);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (active.id !== over.id) {
+      setColumnOrder((items) => {
+        const oldIndex = items.indexOf(active.id);
+        const newIndex = items.indexOf(over.id);
+        const newOrder = arrayMove(items, oldIndex, newIndex);
+        localStorage.setItem('shavzakColumnOrder', JSON.stringify(newOrder));
+        return newOrder;
+      });
+    }
+  };
+
+  const deleteDaySchedule = async () => {
+    if (!currentDate) return;
+    
+    if (!window.confirm('האם אתה בטוח שברצונך למחוק את כל השיבוצים ליום זה? פעולה זו אינה הפיכה.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const dateStr = currentDate.toISOString().split('T')[0];
+      await api.delete(`/plugot/${user.pluga_id}/live-schedule/days/${dateStr}`);
+      toast.success('השיבוץ ליום זה נמחק בהצלחה');
+      loadSchedule(currentDate);
+    } catch (error) {
+      console.error('Error deleting day schedule:', error);
+      toast.error('שגיאה במחיקת השיבוץ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearDaySoldiers = async () => {
+    if (!currentDate) return;
+    
+    if (!window.confirm('האם אתה בטוח שברצונך לנקות את כל החיילים מהשיבוץ ליום זה? המשימות יישארו ריקות.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const dateStr = currentDate.toISOString().split('T')[0];
+      await api.post(`/plugot/${user.pluga_id}/live-schedule/days/${dateStr}/clear-soldiers`);
+      toast.success('החיילים נוקו מהשיבוץ בהצלחה');
+      loadSchedule(currentDate);
+    } catch (error) {
+      console.error('Error clearing day soldiers:', error);
+      toast.error('שגיאה בניקוי החיילים מהשיבוץ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportImage = async () => {
+    const element = document.getElementById('schedule-grid');
+    if (!element) return;
+
+    try {
+      // Clone the element to capture full content
+      const clone = element.cloneNode(true);
+      
+      // Reset zoom on clone for export
+      const innerDiv = clone.querySelector('.min-w-max');
+      if (innerDiv) {
+        innerDiv.style.zoom = '1';
+      }
+
+      clone.style.width = 'fit-content';
+      clone.style.height = 'auto';
+      clone.style.overflow = 'visible';
+      clone.style.position = 'absolute';
+      clone.style.top = '-9999px';
+      clone.style.left = '-9999px';
+      document.body.appendChild(clone);
+
+      const canvas = await html2canvas(clone, {
+        scale: 2, // Higher quality
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        windowWidth: clone.scrollWidth,
+        windowHeight: clone.scrollHeight
+      });
+      
+      document.body.removeChild(clone);
+      
+      const link = document.createElement('a');
+      link.download = `shavzak-${currentDate.toISOString().split('T')[0]}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      toast.success('התמונה נשמרה בהצלחה!');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('שגיאה בייצוא התמונה');
+    }
+  };
+
+  useEffect(() => {
+    if (scheduleData?.assignments) {
+      const uniqueNames = [...new Set(scheduleData.assignments.map(a => a.name))].sort();
+      setColumnOrder(prev => {
+        // אם אין סדר קודם, החזר את המיון האלפביתי
+        if (prev.length === 0) return uniqueNames;
+
+        // שמור על הסדר הקיים, הוסף חדשים בסוף
+        const newItems = uniqueNames.filter(n => !prev.includes(n));
+        const existingItems = prev.filter(n => uniqueNames.includes(n));
+        return [...existingItems, ...newItems];
+      });
+    }
+  }, [scheduleData]);
 
   useEffect(() => {
     // התחל עם מחר
@@ -563,6 +721,111 @@ const LiveSchedule = () => {
     }
   };
 
+  // Soldier Swap handler - החלפה בין חיילים
+  const handleSoldierSwapClick = (soldier, assignment, e) => {
+    e.stopPropagation();
+    
+    if (!selectedSoldierForSwap) {
+      // Select first soldier
+      setSelectedSoldierForSwap({ soldier, assignment });
+      toast.info(`נבחר חייל: ${soldier.name}. לחץ על חייל אחר להחלפה`, {
+        autoClose: 3000,
+        icon: '🔄'
+      });
+    } else if (selectedSoldierForSwap.soldier.id === soldier.id) {
+      // Deselect
+      setSelectedSoldierForSwap(null);
+      toast.info('הבחירה בוטלה', { icon: '❌' });
+    } else {
+      // Swap
+      swapSoldiers(selectedSoldierForSwap, { soldier, assignment });
+    }
+  };
+
+  const swapSoldiers = async (source, target) => {
+    try {
+      // We need to update both assignments with the swapped soldiers
+      // 1. Remove source soldier from source assignment and add target soldier
+      // 2. Remove target soldier from target assignment and add source soldier
+      
+      // Prepare updated soldiers list for source assignment
+      const sourceSoldiers = source.assignment.soldiers.map(s => 
+        s.id === source.soldier.id ? { ...target.soldier, role: source.soldier.role_in_assignment } : s
+      );
+      
+      // Prepare updated soldiers list for target assignment
+      const targetSoldiers = target.assignment.soldiers.map(s => 
+        s.id === target.soldier.id ? { ...source.soldier, role: target.soldier.role_in_assignment } : s
+      );
+
+      // If assignments are the same (swapping roles within same assignment)
+      if (source.assignment.id === target.assignment.id) {
+         // Just one update
+         // Actually the map above handles it but we need to be careful not to duplicate
+         // If same assignment, sourceSoldiers and targetSoldiers are derived from same list
+         // We should just swap in one list
+         const newSoldiers = source.assignment.soldiers.map(s => {
+             if (s.id === source.soldier.id) return { ...target.soldier, role: source.soldier.role_in_assignment };
+             if (s.id === target.soldier.id) return { ...source.soldier, role: target.soldier.role_in_assignment };
+             return s;
+         });
+         
+         await api.put(`/assignments/${source.assignment.id}/soldiers`, {
+             soldiers: newSoldiers.map(s => ({ soldier_id: s.id, role: s.role }))
+         });
+      } else {
+          // Two updates
+          await Promise.all([
+              api.put(`/assignments/${source.assignment.id}/soldiers`, {
+                  soldiers: sourceSoldiers.map(s => ({ soldier_id: s.id, role: s.role_in_assignment || 'חייל' }))
+              }),
+              api.put(`/assignments/${target.assignment.id}/soldiers`, {
+                  soldiers: targetSoldiers.map(s => ({ soldier_id: s.id, role: s.role_in_assignment || 'חייל' }))
+              })
+          ]);
+      }
+
+      toast.success('החיילים הוחלפו בהצלחה! 🔄', { icon: '✅' });
+      setSelectedSoldierForSwap(null);
+      loadSchedule(currentDate);
+    } catch (error) {
+      console.error('Error swapping soldiers:', error);
+      toast.error('שגיאה בהחלפת החיילים');
+      setSelectedSoldierForSwap(null);
+    }
+  };
+
+  // Pinch to Zoom Handlers
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+      setTouchStartDist(dist);
+      setTouchStartZoom(zoomLevel);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches.length === 2 && touchStartDist) {
+      const dist = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+      const scale = dist / touchStartDist;
+      // Limit zoom between 0.5 and 2.0
+      setZoomLevel(Math.min(Math.max(touchStartZoom * scale, 0.5), 2.0));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setTouchStartDist(null);
+  };
+
+  const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.1, 2.0));
+  const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.1, 0.5));
+
   if (loading && !scheduleData) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -574,87 +837,100 @@ const LiveSchedule = () => {
   return (
     <div className="space-y-6">
       {/* Header with Date Navigation */}
-      <div className="card bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl border-none">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="bg-white bg-opacity-20 p-3 rounded-2xl backdrop-blur-sm animate-pulse-slow">
+      <div className="card bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl border-none p-4 md:p-6">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="bg-white bg-opacity-20 p-3 rounded-2xl backdrop-blur-sm animate-pulse-slow hidden md:block">
               <Calendar className="w-12 h-12" />
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-4xl font-bold tracking-tight">שיבוץ חי</h1>
+            <div className="flex-1 text-center md:text-right">
+              <div className="flex items-center justify-center md:justify-start gap-3">
+                <h1 className="text-3xl md:text-4xl font-bold tracking-tight">שיבוץ חי</h1>
                 <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs px-3 py-1 rounded-full font-bold animate-pulse flex items-center gap-1">
                   <Sparkles size={12} />
                   LIVE
                 </span>
               </div>
-              <p className="text-purple-100 text-lg font-medium">ניווט אוטומטי בין ימים • למידת מכונה פעילה</p>
+              <p className="text-purple-100 text-sm md:text-lg font-medium hidden md:block">ניווט אוטומטי בין ימים • למידת מכונה פעילה</p>
             </div>
           </div>
 
           {/* Date Navigation */}
-          <div className="flex items-center gap-4 bg-white bg-opacity-20 backdrop-blur-md rounded-2xl p-4 shadow-lg">
+          <div className="flex items-center justify-between w-full md:w-auto gap-4 bg-white bg-opacity-20 backdrop-blur-md rounded-2xl p-2 md:p-4 shadow-lg">
             <button
               onClick={() => navigateDay(-1)}
-              className="p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
+              className="p-2 md:p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
               title="יום קודם (מקש חץ ימינה)"
             >
-              <ChevronRight size={28} />
+              <ChevronRight size={24} className="md:w-7 md:h-7" />
             </button>
 
-            <div className="text-center min-w-[220px]">
-              <div className="text-3xl font-bold tracking-wide">
+            <div className="text-center min-w-[120px] md:min-w-[220px]">
+              <div className="text-xl md:text-3xl font-bold tracking-wide">
                 {currentDate && getDayName(currentDate)}
               </div>
-              <div className="text-base opacity-90 font-medium mt-1">
+              <div className="text-sm md:text-base opacity-90 font-medium mt-1">
                 {currentDate && currentDate.toLocaleDateString('he-IL')}
               </div>
             </div>
 
             <button
               onClick={() => navigateDay(1)}
-              className="p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
+              className="p-2 md:p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
               title="יום הבא (מקש חץ שמאלה)"
             >
-              <ChevronLeft size={28} />
+              <ChevronLeft size={24} className="md:w-7 md:h-7" />
             </button>
           </div>
 
-          <div className="flex items-center gap-2 mr-4">
+          <div className="flex items-center justify-center gap-2 w-full md:w-auto flex-wrap">
             {(user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
               <>
                 <button
                   onClick={generateSmartSchedule}
                   disabled={isGenerating}
-                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-lg transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
+                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-lg transition-all flex items-center gap-2 shadow-lg disabled:opacity-50 text-sm md:text-base"
                   title="יצירת שיבוץ חכם עם AI"
                 >
                   {isGenerating ? (
                     <>
-                      <RefreshCw size={20} className="animate-spin" />
-                      <span className="hidden md:inline">מייצר...</span>
+                      <RefreshCw size={18} className="animate-spin" />
+                      <span className="hidden sm:inline">מייצר...</span>
                     </>
                   ) : (
                     <>
-                      <Brain size={20} />
-                      <span className="hidden md:inline">שיבוץ AI</span>
+                      <Brain size={18} />
+                      <span className="hidden sm:inline">שיבוץ AI</span>
                     </>
                   )}
-                </button>
-                <button
-                  onClick={openNewAssignmentModal}
-                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors flex items-center gap-2"
-                  title="הוסף משימה חדשה"
-                >
-                  <Plus size={24} />
-                  <span className="hidden md:inline">משימה חדשה</span>
                 </button>
                 <button
                   onClick={() => setShowConstraints(true)}
                   className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
                   title="אילוצי שיבוץ"
                 >
-                  <Shield size={24} />
+                  <Shield size={20} className="md:w-6 md:h-6" />
+                </button>
+                <button
+                  onClick={handleExportImage}
+                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                  title="ייצא לתמונה"
+                >
+                  <Download size={20} className="md:w-6 md:h-6" />
+                </button>
+                <button
+                  onClick={clearDaySoldiers}
+                  className="p-2 hover:bg-orange-500 hover:bg-opacity-20 text-orange-600 hover:text-orange-700 rounded-lg transition-colors"
+                  title="נקה חיילים (השאר משימות)"
+                >
+                  <Eraser size={20} className="md:w-6 md:h-6" />
+                </button>
+                <button
+                  onClick={deleteDaySchedule}
+                  className="p-2 hover:bg-red-500 hover:bg-opacity-20 text-red-600 hover:text-red-700 rounded-lg transition-colors"
+                  title="מחק שיבוץ ליום זה"
+                >
+                  <Trash2 size={20} className="md:w-6 md:h-6" />
                 </button>
               </>
             )}
@@ -664,7 +940,7 @@ const LiveSchedule = () => {
               title="רענן"
               disabled={loading}
             >
-              <RefreshCw size={24} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={20} className={`md:w-6 md:h-6 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -800,7 +1076,9 @@ const LiveSchedule = () => {
                   <div className="bg-white p-3 rounded-lg border-2 border-blue-200 hover:border-blue-400 transition-all hover:shadow-md">
                     <div className="flex items-center gap-2 mb-1">
                       <Calendar className="w-4 h-4 text-blue-600" />
-                      <div className="text-xs text-gray-500 font-medium">משימות</div>
+                      <div className="text-xs text-gray-500 font-medium mb-1">
+                        משימות
+                      </div>
                     </div>
                     <div className="text-2xl font-bold text-blue-700">{stats.totalAssignments}</div>
                   </div>
@@ -809,7 +1087,9 @@ const LiveSchedule = () => {
                   <div className="bg-white p-3 rounded-lg border-2 border-purple-200 hover:border-purple-400 transition-all hover:shadow-md">
                     <div className="flex items-center gap-2 mb-1">
                       <Users className="w-4 h-4 text-purple-600" />
-                      <div className="text-xs text-gray-500 font-medium">חיילים</div>
+                      <div className="text-xs text-gray-500 font-medium mb-1">
+                        חיילים
+                      </div>
                     </div>
                     <div className="text-2xl font-bold text-purple-700">{stats.totalSoldiers}</div>
                   </div>
@@ -818,7 +1098,9 @@ const LiveSchedule = () => {
                   <div className="bg-white p-3 rounded-lg border-2 border-indigo-200 hover:border-indigo-400 transition-all hover:shadow-md">
                     <div className="flex items-center gap-2 mb-1">
                       <Clock className="w-4 h-4 text-indigo-600" />
-                      <div className="text-xs text-gray-500 font-medium">ממוצע שעות</div>
+                      <div className="text-xs text-gray-500 font-medium mb-1">
+                        ממוצע שעות
+                      </div>
                     </div>
                     <div className="text-2xl font-bold text-indigo-700">{stats.avgWorkload}ש'</div>
                   </div>
@@ -831,7 +1113,9 @@ const LiveSchedule = () => {
                   }`}>
                     <div className="flex items-center gap-2 mb-1">
                       <AlertTriangle className={`w-4 h-4 ${stats.lowConfidenceCount > 0 ? 'text-yellow-600' : 'text-gray-400'}`} />
-                      <div className="text-xs text-gray-500 font-medium">אזהרות</div>
+                      <div className="text-xs text-gray-500 font-medium mb-1">
+                        אזהרות
+                      </div>
                     </div>
                     <div className={`text-2xl font-bold ${stats.lowConfidenceCount > 0 ? 'text-yellow-700' : 'text-gray-400'}`}>
                       {stats.lowConfidenceCount}
@@ -842,7 +1126,9 @@ const LiveSchedule = () => {
                   <div className="bg-white p-3 rounded-lg border-2 border-green-200 hover:border-green-400 transition-all hover:shadow-md">
                     <div className="flex items-center gap-2 mb-1">
                       <ThumbsUp className="w-4 h-4 text-green-600" />
-                      <div className="text-xs text-gray-500 font-medium">אושרו</div>
+                      <div className="text-xs text-gray-500 font-medium mb-1">
+                        אושרו
+                      </div>
                     </div>
                     <div className="text-2xl font-bold text-green-700">{stats.approvedCount}</div>
                   </div>
@@ -851,7 +1137,9 @@ const LiveSchedule = () => {
                   <div className="bg-white p-3 rounded-lg border-2 border-red-200 hover:border-red-400 transition-all hover:shadow-md">
                     <div className="flex items-center gap-2 mb-1">
                       <ThumbsDown className="w-4 h-4 text-red-600" />
-                      <div className="text-xs text-gray-500 font-medium">נדחו</div>
+                      <div className="text-xs text-gray-500 font-medium mb-1">
+                        נדחו
+                      </div>
                     </div>
                     <div className="text-2xl font-bold text-red-700">{stats.rejectedCount}</div>
                   </div>
@@ -1000,16 +1288,60 @@ const LiveSchedule = () => {
               <h2 className="text-2xl font-bold text-gray-900">
                 לוח שעות - {getDayName(currentDate)}
               </h2>
-              <span className="text-sm text-gray-500">
-                {scheduleData?.assignments?.length} משימות
-              </span>
+              
+              <div className="flex items-center gap-4">
+                {/* Zoom Controls */}
+                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1" dir="ltr">
+                  <button 
+                    onClick={handleZoomOut}
+                    className="p-1 hover:bg-white rounded-md transition-colors disabled:opacity-50"
+                    disabled={zoomLevel <= 0.5}
+                    title="הקטן תצוגה"
+                  >
+                    <ZoomOut size={18} />
+                  </button>
+                  <span className="text-xs font-medium w-10 text-center">
+                    {Math.round(zoomLevel * 100)}%
+                  </span>
+                  <button 
+                    onClick={handleZoomIn}
+                    className="p-1 hover:bg-white rounded-md transition-colors disabled:opacity-50"
+                    disabled={zoomLevel >= 2.0}
+                    title="הגדל תצוגה"
+                  >
+                    <ZoomIn size={18} />
+                  </button>
+                </div>
+
+                <span className="text-sm text-gray-500 hidden sm:inline">
+                  {scheduleData?.assignments?.length} משימות
+                </span>
+              </div>
             </div>
 
             {/* Time Grid Schedule */}
-            <div className="overflow-x-auto">
+            <div 
+              className="overflow-x-auto touch-pan-x touch-pan-y" 
+              id="schedule-grid"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
               {(() => {
-                // צור מפה של משימות לפי שם ושעה
-                const assignmentNames = [...new Set(scheduleData?.assignments?.map(a => a.name) || [])].sort();
+                // Use columnOrder if available, otherwise fallback to sorted names
+                let assignmentNames = columnOrder;
+                const currentNames = [...new Set(scheduleData?.assignments?.map(a => a.name) || [])].sort();
+                
+                if (!assignmentNames || assignmentNames.length === 0) {
+                    assignmentNames = currentNames;
+                } else {
+                    const missingNames = currentNames.filter(n => !assignmentNames.includes(n));
+                    if (missingNames.length > 0) {
+                        assignmentNames = [...assignmentNames, ...missingNames];
+                    }
+                    assignmentNames = assignmentNames.filter(n => currentNames.includes(n));
+                }
+
                 const assignmentsByName = {};
                 assignmentNames.forEach(name => {
                   assignmentsByName[name] = [];
@@ -1026,20 +1358,25 @@ const LiveSchedule = () => {
                 const hours = Array.from({ length: 24 }, (_, i) => i);
 
               return (
-                <div className="min-w-max">
+                <DndContext 
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                <div className="min-w-max" style={{ zoom: zoomLevel }}>
                   {/* Header - שמות תבניות */}
                   <div className="flex border-b-2 border-gray-300 mb-2">
                     <div className="w-20 flex-shrink-0 font-bold text-gray-700 p-2">
                       שעה
                     </div>
-                    {assignmentNames.map(name => (
-                      <div
-                        key={name}
-                        className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300"
-                      >
-                        {name}
-                      </div>
-                    ))}
+                    <SortableContext 
+                        items={assignmentNames}
+                        strategy={horizontalListSortingStrategy}
+                    >
+                        {assignmentNames.map(name => (
+                            <SortableHeader key={name} name={name} />
+                        ))}
+                    </SortableContext>
                   </div>
 
                   {/* Grid Container */}
@@ -1070,8 +1407,9 @@ const LiveSchedule = () => {
                         {/* Assignment Blocks - Positioned Absolutely */}
                         <div className="absolute inset-0 pointer-events-none">
                           {assignmentsByName[name]?.map(assignment => {
-                            const startHour = assignment.start_hour || 0;
-                            const lengthInHours = assignment.length_in_hours || 1;
+                            // Use display values if available (for multi-day support), otherwise fallback to original
+                            const startHour = assignment.display_start_hour !== undefined ? assignment.display_start_hour : (assignment.start_hour || 0);
+                            const lengthInHours = assignment.display_length_in_hours !== undefined ? assignment.display_length_in_hours : (assignment.length_in_hours || 1);
                             const endHour = startHour + lengthInHours;
                             // צבע לפי פלוגתי (2+ מחלקות = צהוב) או מחלקתי (צבע המחלקה)
                             const assignmentColor = getAssignmentColor(assignment);
@@ -1226,11 +1564,20 @@ const LiveSchedule = () => {
                                           const workload = calculateSoldierWorkload(soldier.id);
                                           const workloadPercentage = Math.min((workload / 60) * 100, 100); // מקסימום 60 שעות = 100%
                                           const workloadColor = workload > 40 ? 'bg-red-500' : workload > 20 ? 'bg-yellow-500' : 'bg-green-500';
+                                          
+                                          const isSelectedSoldier = selectedSoldierForSwap && 
+                                                                  selectedSoldierForSwap.soldier.id === soldier.id && 
+                                                                  selectedSoldierForSwap.assignment.id === assignment.id;
 
                                           return (
                                             <div
                                               key={soldier.id}
-                                              className="text-xs bg-white/25 backdrop-blur-md px-2 py-1 rounded border border-white/30 shadow-sm hover:bg-white/35 transition-all duration-200"
+                                              onClick={(e) => (user.role === 'מפ' || user.role === 'ממ') && handleSoldierSwapClick(soldier, assignment, e)}
+                                              className={`text-xs backdrop-blur-md px-2 py-1 rounded border shadow-sm transition-all duration-200 cursor-pointer
+                                                ${isSelectedSoldier 
+                                                    ? 'bg-yellow-500 border-yellow-300 ring-2 ring-yellow-300 animate-pulse text-white' 
+                                                    : 'bg-white/25 border-white/30 hover:bg-white/35 text-white'}
+                                              `}
                                             >
                                               <div className="font-semibold flex items-center justify-between gap-1">
                                                 <div className="flex items-center gap-1">
@@ -1272,6 +1619,7 @@ const LiveSchedule = () => {
                     ))}
                   </div>
                 </div>
+                </DndContext>
                 );
               })()}
             </div>

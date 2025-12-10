@@ -27,11 +27,19 @@ const AssignmentModal = ({
   const [loadingSoldiers, setLoadingSoldiers] = useState(true);
   const [soldierAssignmentCounts, setSoldierAssignmentCounts] = useState({});
   const [mahalkot, setMahalkot] = useState([]);
+  const [expandedMahalkot, setExpandedMahalkot] = useState({}); // For accordion
 
   const assignmentTypes = [
     'שמירה', 'סיור', 'כוננות א', 'כוננות ב',
     'חמל', 'תורן מטבח', 'חפק גשש', 'שלז', 'קצין תורן'
   ];
+
+  const toggleMahlaka = (mahlakaId) => {
+    setExpandedMahalkot(prev => ({
+      ...prev,
+      [mahlakaId]: !prev[mahlakaId]
+    }));
+  };
 
   useEffect(() => {
     loadAvailableSoldiers();
@@ -130,7 +138,7 @@ const AssignmentModal = ({
     }));
   };
 
-  const addSoldier = (soldier) => {
+  const addSoldier = (soldier, role = 'חייל') => {
     if (selectedSoldiers.find(s => s.soldier_id === soldier.id)) {
       toast.warning('חייל זה כבר משובץ');
       return;
@@ -139,7 +147,7 @@ const AssignmentModal = ({
     setSelectedSoldiers(prev => [...prev, {
       soldier_id: soldier.id,
       name: soldier.name,
-      role: 'חייל',
+      role: role,
       soldier_role: soldier.role
     }]);
   };
@@ -152,6 +160,15 @@ const AssignmentModal = ({
     setSelectedSoldiers(prev => prev.map(s =>
       s.soldier_id === soldierId ? { ...s, role: newRole } : s
     ));
+  };
+
+  const handleSoldierToggle = (soldier, defaultRole = 'חייל') => {
+    const isSelected = selectedSoldiers.some(s => s.soldier_id === soldier.id);
+    if (isSelected) {
+      removeSoldier(soldier.id);
+    } else {
+      addSoldier(soldier, defaultRole);
+    }
   };
 
   const handleSave = async () => {
@@ -196,6 +213,92 @@ const AssignmentModal = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const getSortedSoldiers = (soldiers) => {
+    // Sort by assignment count (ascending)
+    return [...soldiers].sort((a, b) => {
+      const countA = soldierAssignmentCounts[a.id] || 0;
+      const countB = soldierAssignmentCounts[b.id] || 0;
+      return countA - countB;
+    });
+  };
+
+  const renderSoldierList = (categoryTitle, filterFn, defaultRole = 'חייל') => {
+    const filteredSoldiers = availableSoldiers.filter(filterFn);
+    const sortedSoldiers = getSortedSoldiers(filteredSoldiers);
+    
+    // Group by Mahlaka
+    const soldiersByMahlaka = {};
+    mahalkot.forEach(m => {
+        soldiersByMahlaka[m.id] = {
+            ...m,
+            soldiers: sortedSoldiers.filter(s => s.mahlaka_id === m.id)
+        };
+    });
+
+    return (
+      <div className="mb-4">
+        <h4 className="font-bold text-gray-700 mb-2 border-b pb-1">{categoryTitle}</h4>
+        <div className="space-y-2">
+          {mahalkot.map(mahlaka => {
+            const group = soldiersByMahlaka[mahlaka.id];
+            if (!group || group.soldiers.length === 0) return null;
+            
+            const isExpanded = expandedMahalkot[`${categoryTitle}-${mahlaka.id}`];
+            
+            return (
+              <div key={mahlaka.id} className="border rounded-lg overflow-hidden">
+                <button
+                    type="button"
+                    onClick={() => toggleMahlaka(`${categoryTitle}-${mahlaka.id}`)}
+                    className="w-full flex items-center justify-between p-2 bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: mahlaka.color }}></div>
+                        <span className="font-medium text-sm">מחלקה {mahlaka.number}</span>
+                        <span className="text-xs text-gray-500">({group.soldiers.length})</span>
+                    </div>
+                    <div className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                        ▼
+                    </div>
+                </button>
+                
+                {isExpanded && (
+                    <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white">
+                        {group.soldiers.map(soldier => {
+                            const isSelected = selectedSoldiers.some(s => s.soldier_id === soldier.id);
+                            const count = soldierAssignmentCounts[soldier.id] || 0;
+                            
+                            return (
+                                <div
+                                    key={soldier.id}
+                                    onClick={() => handleSoldierToggle(soldier, defaultRole)}
+                                    className={`
+                                        flex items-center justify-between p-2 rounded cursor-pointer border transition-all
+                                        ${isSelected 
+                                            ? 'bg-military-50 border-military-500 ring-1 ring-military-500' 
+                                            : 'bg-white border-gray-200 hover:border-military-300 hover:bg-gray-50'}
+                                    `}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-2 h-2 rounded-full ${count === 0 ? 'bg-green-500' : count > 1 ? 'bg-red-500' : 'bg-yellow-500'}`}></div>
+                                        <span className="text-sm font-medium">{soldier.name}</span>
+                                    </div>
+                                    <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                                        {count} משימות
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -356,90 +459,35 @@ const AssignmentModal = ({
                 <div className="spinner"></div>
               </div>
             ) : (
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {mahalkot.map(mahlaka => {
-                  const mahlakaSoldiers = availableSoldiers.filter(s => s.mahlaka_id === mahlaka.id);
-                  if (mahlakaSoldiers.length === 0) return null;
+              <div className="space-y-6 max-h-96 overflow-y-auto pr-2">
+                {/* Commanders */}
+                {renderSoldierList('מפקדים', (s) => {
+                    const isCommander = ['ממ', 'מכ', 'סמל'].includes(s.role) || 
+                                      (s.certifications && s.certifications.some(c => c.name === 'מפקד'));
+                    return isCommander;
+                }, 'מפקד')}
 
-                  return (
-                    <div key={mahlaka.id} className="border-2 border-gray-200 rounded-xl p-3">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div
-                          className="w-4 h-4 rounded-full"
-                          style={{ backgroundColor: mahlaka.color || '#6B7280' }}
-                        />
-                        <h4 className="font-bold text-gray-800">
-                          מחלקה {mahlaka.number}
-                        </h4>
-                        <span className="text-sm text-gray-500">({mahlakaSoldiers.length} חיילים)</span>
-                      </div>
+                {/* Drivers */}
+                {renderSoldierList('נהגים', (s) => {
+                    const isDriver = s.role.includes('נהג') || 
+                                   (s.certifications && s.certifications.some(c => c.name === 'נהג'));
+                    // Exclude if already shown as commander (unless they are primarily driver?)
+                    // Let's keep them in both if they qualify, or prioritize commander?
+                    // User said: "Commanders then Drivers then Soldiers"
+                    // So if someone is both, they appear in Commanders.
+                    const isCommander = ['ממ', 'מכ', 'סמל'].includes(s.role) || 
+                                      (s.certifications && s.certifications.some(c => c.name === 'מפקד'));
+                    return isDriver && !isCommander;
+                }, 'נהג')}
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {mahlakaSoldiers.map(soldier => {
-                          const isSelected = selectedSoldiers.find(s => s.soldier_id === soldier.id);
-                          const assignmentCount = soldierAssignmentCounts[soldier.id] || 0;
-
-                          // קביעת צבע לפי סטטוס שיבוץ
-                          let bgColor, textColor, borderColor, hoverBg;
-                          if (assignmentCount >= 2) {
-                            // אדום - משובץ פעמיים או יותר
-                            bgColor = 'bg-red-100';
-                            textColor = 'text-red-900';
-                            borderColor = 'border-red-400';
-                            hoverBg = 'hover:bg-red-200';
-                          } else if (assignmentCount === 1) {
-                            // אפור - משובץ פעם אחת
-                            bgColor = 'bg-gray-200';
-                            textColor = 'text-gray-700';
-                            borderColor = 'border-gray-400';
-                            hoverBg = 'hover:bg-gray-300';
-                          } else {
-                            // צבע המחלקה - לא משובץ
-                            bgColor = '';
-                            textColor = 'text-gray-900';
-                            borderColor = 'border-gray-200';
-                            hoverBg = '';
-                          }
-
-                          return (
-                            <button
-                              key={soldier.id}
-                              onClick={() => addSoldier(soldier)}
-                              disabled={isSelected}
-                              className={`p-3 rounded-lg text-right transition-all border-2 ${
-                                isSelected
-                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50'
-                                  : `${bgColor} ${textColor} ${borderColor} ${hoverBg}`
-                              }`}
-                              style={
-                                !isSelected && assignmentCount === 0
-                                  ? {
-                                      backgroundColor: `${mahlaka.color || '#6B7280'}15`,
-                                      borderColor: mahlaka.color || '#6B7280'
-                                    }
-                                  : {}
-                              }
-                            >
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <div className="font-medium">{soldier.name}</div>
-                                  <div className="text-xs opacity-75">{soldier.role}</div>
-                                </div>
-                                {assignmentCount > 0 && !isSelected && (
-                                  <div className={`text-xs font-bold px-2 py-1 rounded ${
-                                    assignmentCount >= 2 ? 'bg-red-600 text-white' : 'bg-gray-600 text-white'
-                                  }`}>
-                                    {assignmentCount}×
-                                  </div>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
+                {/* Soldiers */}
+                {renderSoldierList('חיילים', (s) => {
+                    const isCommander = ['ממ', 'מכ', 'סמל'].includes(s.role) || 
+                                      (s.certifications && s.certifications.some(c => c.name === 'מפקד'));
+                    const isDriver = s.role.includes('נהג') || 
+                                   (s.certifications && s.certifications.some(c => c.name === 'נהג'));
+                    return !isCommander && !isDriver;
+                }, 'חייל')}
               </div>
             )}
           </div>

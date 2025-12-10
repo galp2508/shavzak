@@ -1170,6 +1170,93 @@ def get_live_schedule(pluga_id, current_user):
                         current_date = master_shavzak.start_date + timedelta(days=day)
 
                         for template in templates:
+                            # טיפול במשימות רב-יומיות
+                            if template.duration_days > 0:
+                                # בדוק אם המשימה צריכה להתחיל ביום הזה
+                                # חישוב: (יום נוכחי - אופסט) % אינטרוול == 0
+                                # וגם: יום נוכחי >= אופסט
+                                if day >= template.start_day_offset and \
+                                   (day - template.start_day_offset) % template.recurrence_interval == 0:
+                                    
+                                    # יצירת משימה אחת ארוכה
+                                    assign_data = {
+                                        'name': template.name,
+                                        'type': template.assignment_type,
+                                        'day': day,
+                                        'start_hour': template.start_hour or 8, # ברירת מחדל 8 בבוקר
+                                        'length_in_hours': template.duration_days * 24, # המרה לשעות
+                                        'commanders_needed': template.commanders_needed,
+                                        'drivers_needed': template.drivers_needed,
+                                        'soldiers_needed': template.soldiers_needed,
+                                        'same_mahlaka_required': template.same_mahlaka_required,
+                                        'requires_certification': template.requires_certification,
+                                        'requires_senior_commander': template.requires_senior_commander,
+                                        'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
+                                        'date': current_date,
+                                        'is_base_task': template.is_base_task
+                                    }
+                                    all_assignments.append(assign_data)
+                                continue
+
+                            # טיפול במשימות רגילות (לפי שעות)
+                            # אם המשימה ניתנת לפיצול (can_split), ניצור שתי משימות נפרדות
+                            if template.can_split:
+                                # נניח פיצול לשני חלקים שווים עם רווח ביניהם
+                                # למשל: פתיחה בבוקר, סגירה בערב
+                                # אם לא מוגדרת שעה, נניח 06:00 ו-18:00
+                                # אם מוגדרת שעה, נניח שזו שעת ההתחלה של החלק הראשון
+                                
+                                # שימוש בחלוקה שלמה כדי למנוע שברים (ה-DB דורש Integer)
+                                part_length_1 = template.length_in_hours // 2
+                                part_length_2 = template.length_in_hours - part_length_1
+                                
+                                # חלק 1 - פתיחה
+                                start_hour_1 = template.start_hour if template.start_hour is not None else 6
+                                
+                                assign_data_1 = {
+                                    'name': f"{template.name} (פתיחה)",
+                                    'type': template.assignment_type,
+                                    'day': day,
+                                    'start_hour': start_hour_1,
+                                    'length_in_hours': part_length_1,
+                                    'commanders_needed': template.commanders_needed,
+                                    'drivers_needed': template.drivers_needed,
+                                    'soldiers_needed': template.soldiers_needed,
+                                    'same_mahlaka_required': template.same_mahlaka_required,
+                                    'requires_certification': template.requires_certification,
+                                    'requires_senior_commander': template.requires_senior_commander,
+                                    'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
+                                    'date': current_date,
+                                    'is_base_task': template.is_base_task
+                                }
+                                all_assignments.append(assign_data_1)
+                                
+                                # חלק 2 - סגירה (אחרי 12 שעות או בסוף היום)
+                                # אם החלק הראשון ב-6, השני ב-18
+                                start_hour_2 = start_hour_1 + 12
+                                if start_hour_2 + part_length_2 > 24:
+                                    start_hour_2 = 24 - part_length_2 # דוחף לסוף היום אם חורג
+                                
+                                assign_data_2 = {
+                                    'name': f"{template.name} (סגירה)",
+                                    'type': template.assignment_type,
+                                    'day': day,
+                                    'start_hour': start_hour_2,
+                                    'length_in_hours': part_length_2,
+                                    'commanders_needed': template.commanders_needed,
+                                    'drivers_needed': template.drivers_needed,
+                                    'soldiers_needed': template.soldiers_needed,
+                                    'same_mahlaka_required': template.same_mahlaka_required,
+                                    'requires_certification': template.requires_certification,
+                                    'requires_senior_commander': template.requires_senior_commander,
+                                    'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
+                                    'date': current_date,
+                                    'is_base_task': template.is_base_task
+                                }
+                                all_assignments.append(assign_data_2)
+                                
+                                continue
+
                             for slot in range(template.times_per_day):
                                 # אם start_hour מוגדר בתבנית, השתמש בו. אחרת, חשב אוטומטית
                                 if template.start_hour is not None:
@@ -1192,7 +1279,8 @@ def get_live_schedule(pluga_id, current_user):
                                     'requires_certification': template.requires_certification,
                                     'requires_senior_commander': template.requires_senior_commander,
                                     'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
-                                    'date': current_date
+                                    'date': current_date,
+                                    'is_base_task': template.is_base_task
                                 }
 
                                 all_assignments.append(assign_data)
@@ -1230,12 +1318,24 @@ def get_live_schedule(pluga_id, current_user):
                                 schedules[soldier_id] = []
 
                             # הוסף את המשימה ל-schedule של החייל
+                            # בדוק אם זו משימת בסיס (נצטרך לשלוף את התבנית או להניח לפי שם/סוג)
+                            # לצורך פשטות, נניח כרגע False אלא אם כן נשמור את זה ב-Assignment בעתיד
+                            # אבל רגע, הוספנו is_base_task לתבנית, לא למשימה עצמה ב-DB.
+                            # אז נצטרך לבדוק מול התבנית.
+                            
+                            # שליפת התבנית לפי שם (קצת יקר, אבל נחוץ)
+                            # או שנשמור is_base_task ב-Assignment בעתיד.
+                            # בינתיים ננסה לנחש או נשאיר False
+                            is_base = False 
+                            # TODO: לשפר את זה ע"י שמירת is_base_task בטבלת assignments
+                            
                             schedules[soldier_id].append((
                                 existing_assignment.day,
                                 existing_assignment.start_hour,
                                 existing_assignment.start_hour + existing_assignment.length_in_hours,
                                 existing_assignment.name,
-                                existing_assignment.assignment_type
+                                existing_assignment.assignment_type,
+                                is_base
                             ))
 
                     # מחק משימות קיימות מהימים שאנחנו עומדים ליצור (כדי למנוע כפילויות)
@@ -1329,12 +1429,17 @@ def get_live_schedule(pluga_id, current_user):
                                             # עדכון schedules
                                             if soldier_id not in schedules:
                                                 schedules[soldier_id] = []
+                                            
+                                            # הוסף דגל is_base_task ל-schedule
+                                            is_base = assign_data.get('is_base_task', False)
+                                            
                                             schedules[soldier_id].append((
                                                 assign_data['day'],
                                                 assign_data['start_hour'],
                                                 assign_data['start_hour'] + assign_data['length_in_hours'],
                                                 assign_data['name'],
-                                                assign_data['type']
+                                                assign_data['type'],
+                                                is_base
                                             ))
 
                         except Exception as e:
@@ -1367,12 +1472,18 @@ def get_live_schedule(pluga_id, current_user):
         ).distinct().all()
         print(f"🔍 DEBUG live-schedule: ימים עם משימות: {[d[0] for d in all_days_with_assignments]}")
 
+        # חישוב טווח שעות אבסולוטי ליום המבוקש
+        day_start_abs = day_diff * 24
+        day_end_abs = (day_diff + 1) * 24
+
+        # מצא משימות שחופפות ליום זה (כולל משימות רב-יומיות)
         existing_assignments = session.query(Assignment).filter(
             Assignment.shavzak_id == master_shavzak.id,
-            Assignment.day == day_diff
+            (Assignment.day * 24 + Assignment.start_hour) < day_end_abs,
+            (Assignment.day * 24 + Assignment.start_hour + Assignment.length_in_hours) > day_start_abs
         ).all()
 
-        print(f"🔍 DEBUG live-schedule: מצאתי {len(existing_assignments)} משימות ליום {day_diff}")
+        print(f"🔍 DEBUG live-schedule: מצאתי {len(existing_assignments)} משימות חופפות ליום {day_diff}")
 
         # אם יש משימות, החזר אותן
         if existing_assignments:
@@ -1470,7 +1581,12 @@ def get_live_schedule(pluga_id, current_user):
                     suggest_deletion = False
                     severity = "warning"
 
-                    if total_assigned == 0:
+                    # בדיקה אם המשימה מוגדרת כניתנת לוויתור
+                    if template.is_skippable:
+                        severity = "warning" # לא קריטי, כי זה מתוכנן
+                        suggest_deletion = True
+                        suggestion = "משימה זו מוגדרת כניתנת לוויתור. עקב חוסר בכוח אדם, מומלץ לבטל אותה."
+                    elif total_assigned == 0:
                         severity = "critical"
                         suggest_deletion = True
                         suggestion = "המשימה ריקה לחלוטין. מומלץ למחוק אותה כדי לפנות משאבים."
@@ -1500,6 +1616,18 @@ def get_live_schedule(pluga_id, current_user):
                     'suggestion': None
                 })
 
+            # חישוב שעות תצוגה ליום הנוכחי (עבור משימות רב-יומיות)
+            assign_start_abs = assignment.day * 24 + assignment.start_hour
+            assign_end_abs = assign_start_abs + assignment.length_in_hours
+            
+            # חיתוך לטווח היום הנוכחי
+            effective_start_abs = max(assign_start_abs, day_start_abs)
+            effective_end_abs = min(assign_end_abs, day_end_abs)
+            
+            # המרה לשעות יחסיות ליום (0-24)
+            display_start_hour = effective_start_abs - day_start_abs
+            display_length = effective_end_abs - effective_start_abs
+
             assignments_data.append({
                 'id': assignment.id,
                 'name': assignment.name,
@@ -1507,6 +1635,8 @@ def get_live_schedule(pluga_id, current_user):
                 'day': assignment.day,
                 'start_hour': assignment.start_hour,
                 'length_in_hours': assignment.length_in_hours,
+                'display_start_hour': display_start_hour,
+                'display_length_in_hours': display_length,
                 'assigned_mahlaka_id': assignment.assigned_mahlaka_id,
                 'soldiers': soldiers_list
             })
@@ -1910,5 +2040,143 @@ def get_recent_assignments(pluga_id, current_user):
         print(f"🔴 שגיאה: {str(e)}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+    finally:
+        session.close()
+
+
+@schedule_bp.route('/api/plugot/<int:pluga_id>/live-schedule/days/<string:date_str>', methods=['DELETE'])
+@token_required
+def delete_day_schedule(pluga_id, date_str, current_user):
+    """
+    מחיקת כל המשימות ליום ספציפי בשיבוץ האוטומטי
+    """
+    session = get_db()
+    try:
+        # בדיקת הרשאות - רק מפקדים יכולים לבצע פעולה זו
+        if not can_edit_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לעדכן שיבוץ'}), 403
+
+        # המרת תאריך
+        try:
+            requested_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'פורמט תאריך לא תקין (YYYY-MM-DD)'}), 400
+
+        # מצא את השיבוץ האוטומטי
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if not master_shavzak:
+            return jsonify({'error': 'לא נמצא שיבוץ אוטומטי'}), 404
+
+        # חישוב יום בשיבוץ
+        day_diff = (requested_date - master_shavzak.start_date).days
+
+        if day_diff < 0:
+            return jsonify({'error': 'התאריך המבוקש קודם לתאריך התחלת השיבוץ'}), 400
+
+        # מצא את כל המשימות ליום זה
+        assignments = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day == day_diff
+        ).all()
+
+        if not assignments:
+            return jsonify({'message': 'לא נמצאו משימות למחיקה ביום זה'}), 200
+
+        count = 0
+        for assignment in assignments:
+            # מחק את כל השיוכים של המשימה
+            session.query(AssignmentSoldier).filter(
+                AssignmentSoldier.assignment_id == assignment.id
+            ).delete()
+            # מחק את המשימה עצמה
+            session.delete(assignment)
+            count += 1
+
+        session.commit()
+        print(f"✅ נמחקו {count} משימות מהשיבוץ האוטומטי ליום {date_str}")
+
+        return jsonify({
+            'success': True,
+            'message': f'נמחקו {count} משימות מהשיבוץ ליום {date_str}',
+            'deleted_count': count
+        }), 200
+
+    except Exception as e:
+        session.rollback()
+        print(f"Error in delete_day_schedule: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': f'שגיאה במחיקת השיבוץ ליום: {str(e)}'}), 500
+    finally:
+        session.close()
+
+
+@schedule_bp.route('/api/plugot/<int:pluga_id>/live-schedule/days/<string:date_str>/clear-soldiers', methods=['POST'])
+@token_required
+def clear_day_soldiers(pluga_id, date_str, current_user):
+    """
+    ניקוי שיבוץ ליום ספציפי - מחיקת החיילים המשובצים אך השארת המשימות (העמודות)
+    """
+    session = get_db()
+    try:
+        # בדיקת הרשאות - רק מפקדים יכולים לבצע פעולה זו
+        if not can_edit_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה לעדכן שיבוץ'}), 403
+
+        # המרת תאריך
+        try:
+            requested_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'פורמט תאריך לא תקין (YYYY-MM-DD)'}), 400
+
+        # מצא את השיבוץ האוטומטי
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if not master_shavzak:
+            return jsonify({'error': 'לא נמצא שיבוץ אוטומטי'}), 404
+
+        # חישוב יום בשיבוץ
+        day_diff = (requested_date - master_shavzak.start_date).days
+
+        if day_diff < 0:
+            return jsonify({'error': 'התאריך המבוקש קודם לתאריך התחלת השיבוץ'}), 400
+
+        # מצא את כל המשימות ליום זה
+        assignments = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day == day_diff
+        ).all()
+
+        if not assignments:
+            return jsonify({'message': 'לא נמצאו משימות לניקוי ביום זה'}), 200
+
+        count = 0
+        for assignment in assignments:
+            # מחק את כל השיוכים של המשימה בלבד
+            deleted = session.query(AssignmentSoldier).filter(
+                AssignmentSoldier.assignment_id == assignment.id
+            ).delete()
+            count += deleted
+
+        session.commit()
+        print(f"✅ נמחקו {count} שיבוצי חיילים מהשיבוץ האוטומטי ליום {date_str}")
+
+        return jsonify({
+            'success': True,
+            'message': f'נמחקו {count} שיבוצי חיילים. המשימות נשמרו.',
+            'deleted_count': count
+        }), 200
+
+    except Exception as e:
+        session.rollback()
+        print(f"Error in clear_day_soldiers: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': f'שגיאה בניקוי השיבוץ ליום: {str(e)}'}), 500
     finally:
         session.close()

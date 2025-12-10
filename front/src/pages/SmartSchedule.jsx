@@ -7,8 +7,34 @@ import {
   AlertTriangle, TrendingUp, Award, Zap, Shield, Edit, ArrowLeftRight
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import html2canvas from 'html2canvas';
+import { Download } from 'lucide-react';
 import Constraints from './Constraints';
 import AssignmentModal from '../components/AssignmentModal';
+
+const SortableHeader = ({ name }) => {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: name });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    cursor: 'grab',
+    touchAction: 'none', // Important for PointerSensor
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300 select-none hover:bg-gray-200 active:cursor-grabbing"
+    >
+      {name}
+    </div>
+  );
+};
 
 const SmartSchedule = () => {
   const { user } = useAuth();
@@ -28,6 +54,52 @@ const SmartSchedule = () => {
   const [selectedForSwap, setSelectedForSwap] = useState(null); // משימה שנבחרה להחלפה
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackAssignmentId, setFeedbackAssignmentId] = useState(null);
+  const [columnOrder, setColumnOrder] = useState([]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (active.id !== over.id) {
+      setColumnOrder((items) => {
+        const oldIndex = items.indexOf(active.id);
+        const newIndex = items.indexOf(over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
+  const handleExportImage = async () => {
+    const element = document.getElementById('schedule-grid');
+    if (!element) return;
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2, // Higher quality
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      });
+      
+      const link = document.createElement('a');
+      link.download = `shavzak-${currentDate.toISOString().split('T')[0]}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      toast.success('התמונה נשמרה בהצלחה!');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('שגיאה בייצוא התמונה');
+    }
+  };
 
   // 🐛 Debug logging
   useEffect(() => {
@@ -49,6 +121,18 @@ const SmartSchedule = () => {
       loadSchedule(currentDate);
     }
   }, [currentDate]);
+
+  useEffect(() => {
+    if (scheduleData?.assignments) {
+      const uniqueNames = [...new Set(scheduleData.assignments.map(a => a.name))].sort();
+      setColumnOrder(prev => {
+        // שמור על הסדר הקיים אם אפשר
+        const newItems = uniqueNames.filter(n => !prev.includes(n));
+        const existingItems = prev.filter(n => uniqueNames.includes(n));
+        return [...existingItems, ...newItems];
+      });
+    }
+  }, [scheduleData]);
 
   // האזן למקלדת
   useEffect(() => {
@@ -341,71 +425,71 @@ const SmartSchedule = () => {
   return (
     <div className="space-y-6">
       {/* Header with AI Badge */}
-      <div className="card bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700 text-white shadow-2xl border-none">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="bg-white bg-opacity-20 p-3 rounded-2xl backdrop-blur-sm">
+      <div className="card bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700 text-white shadow-2xl border-none p-4 md:p-6">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="bg-white bg-opacity-20 p-3 rounded-2xl backdrop-blur-sm hidden md:block">
               <Brain className="w-12 h-12 animate-pulse" />
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-4xl font-bold tracking-tight">שיבוץ חכם AI</h1>
+            <div className="flex-1 text-center md:text-right">
+              <div className="flex items-center justify-center md:justify-start gap-3">
+                <h1 className="text-3xl md:text-4xl font-bold tracking-tight">שיבוץ חכם AI</h1>
                 <span className="bg-green-500 text-white text-xs px-3 py-1 rounded-full font-bold animate-pulse flex items-center gap-1">
                   <Zap size={12} />
                   POWERED BY ML
                 </span>
               </div>
-              <p className="text-purple-100 text-lg font-medium">למידת מכונה - משתפר עם הזמן</p>
+              <p className="text-purple-100 text-sm md:text-lg font-medium hidden md:block">למידת מכונה - משתפר עם הזמן</p>
             </div>
           </div>
 
           {/* Date Navigation */}
-          <div className="flex items-center gap-4 bg-white bg-opacity-20 backdrop-blur-md rounded-2xl p-4 shadow-lg">
+          <div className="flex items-center justify-between w-full md:w-auto gap-4 bg-white bg-opacity-20 backdrop-blur-md rounded-2xl p-2 md:p-4 shadow-lg">
             <button
               onClick={() => navigateDay(-1)}
-              className="p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
+              className="p-2 md:p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
               title="יום קודם (מקש חץ ימינה)"
             >
-              <ChevronRight size={28} />
+              <ChevronRight size={24} className="md:w-7 md:h-7" />
             </button>
 
-            <div className="text-center min-w-[220px]">
-              <div className="text-3xl font-bold tracking-wide">
+            <div className="text-center min-w-[120px] md:min-w-[220px]">
+              <div className="text-xl md:text-3xl font-bold tracking-wide">
                 {currentDate && getDayName(currentDate)}
               </div>
-              <div className="text-base opacity-90 font-medium mt-1">
+              <div className="text-sm md:text-base opacity-90 font-medium mt-1">
                 {currentDate && currentDate.toLocaleDateString('he-IL')}
               </div>
             </div>
 
             <button
               onClick={() => navigateDay(1)}
-              className="p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
+              className="p-2 md:p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
               title="יום הבא (מקש חץ שמאלה)"
             >
-              <ChevronLeft size={28} />
+              <ChevronLeft size={24} className="md:w-7 md:h-7" />
             </button>
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2 mr-4">
+          <div className="flex items-center justify-center gap-2 w-full md:w-auto flex-wrap">
             {(user.role === 'מפ' || user.role === 'ממ' || user.role === 'מכ') && (
               <>
                 <button
                   onClick={generateSmartSchedule}
                   disabled={isGenerating}
-                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-4 py-2 rounded-lg transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
+                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-lg transition-all flex items-center gap-2 shadow-lg disabled:opacity-50 text-sm md:text-base"
                   title="יצירת שיבוץ חכם עם AI"
                 >
                   {isGenerating ? (
                     <>
-                      <RefreshCw size={20} className="animate-spin" />
-                      <span>מייצר...</span>
+                      <RefreshCw size={18} className="animate-spin" />
+                      <span className="hidden sm:inline">מייצר...</span>
                     </>
                   ) : (
                     <>
-                      <Brain size={20} />
-                      <span>שיבוץ AI</span>
+                      <Brain size={18} />
+                      <span className="hidden sm:inline">שיבוץ AI</span>
                     </>
                   )}
                 </button>
@@ -414,7 +498,7 @@ const SmartSchedule = () => {
                   className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
                   title="העלה דוגמאות שיבוץ"
                 >
-                  <Upload size={24} />
+                  <Upload size={20} className="md:w-6 md:h-6" />
                 </button>
               </>
             )}
@@ -423,7 +507,14 @@ const SmartSchedule = () => {
               className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
               title="אילוצים ופידבק"
             >
-              <Shield size={24} />
+              <Shield size={20} className="md:w-6 md:h-6" />
+            </button>
+            <button
+              onClick={handleExportImage}
+              className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+              title="ייצא לתמונה"
+            >
+              <Download size={20} className="md:w-6 md:h-6" />
             </button>
             <button
               onClick={() => loadSchedule(currentDate)}
@@ -431,7 +522,7 @@ const SmartSchedule = () => {
               title="רענן"
               disabled={loading}
             >
-              <RefreshCw size={24} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={20} className={`md:w-6 md:h-6 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -601,9 +692,21 @@ const SmartSchedule = () => {
             </div>
 
             {/* Time Grid Schedule */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" id="schedule-grid">
               {(() => {
-                const assignmentNames = [...new Set(scheduleData?.assignments?.map(a => a.name) || [])].sort();
+                let assignmentNames = columnOrder;
+                const currentNames = [...new Set(scheduleData?.assignments?.map(a => a.name) || [])].sort();
+                
+                if (!assignmentNames || assignmentNames.length === 0) {
+                    assignmentNames = currentNames;
+                } else {
+                    const missingNames = currentNames.filter(n => !assignmentNames.includes(n));
+                    if (missingNames.length > 0) {
+                        assignmentNames = [...assignmentNames, ...missingNames];
+                    }
+                    assignmentNames = assignmentNames.filter(n => currentNames.includes(n));
+                }
+
                 const assignmentsByName = {};
                 assignmentNames.forEach(name => {
                   assignmentsByName[name] = [];
@@ -619,21 +722,26 @@ const SmartSchedule = () => {
                 const hours = Array.from({ length: 24 }, (_, i) => i);
 
                 return (
-                  <div className="min-w-max">
-                    {/* Header */}
-                    <div className="flex border-b-2 border-gray-300 mb-2">
-                      <div className="w-20 flex-shrink-0 font-bold text-gray-700 p-2">
-                        שעה
-                      </div>
-                      {assignmentNames.map(name => (
-                        <div
-                          key={name}
-                          className="flex-1 min-w-[200px] font-bold text-center p-2 bg-gray-100 border-l border-gray-300"
-                        >
-                          {name}
+                  <DndContext 
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <div className="min-w-max">
+                      {/* Header */}
+                      <div className="flex border-b-2 border-gray-300 mb-2">
+                        <div className="w-20 flex-shrink-0 font-bold text-gray-700 p-2">
+                          שעה
                         </div>
-                      ))}
-                    </div>
+                        <SortableContext 
+                            items={assignmentNames}
+                            strategy={horizontalListSortingStrategy}
+                        >
+                            {assignmentNames.map(name => (
+                                <SortableHeader key={name} name={name} />
+                            ))}
+                        </SortableContext>
+                      </div>
 
                     {/* Grid */}
                     <div className="flex">
@@ -788,6 +896,7 @@ const SmartSchedule = () => {
                       ))}
                     </div>
                   </div>
+                  </DndContext>
                 );
               })()}
             </div>

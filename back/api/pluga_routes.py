@@ -420,7 +420,13 @@ def create_assignment_template(pluga_id, current_user):
             same_mahlaka_required=data.get('same_mahlaka_required', False),
             requires_certification=data.get('requires_certification'),
             requires_senior_commander=data.get('requires_senior_commander', False),
-            reuse_soldiers_for_standby=data.get('reuse_soldiers_for_standby', False)
+            reuse_soldiers_for_standby=data.get('reuse_soldiers_for_standby', False),
+            duration_days=data.get('duration_days', 0),
+            recurrence_interval=data.get('recurrence_interval', 1),
+            start_day_offset=data.get('start_day_offset', 0),
+            is_base_task=data.get('is_base_task', False),
+            can_split=data.get('can_split', False),
+            is_skippable=data.get('is_skippable', False)
         )
 
         session.add(template)
@@ -472,7 +478,13 @@ def list_assignment_templates(pluga_id, current_user):
             'same_mahlaka_required': t.same_mahlaka_required,
             'requires_certification': t.requires_certification,
             'requires_senior_commander': t.requires_senior_commander,
-            'reuse_soldiers_for_standby': t.reuse_soldiers_for_standby
+            'reuse_soldiers_for_standby': t.reuse_soldiers_for_standby,
+            'duration_days': t.duration_days,
+            'recurrence_interval': t.recurrence_interval,
+            'start_day_offset': t.start_day_offset,
+            'is_base_task': t.is_base_task,
+            'can_split': t.can_split,
+            'is_skippable': t.is_skippable
         } for t in templates]
 
         return jsonify({'templates': result}), 200
@@ -525,6 +537,18 @@ def update_assignment_template(template_id, current_user):
             template.requires_senior_commander = data['requires_senior_commander']
         if 'reuse_soldiers_for_standby' in data:
             template.reuse_soldiers_for_standby = data['reuse_soldiers_for_standby']
+        if 'duration_days' in data:
+            template.duration_days = data['duration_days']
+        if 'recurrence_interval' in data:
+            template.recurrence_interval = data['recurrence_interval']
+        if 'start_day_offset' in data:
+            template.start_day_offset = data['start_day_offset']
+        if 'is_base_task' in data:
+            template.is_base_task = data['is_base_task']
+        if 'can_split' in data:
+            template.can_split = data['can_split']
+        if 'is_skippable' in data:
+            template.is_skippable = data['is_skippable']
 
         session.commit()
 
@@ -611,7 +635,13 @@ def duplicate_assignment_template(template_id, current_user):
             same_mahlaka_required=original_template.same_mahlaka_required,
             requires_certification=original_template.requires_certification,
             requires_senior_commander=original_template.requires_senior_commander,
-            reuse_soldiers_for_standby=original_template.reuse_soldiers_for_standby
+            reuse_soldiers_for_standby=original_template.reuse_soldiers_for_standby,
+            duration_days=original_template.duration_days,
+            recurrence_interval=original_template.recurrence_interval,
+            start_day_offset=original_template.start_day_offset,
+            is_base_task=original_template.is_base_task,
+            can_split=original_template.can_split,
+            is_skippable=original_template.is_skippable
         )
 
         session.add(new_template)

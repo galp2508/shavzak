@@ -123,16 +123,32 @@ const Templates = () => {
             </div>
 
             <div className="space-y-2 text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <Clock size={16} />
-                <span>{template.length_in_hours} שעות × {Math.floor(24 / template.length_in_hours)} פעמים ביום</span>
-              </div>
-              {template.start_hour !== null && template.start_hour !== undefined && (
+              {template.duration_days > 0 ? (
+                <div className="flex items-center gap-2">
+                  <Clock size={16} />
+                  <span>משך: {template.duration_days} ימים (כל {template.recurrence_interval} ימים)</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Clock size={16} />
+                  <span>{template.length_in_hours} שעות × {Math.floor(24 / template.length_in_hours)} פעמים ביום</span>
+                </div>
+              )}
+              {template.start_hour !== null && template.start_hour !== undefined && !template.duration_days && (
                 <div className="text-xs text-gray-500">
                   התחלה: {String(template.start_hour).padStart(2, '0')}:00
                 </div>
               )}
               <div className="flex gap-2 flex-wrap mt-3">
+                {template.is_base_task && (
+                  <span className="badge bg-gray-100 text-gray-700 border border-gray-300">משימת בסיס</span>
+                )}
+                {template.can_split && (
+                  <span className="badge bg-indigo-100 text-indigo-700 border border-indigo-300">ניתן לפיצול</span>
+                )}
+                {template.is_skippable && (
+                  <span className="badge bg-yellow-100 text-yellow-700 border border-yellow-300">ניתן לוויתור</span>
+                )}
                 {template.commanders_needed > 0 && (
                   <span className="badge badge-purple">{template.commanders_needed} מפקדים</span>
                 )}
@@ -189,9 +205,16 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
     requires_certification: template?.requires_certification || '',
     requires_senior_commander: template?.requires_senior_commander || false,
     reuse_soldiers_for_standby: template?.reuse_soldiers_for_standby || false,
+    duration_days: template?.duration_days || 0,
+    recurrence_interval: template?.recurrence_interval || 1,
+    start_day_offset: template?.start_day_offset || 0,
+    is_base_task: template?.is_base_task || false,
+    can_split: template?.can_split || false,
+    is_skippable: template?.is_skippable || false,
   });
   const [loading, setLoading] = useState(false);
   const [availableRoles, setAvailableRoles] = useState([]);
+  const [isMultiDay, setIsMultiDay] = useState(template?.duration_days > 0);
 
   // טען את רשימת התפקידים/הסמכות הזמינים
   useEffect(() => {
@@ -266,7 +289,9 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
       // הוסף חישוב אוטומטי של times_per_day
       const dataToSend = {
         ...formData,
-        times_per_day: timesPerDay,
+        times_per_day: isMultiDay ? 1 : timesPerDay,
+        length_in_hours: isMultiDay ? formData.duration_days * 24 : formData.length_in_hours,
+        duration_days: isMultiDay ? formData.duration_days : 0,
         start_hour: formData.start_hour ? parseInt(formData.start_hour) : null
       };
 
@@ -331,37 +356,102 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
               )}
             </div>
 
-            <div>
-              <label className="label">אורך במשמרת (שעות) *</label>
-              <input
-                type="number"
-                min="1"
-                max="24"
-                value={formData.length_in_hours}
-                onChange={(e) => setFormData({ ...formData, length_in_hours: parseInt(e.target.value) })}
-                className="input-field"
-                required
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                תקרה {timesPerDay} {timesPerDay === 1 ? 'פעם' : 'פעמים'} ביום (24 / {formData.length_in_hours})
-              </p>
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-2 cursor-pointer mb-4">
+                <input
+                  type="checkbox"
+                  checked={isMultiDay}
+                  onChange={(e) => {
+                    setIsMultiDay(e.target.checked);
+                    if (e.target.checked) {
+                      setFormData(prev => ({ ...prev, duration_days: 1 }));
+                    } else {
+                      setFormData(prev => ({ ...prev, duration_days: 0 }));
+                    }
+                  }}
+                  className="w-4 h-4 text-military-600"
+                />
+                <span className="font-bold text-gray-700">משימה רב-יומית (נמשכת יותר מיום אחד)</span>
+              </label>
             </div>
 
-            <div>
-              <label className="label">שעת התחלה (אופציונלי)</label>
-              <input
-                type="number"
-                min="0"
-                max="23"
-                value={formData.start_hour}
-                onChange={(e) => setFormData({ ...formData, start_hour: e.target.value })}
-                className="input-field"
-                placeholder="לדוגמה: 8"
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                שעת התחלה של המשמרת הראשונה (0-23)
-              </p>
-            </div>
+            {!isMultiDay ? (
+              <>
+                <div>
+                  <label className="label">אורך במשמרת (שעות) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={formData.length_in_hours}
+                    onChange={(e) => setFormData({ ...formData, length_in_hours: parseInt(e.target.value) })}
+                    className="input-field"
+                    required={!isMultiDay}
+                  />
+                  <p className="text-sm text-gray-500 mt-1">
+                    תקרה {timesPerDay} {timesPerDay === 1 ? 'פעם' : 'פעמים'} ביום (24 / {formData.length_in_hours})
+                  </p>
+                </div>
+
+                <div>
+                  <label className="label">שעת התחלה (אופציונלי)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={formData.start_hour}
+                    onChange={(e) => setFormData({ ...formData, start_hour: e.target.value })}
+                    className="input-field"
+                    placeholder="לדוגמה: 8"
+                  />
+                  <p className="text-sm text-gray-500 mt-1">
+                    שעת התחלה של המשמרת הראשונה (0-23)
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="label">משך המשימה (ימים) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.duration_days}
+                    onChange={(e) => setFormData({ ...formData, duration_days: parseInt(e.target.value) })}
+                    className="input-field"
+                    required={isMultiDay}
+                  />
+                </div>
+
+                <div>
+                  <label className="label">חזרה כל (ימים)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.recurrence_interval}
+                    onChange={(e) => setFormData({ ...formData, recurrence_interval: parseInt(e.target.value) })}
+                    className="input-field"
+                  />
+                  <p className="text-sm text-gray-500 mt-1">
+                    כל כמה ימים המשימה חוזרת על עצמה (1 = רצוף)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="label">התחלה ביום (Offset)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.start_day_offset}
+                    onChange={(e) => setFormData({ ...formData, start_day_offset: parseInt(e.target.value) })}
+                    className="input-field"
+                  />
+                  <p className="text-sm text-gray-500 mt-1">
+                    התחלה ביום ה-X של השיבוץ (0 = יום ראשון)
+                  </p>
+                </div>
+              </>
+            )}
 
             <div>
               <label className="label">מספר מפקדים נדרשים</label>
@@ -447,6 +537,49 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
                 <span className="text-xs text-gray-500">(המערכת תעדיף חיילים שסיימו משימה זמן קצר לפני הכוננות)</span>
               </label>
             )}
+
+            <div className="border-t border-gray-200 pt-3 mt-3">
+              <h4 className="text-sm font-bold text-gray-700 mb-2">הגדרות מתקדמות</h4>
+              
+              <label className="flex items-center gap-2 cursor-pointer mb-2">
+                <input
+                  type="checkbox"
+                  checked={formData.is_base_task}
+                  onChange={(e) => setFormData({ ...formData, is_base_task: e.target.checked })}
+                  className="w-4 h-4 text-green-600"
+                />
+                <div>
+                  <span className="text-gray-700 font-medium">משימת בסיס (נחשבת כמנוחה)</span>
+                  <p className="text-xs text-gray-500">משימה קלה שלא דורשת שעות מנוחה לפניה/אחריה ולא שוברת רצף מנוחה</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.can_split}
+                  onChange={(e) => setFormData({ ...formData, can_split: e.target.checked })}
+                  className="w-4 h-4 text-indigo-600"
+                />
+                <div>
+                  <span className="text-gray-700 font-medium">ניתן לפיצול</span>
+                  <p className="text-xs text-gray-500">המערכת רשאית לפצל את המשימה לשני חלקים (למשל: פתיחה וסגירה) במידת הצורך</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer mt-2">
+                <input
+                  type="checkbox"
+                  checked={formData.is_skippable}
+                  onChange={(e) => setFormData({ ...formData, is_skippable: e.target.checked })}
+                  className="w-4 h-4 text-yellow-600"
+                />
+                <div>
+                  <span className="text-gray-700 font-medium">ניתן לוויתור (Optional)</span>
+                  <p className="text-xs text-gray-500">במקרה של חוסר בכוח אדם, המערכת תציע לוותר על משימה זו</p>
+                </div>
+              </label>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">

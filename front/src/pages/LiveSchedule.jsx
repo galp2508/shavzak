@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useDitto } from '../context/DittoContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap, ArrowLeftRight, Download, ZoomIn, ZoomOut, Eraser } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap, ArrowLeftRight, Download, ZoomIn, ZoomOut, Eraser, LayoutList, Grid } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -55,6 +55,7 @@ const LiveSchedule = () => {
     return savedOrder ? JSON.parse(savedOrder) : [];
   });
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [viewMode, setViewMode] = useState(window.innerWidth < 768 ? 'list' : 'grid');
   const [touchStartDist, setTouchStartDist] = useState(null);
   const [touchStartZoom, setTouchStartZoom] = useState(1);
 
@@ -1312,6 +1313,24 @@ const LiveSchedule = () => {
               </h2>
               
               <div className="flex items-center gap-4">
+                {/* View Toggle */}
+                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`p-1 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow text-blue-600' : 'hover:bg-white/50 text-gray-500'}`}
+                    title="תצוגת רשימה"
+                  >
+                    <LayoutList size={18} />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`p-1 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-white shadow text-blue-600' : 'hover:bg-white/50 text-gray-500'}`}
+                    title="תצוגת טבלה"
+                  >
+                    <Grid size={18} />
+                  </button>
+                </div>
+
                 {/* Zoom Controls */}
                 <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1" dir="ltr">
                   <button 
@@ -1341,7 +1360,74 @@ const LiveSchedule = () => {
               </div>
             </div>
 
-            {/* Time Grid Schedule */}
+            {/* Schedule View */}
+            {viewMode === 'list' ? (
+              <div className="space-y-3">
+                {(() => {
+                   const sortedAssignments = [...(scheduleData?.assignments || [])].sort((a, b) => {
+                     if (a.start_hour !== b.start_hour) return a.start_hour - b.start_hour;
+                     return a.name.localeCompare(b.name);
+                   });
+
+                   if (sortedAssignments.length === 0) return <div className="text-center text-gray-500 py-8">אין משימות להצגה</div>;
+
+                   return sortedAssignments.map(assignment => {
+                     const startHour = assignment.display_start_hour !== undefined ? assignment.display_start_hour : (assignment.start_hour || 0);
+                     const lengthInHours = assignment.display_length_in_hours !== undefined ? assignment.display_length_in_hours : (assignment.length_in_hours || 1);
+                     const endHour = startHour + lengthInHours;
+                     const assignmentColor = getAssignmentColor(assignment);
+                     
+                     return (
+                       <div 
+                         key={assignment.id}
+                         className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden active:scale-[0.99] transition-transform"
+                         onClick={() => (user.role === 'מפ' || user.role === 'ממ') && openEditAssignmentModal(assignment)}
+                       >
+                         <div className="flex">
+                           {/* Color Strip */}
+                           <div className="w-2" style={{ backgroundColor: assignmentColor }}></div>
+                           
+                           <div className="flex-1 p-3">
+                             <div className="flex justify-between items-start mb-2">
+                               <div>
+                                 <h3 className="font-bold text-gray-900">{assignment.name}</h3>
+                                 <div className="flex items-center gap-1 text-sm text-gray-500 mt-0.5">
+                                   <Clock size={14} />
+                                   <span>{startHour.toString().padStart(2, '0')}:00 - {endHour.toString().padStart(2, '0')}:00</span>
+                                 </div>
+                               </div>
+                               {/* Edit Icon for commanders */}
+                               {(user.role === 'מפ' || user.role === 'ממ') && (
+                                 <Edit size={16} className="text-gray-400" />
+                               )}
+                             </div>
+
+                             <div className="flex flex-wrap gap-2">
+                               {assignment.soldiers && assignment.soldiers.length > 0 ? (
+                                 assignment.soldiers.map(soldier => (
+                                   <div key={soldier.id} className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
+                                     <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600">
+                                       {soldier.first_name[0]}{soldier.last_name[0]}
+                                     </div>
+                                     <span className="text-sm text-gray-700">{soldier.first_name} {soldier.last_name}</span>
+                                   </div>
+                                 ))
+                               ) : (
+                                 <span className="text-sm text-red-400 italic flex items-center gap-1">
+                                   <AlertTriangle size={14} />
+                                   ללא חיילים
+                                 </span>
+                               )}
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+                     );
+                   });
+                })()}
+              </div>
+            ) : (
+            /* Time Grid Schedule */
             <div 
               className="overflow-x-auto touch-pan-x touch-pan-y" 
               id="schedule-grid"
@@ -1645,6 +1731,7 @@ const LiveSchedule = () => {
                 );
               })()}
             </div>
+            )}
           </div>
         </>
       )}

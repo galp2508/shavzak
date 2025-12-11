@@ -119,7 +119,7 @@ const Layout = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-6 max-w-7xl mx-auto w-full pb-20 lg:pb-6">
           <Outlet />
         </main>
       </div>
@@ -131,6 +131,43 @@ const Layout = () => {
           onClick={() => setSidebarOpen(false)}
         />
       )}
+
+      {/* Bottom Navigation for Mobile */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+        <div className="flex justify-around items-center h-16">
+          <Link 
+            to="/" 
+            className={`flex flex-col items-center justify-center w-full h-full transition-colors ${isActive('/') ? 'text-military-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <Home size={24} strokeWidth={isActive('/') ? 2.5 : 2} />
+            <span className="text-[10px] mt-1 font-medium">דשבורד</span>
+          </Link>
+          
+          <Link 
+            to="/live-schedule" 
+            className={`flex flex-col items-center justify-center w-full h-full transition-colors ${isActive('/live-schedule') ? 'text-military-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <CalendarDays size={24} strokeWidth={isActive('/live-schedule') ? 2.5 : 2} />
+            <span className="text-[10px] mt-1 font-medium">לו"ז</span>
+          </Link>
+
+          <Link 
+            to="/profile" 
+            className={`flex flex-col items-center justify-center w-full h-full transition-colors ${isActive('/profile') ? 'text-military-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <User size={24} strokeWidth={isActive('/profile') ? 2.5 : 2} />
+            <span className="text-[10px] mt-1 font-medium">פרופיל</span>
+          </Link>
+          
+          <button 
+            onClick={() => setSidebarOpen(true)} 
+            className={`flex flex-col items-center justify-center w-full h-full transition-colors ${sidebarOpen ? 'text-military-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <Menu size={24} />
+            <span className="text-[10px] mt-1 font-medium">תפריט</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

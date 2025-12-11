@@ -1,0 +1,18 @@
+server {
+    listen 80;
+    server_name _;
+
+    root /root/shavzak/front/dist;
+    index index.html;
+
+    # Serve Frontend (SPA support)
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API requests to Flask
+    location /api {
+        include proxy_params;
+        proxy_pass http://unix:/root/shavzak/back/shavzak.sock;
+    }
+}

@@ -29,7 +29,8 @@ export const getStatusBadge = (soldier) => {
       'בקשת יציאה': 'bg-blue-500 text-white',
       'גימלים': 'bg-yellow-500 text-white',
       'ריתוק': 'bg-red-600 text-white',
-      'בסבב קו': 'bg-green-600 text-white'
+      'בסבב קו': 'bg-green-600 text-white',
+      'מיוחדת': 'bg-purple-600 text-white'
     };
 
     return {
@@ -100,7 +101,8 @@ export const StatusChangeModal = ({ soldier, onClose, onUpdate }) => {
     { value: 'בקשת יציאה', label: 'בקשת יציאה', needsReturn: true },
     { value: 'גימלים', label: 'גימלים', needsReturn: true },
     { value: 'ריתוק', label: 'ריתוק', needsReturn: true },
-    { value: 'בסבב קו', label: 'בסבב קו', needsReturn: false }
+    { value: 'בסבב קו', label: 'בסבב קו', needsReturn: false },
+    { value: 'מיוחדת', label: 'מיוחדת', needsReturn: true }
   ];
 
   const selectedType = statusTypes.find(t => t.value === formData.status_type);

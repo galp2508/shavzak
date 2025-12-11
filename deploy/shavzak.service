@@ -1,0 +1,13 @@
+[Unit]
+Description=Gunicorn instance to serve Shavzak API
+After=network.target
+
+[Service]
+User=root
+Group=www-data
+WorkingDirectory=/root/shavzak/back
+Environment="PATH=/root/shavzak/venv/bin"
+ExecStart=/root/shavzak/venv/bin/gunicorn --workers 3 --bind unix:shavzak.sock -m 007 wsgi:app
+
+[Install]
+WantedBy=multi-user.target

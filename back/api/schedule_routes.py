@@ -174,6 +174,8 @@ def generate_shavzak(shavzak_id, current_user):
                     'hatash_2_days': soldier.hatash_2_days,
                     'home_round_date': soldier.home_round_date,
                     'status_type': status.status_type if status else 'בבסיס',
+                    'status_end_date': status.end_date if status else None,
+                    'status_return_date': status.return_date if status else None,
                     'mahlaka_id': mahlaka.id  # חשוב ל-ML!
                 }
 
@@ -200,10 +202,16 @@ def generate_shavzak(shavzak_id, current_user):
             status_type = soldier_data.get('status_type', 'בבסיס')
 
             # רשימת סטטוסים שמונעים שיבוץ
-            unavailable_statuses = ['ריתוק', 'לא בבסיס', 'חופשה', 'מילואים', 'גימלים', 'בסבב קו', 'בקשת יציאה']
+            unavailable_statuses = ['ריתוק', 'לא בבסיס', 'חופשה', 'מילואים', 'גימלים', 'בסבב קו', 'בקשת יציאה', 'מיוחדת']
 
             if status_type in unavailable_statuses:
-                return False
+                # בדוק אם הסטטוס רלוונטי לתאריך הנבדק
+                status_end = soldier_data.get('status_end_date') or soldier_data.get('status_return_date')
+                
+                # אם אין תאריך סיום, הסטטוס תקף תמיד (עד שישונה ידנית)
+                # אם יש תאריך סיום, בדוק אם התאריך הנבדק הוא לפני תאריך הסיום
+                if not status_end or check_date <= status_end:
+                    return False
 
             # בדוק אם התאריך באי זמינות רגילה
             if check_date in soldier_data.get('unavailable_dates', []):

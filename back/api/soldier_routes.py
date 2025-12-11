@@ -528,6 +528,26 @@ def list_soldiers_by_mahlaka(mahlaka_id, current_user):
             # status כבר נטען עם joinedload
             status = soldier.current_status
 
+            # בדיקת תוקף סטטוס - אם עבר תאריך הסיום, החזר ל"בבסיס"
+            if status and status.status_type != 'בבסיס':
+                today = datetime.now().date()
+                # השתמש ב-end_date אם קיים, אחרת ב-return_date לתאימות לאחור
+                end_date = status.end_date or status.return_date
+                
+                if end_date and today > end_date:
+                    # הסטטוס פג תוקף - עדכן ב-DB
+                    status.status_type = 'בבסיס'
+                    status.start_date = None
+                    status.end_date = None
+                    status.return_date = None
+                    status.notes = None
+                    session.add(status)
+                    # לא עושים commit בתוך הלולאה לביצועים, נעשה בסוף אם צריך
+                    # אבל כאן אנחנו רק קוראים, אז אולי כדאי לעשות flush או commit אם יש שינוי
+                    # נשאיר את זה ל-commit בסוף ה-request אם היינו משנים משהו גלובלי, 
+                    # אבל כאן זה GET request. נצטרך לעשות commit אם שינינו.
+                    session.commit()
+
             # בדוק אם בסבב קו
             in_round = False
             if soldier.home_round_date:
@@ -888,6 +908,20 @@ def get_soldier_status(soldier_id, current_user):
             status = SoldierStatus(soldier_id=soldier_id, status_type='בבסיס')
             session.add(status)
             session.commit()
+        
+        # בדיקת תוקף סטטוס
+        elif status.status_type != 'בבסיס':
+            today = datetime.now().date()
+            end_date = status.end_date or status.return_date
+            
+            if end_date and today > end_date:
+                # הסטטוס פג תוקף - עדכן ב-DB
+                status.status_type = 'בבסיס'
+                status.start_date = None
+                status.end_date = None
+                status.return_date = None
+                status.notes = None
+                session.commit()
 
         return jsonify({
             'status': {

@@ -14,6 +14,31 @@ const SoldiersModal = ({ mahlaka, soldiers, onClose, onDelete, onRefresh }) => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedSoldier, setSelectedSoldier] = useState(null);
 
+  // מיון חיילים לפי סדר היררכי
+  const sortedSoldiers = [...soldiers].sort((a, b) => {
+    const roleOrder = {
+      'ממ': 1,
+      'סמל': 2,
+      'מכ': 3,
+      'חייל': 4
+    };
+
+    const roleA = roleOrder[a.role] || 99;
+    const roleB = roleOrder[b.role] || 99;
+
+    if (roleA !== roleB) return roleA - roleB;
+
+    // אם התפקיד זהה (למשל מ"כים או חיילים), מיין לפי כיתה (א, ב, ג)
+    if (a.kita !== b.kita) {
+      if (!a.kita) return 1;
+      if (!b.kita) return -1;
+      return a.kita.localeCompare(b.kita);
+    }
+
+    // אם הכיתה זהה, מיין לפי שם
+    return a.name.localeCompare(b.name);
+  });
+
   const getRoleBadge = (role) => {
     const badges = {
       'לוחם': 'badge-green',
@@ -78,7 +103,7 @@ const SoldiersModal = ({ mahlaka, soldiers, onClose, onDelete, onRefresh }) => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {soldiers.map((soldier) => (
+                    {sortedSoldiers.map((soldier) => (
                       <tr key={soldier.id} className="hover:bg-gray-50">
                         <td
                           className="px-6 py-4 whitespace-nowrap cursor-pointer"

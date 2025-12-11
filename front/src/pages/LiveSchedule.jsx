@@ -885,7 +885,7 @@ const LiveSchedule = () => {
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className={`space-y-4 md:space-y-6 ${isFullScreen ? 'fixed inset-0 z-[100] bg-gray-100 overflow-auto p-2' : ''}`}>
       {/* Header with Date Navigation */}
       <div className="card bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl border-none p-3 md:p-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
@@ -978,6 +978,17 @@ const LiveSchedule = () => {
                   title="ייצא לתמונה"
                 >
                   <Download size={18} className="md:w-6 md:h-6" />
+                </button>
+                <button
+                  onClick={toggleFullScreen}
+                  className="p-1.5 md:p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                  title={isFullScreen ? "צא ממסך מלא" : "מסך מלא"}
+                >
+                  {isFullScreen ? (
+                    <Minimize2 size={18} className="md:w-6 md:h-6" />
+                  ) : (
+                    <Maximize2 size={18} className="md:w-6 md:h-6" />
+                  )}
                 </button>
                 <button
                   onClick={clearDaySoldiers}

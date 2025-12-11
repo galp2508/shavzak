@@ -82,9 +82,18 @@ export const AuthProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
+      let errorMessage = error.response?.data?.error || 'שגיאה ברישום';
+      if (error.response?.data?.errors) {
+        const errors = error.response.data.errors;
+        if (typeof errors === 'object') {
+            errorMessage = Object.values(errors).flat().join(', ');
+        } else {
+            errorMessage = String(errors);
+        }
+      }
       return {
         success: false,
-        error: error.response?.data?.error || 'שגיאה ברישום'
+        error: errorMessage
       };
     }
   };

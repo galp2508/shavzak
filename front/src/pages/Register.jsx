@@ -118,8 +118,17 @@ const Register = () => {
         }
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'שגיאה ברישום');
-      toast.error(err.response?.data?.error || 'שגיאה ברישום');
+      let errorMessage = err.response?.data?.error || 'שגיאה ברישום';
+      if (err.response?.data?.errors) {
+        const errors = err.response.data.errors;
+        if (typeof errors === 'object') {
+            errorMessage = Object.values(errors).flat().join(', ');
+        } else {
+            errorMessage = String(errors);
+        }
+      }
+      setError(errorMessage);
+      toast.error(errorMessage);
     }
 
     setLoading(false);

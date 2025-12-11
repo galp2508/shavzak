@@ -10,12 +10,14 @@ from models import User, Pluga, JoinRequest
 from auth import create_token, token_required, role_required
 from .utils import get_db, build_user_response, limiter
 from validation import validate_data, UserRegistrationSchema, UserLoginSchema
+from ditto_client import ditto
 
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/api/register', methods=['POST'])
 def register():
     """רישום משתמש חדש / בקשת הצטרפות"""
+    session = None
     try:
         # אימות נתונים
         validated_data, errors = validate_data(UserRegistrationSchema, request.json)
@@ -52,6 +54,19 @@ def register():
             session.add(user)
             session.commit()
 
+            # Sync to Ditto
+            try:
+                ditto.upsert("users", {
+                    "username": user.username,
+                    "full_name": user.full_name,
+                    "role": user.role,
+                    "pluga_id": user.pluga_id,
+                    "type": "user",
+                    "_id": user.username
+                })
+            except Exception as e:
+                print(f"⚠️ Failed to sync user to Ditto: {e}")
+
             token = create_token(user)
 
             return jsonify({
@@ -74,6 +89,20 @@ def register():
                 session.add(join_request)
                 session.commit()
 
+                # Sync to Ditto
+                try:
+                    ditto.upsert("join_requests", {
+                        "username": join_request.username,
+                        "full_name": join_request.full_name,
+                        "pluga_name": join_request.pluga_name,
+                        "gdud": join_request.gdud,
+                        "status": "pending",
+                        "type": "join_request",
+                        "_id": join_request.username
+                    })
+                except Exception as e:
+                    print(f"⚠️ Failed to sync join_request to Ditto: {e}")
+
                 return jsonify({
                     'message': 'בקשת ההצטרפות נשלחה בהצלחה. אנא המתן לאישור המפקד הראשי.',
                     'request_id': join_request.id
@@ -94,6 +123,19 @@ def register():
                 session.add(user)
                 session.commit()
 
+                # Sync to Ditto
+                try:
+                    ditto.upsert("users", {
+                        "username": user.username,
+                        "full_name": user.full_name,
+                        "role": user.role,
+                        "pluga_id": user.pluga_id,
+                        "type": "user",
+                        "_id": user.username
+                    })
+                except Exception as e:
+                    print(f"⚠️ Failed to sync user to Ditto: {e}")
+
                 token = create_token(user)
 
                 return jsonify({
@@ -107,13 +149,15 @@ def register():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
-        session.close()
+        if session:
+            session.close()
 
 
 @auth_bp.route('/api/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def login():
     """התחברות - מוגבל ל-5 ניסיונות בדקה למניעת brute-force"""
+    session = None
     try:
         # אימות נתונים
         validated_data, errors = validate_data(UserLoginSchema, request.json)
@@ -143,13 +187,15 @@ def login():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
-        session.close()
+        if session:
+            session.close()
 
 
 @auth_bp.route('/api/me', methods=['GET'])
 @token_required
 def get_current_user(current_user):
     """קבלת פרטי המשתמש הנוכחי"""
+    session = None
     try:
         session = get_db()
         user = session.query(User).filter_by(id=current_user.get('user_id')).first()
@@ -165,7 +211,8 @@ def get_current_user(current_user):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
-        session.close()
+        if session:
+            session.close()
 
 
 @auth_bp.route('/api/users', methods=['POST'])
@@ -173,6 +220,7 @@ def get_current_user(current_user):
 @role_required(['מפ', 'ממ'])
 def create_user(current_user):
     """יצירת משתמש"""
+    session = None
     try:
         data = request.json
         session = get_db()
@@ -203,4 +251,5 @@ def create_user(current_user):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
-        session.close()
+        if session:
+            session.close()

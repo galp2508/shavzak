@@ -21,6 +21,7 @@ from auth import (
 from .utils import get_db, build_user_response
 from smart_scheduler import SmartScheduler
 import os
+from ditto_client import ditto
 
 schedule_bp = Blueprint('schedule', __name__)
 
@@ -68,6 +69,23 @@ def create_shavzak(current_user):
 
         session.add(shavzak)
         session.commit()
+
+        # Sync to Ditto
+        try:
+            shavzak_data = {
+                "pluga_id": shavzak.pluga_id,
+                "name": shavzak.name,
+                "start_date": shavzak.start_date.isoformat(),
+                "days_count": shavzak.days_count,
+                "created_by": shavzak.created_by,
+                "min_rest_hours": shavzak.min_rest_hours,
+                "emergency_mode": shavzak.emergency_mode,
+                "type": "shavzak",
+                "_id": str(shavzak.id)
+            }
+            ditto.upsert("shavzakim", shavzak_data)
+        except Exception as e:
+            print(f"⚠️ Failed to sync shavzak to Ditto: {e}")
 
         return jsonify({
             'message': 'שיבוץ נוצר בהצלחה',
@@ -336,6 +354,7 @@ def generate_shavzak(shavzak_id, current_user):
                         raise ValueError(f"שגיאה ביצירת משימה '{assign_data['name']}' ליום {assign_data['day']} - לא ניתן היה לשמור את המשימה במסד הנתונים")
 
                     # הוספת חיילים
+                    all_soldier_ids = []
                     for role_key in ['commanders', 'drivers', 'soldiers']:
                         if role_key in result:
                             role_name = role_key[:-1]  # הסרת 's'
@@ -346,6 +365,7 @@ def generate_shavzak(shavzak_id, current_user):
                                     role_in_assignment=role_name
                                 )
                                 session.add(assign_soldier)
+                                all_soldier_ids.append(soldier_id)
 
                                 # עדכון schedules
                                 if soldier_id not in schedules:
@@ -357,6 +377,24 @@ def generate_shavzak(shavzak_id, current_user):
                                     assign_data['name'],
                                     assign_data['type']
                                 ))
+
+                    # Sync to Ditto
+                    try:
+                        assignment_data = {
+                            "shavzak_id": assignment.shavzak_id,
+                            "name": assignment.name,
+                            "assignment_type": assignment.assignment_type,
+                            "day": assignment.day,
+                            "start_hour": assignment.start_hour,
+                            "length_in_hours": assignment.length_in_hours,
+                            "assigned_mahlaka_id": assignment.assigned_mahlaka_id,
+                            "soldier_ids": all_soldier_ids,
+                            "type": "assignment",
+                            "_id": str(assignment.id)
+                        }
+                        ditto.upsert("assignments", assignment_data)
+                    except Exception as e:
+                        print(f"⚠️ Failed to sync assignment to Ditto: {e}")
 
             except Exception as e:
                 error_msg = str(e)
@@ -599,8 +637,15 @@ def delete_assignment(assignment_id, current_user):
             return jsonify({'error': 'אין לך הרשאה'}), 403
 
         # מחיקה תמחוק גם את החיילים המשובצים בגלל cascade
+        assignment_id_str = str(assignment.id)
         session.delete(assignment)
         session.commit()
+
+        # Sync to Ditto
+        try:
+            ditto.delete("assignments", assignment_id_str)
+        except Exception as e:
+            print(f"⚠️ Failed to sync assignment deletion to Ditto: {e}")
 
         return jsonify({'message': 'משימה נמחקה בהצלחה'}), 200
     except Exception as e:
@@ -815,11 +860,13 @@ def update_assignment(assignment_id, current_user):
 
         # החזרת המשימה המעודכנת
         soldiers = []
+        soldier_ids = []
         soldier_assignments = session.query(AssignmentSoldier).filter_by(
             assignment_id=assignment.id
         ).all()
 
         for sa in soldier_assignments:
+            soldier_ids.append(sa.soldier_id)
             soldier = session.query(Soldier).filter_by(id=sa.soldier_id).first()
             if soldier:
                 soldiers.append({
@@ -829,6 +876,24 @@ def update_assignment(assignment_id, current_user):
                     'role_in_assignment': sa.role_in_assignment,
                     'mahlaka_id': soldier.mahlaka_id
                 })
+
+        # Sync to Ditto
+        try:
+            assignment_data = {
+                "shavzak_id": assignment.shavzak_id,
+                "name": assignment.name,
+                "assignment_type": assignment.assignment_type,
+                "day": assignment.day,
+                "start_hour": assignment.start_hour,
+                "length_in_hours": assignment.length_in_hours,
+                "assigned_mahlaka_id": assignment.assigned_mahlaka_id,
+                "soldier_ids": soldier_ids,
+                "type": "assignment",
+                "_id": str(assignment.id)
+            }
+            ditto.upsert("assignments", assignment_data)
+        except Exception as e:
+            print(f"⚠️ Failed to sync assignment update to Ditto: {e}")
 
         return jsonify({
             'message': 'משימה עודכנה בהצלחה',
@@ -889,6 +954,25 @@ def update_assignment_time(assignment_id, current_user):
 
         session.commit()
 
+        # Sync to Ditto
+        try:
+            soldier_ids = [sa.soldier_id for sa in session.query(AssignmentSoldier).filter_by(assignment_id=assignment.id).all()]
+            assignment_data = {
+                "shavzak_id": assignment.shavzak_id,
+                "name": assignment.name,
+                "assignment_type": assignment.assignment_type,
+                "day": assignment.day,
+                "start_hour": assignment.start_hour,
+                "length_in_hours": assignment.length_in_hours,
+                "assigned_mahlaka_id": assignment.assigned_mahlaka_id,
+                "soldier_ids": soldier_ids,
+                "type": "assignment",
+                "_id": str(assignment.id)
+            }
+            ditto.upsert("assignments", assignment_data)
+        except Exception as e:
+            print(f"⚠️ Failed to sync assignment time update to Ditto: {e}")
+
         return jsonify({
             'message': 'המשימה עודכנה בהצלחה',
             'assignment': {
@@ -940,11 +1024,13 @@ def update_assignment_soldiers(assignment_id, current_user):
 
         # החזרת רשימת החיילים המעודכנת
         soldiers = []
+        soldier_ids = []
         soldier_assignments = session.query(AssignmentSoldier).filter_by(
             assignment_id=assignment_id
         ).all()
 
         for sa in soldier_assignments:
+            soldier_ids.append(sa.soldier_id)
             soldier = session.query(Soldier).filter_by(id=sa.soldier_id).first()
             if soldier:
                 soldiers.append({
@@ -954,6 +1040,24 @@ def update_assignment_soldiers(assignment_id, current_user):
                     'role_in_assignment': sa.role_in_assignment,
                     'mahlaka_id': soldier.mahlaka_id
                 })
+
+        # Sync to Ditto
+        try:
+            assignment_data = {
+                "shavzak_id": assignment.shavzak_id,
+                "name": assignment.name,
+                "assignment_type": assignment.assignment_type,
+                "day": assignment.day,
+                "start_hour": assignment.start_hour,
+                "length_in_hours": assignment.length_in_hours,
+                "assigned_mahlaka_id": assignment.assigned_mahlaka_id,
+                "soldier_ids": soldier_ids,
+                "type": "assignment",
+                "_id": str(assignment.id)
+            }
+            ditto.upsert("assignments", assignment_data)
+        except Exception as e:
+            print(f"⚠️ Failed to sync assignment soldiers update to Ditto: {e}")
 
         return jsonify({
             'message': 'חיילים עודכנו בהצלחה',

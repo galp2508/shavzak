@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useDitto } from '../context/DittoContext';
 import api from '../services/api';
 import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap, ArrowLeftRight, Download, ZoomIn, ZoomOut, Eraser } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -33,6 +34,7 @@ const SortableHeader = ({ name }) => {
 
 const LiveSchedule = () => {
   const { user } = useAuth();
+  const { ditto } = useDitto();
   const [currentDate, setCurrentDate] = useState(null);
   const [scheduleData, setScheduleData] = useState(null);
   const [mahalkot, setMahalkot] = useState([]);
@@ -195,6 +197,26 @@ const LiveSchedule = () => {
       loadSchedule(currentDate);
     }
   }, [currentDate]);
+
+  // Ditto Live Sync
+  useEffect(() => {
+    if (!ditto || !currentDate) return;
+
+    console.log("🔌 Subscribing to Ditto changes...");
+    
+    const subscription = ditto.store.collection("assignments").find("true").subscribe();
+    
+    const observer = ditto.store.collection("assignments").find("true").observeLocal((docs, event) => {
+      // When data changes in Ditto (from other devices), reload the schedule
+      console.log("🔄 Ditto update received!", event);
+      loadSchedule(currentDate);
+    });
+
+    return () => {
+      subscription.cancel();
+      observer.stop();
+    };
+  }, [ditto, currentDate]);
 
   // האזן לשינויים בתבניות משימות
   useEffect(() => {

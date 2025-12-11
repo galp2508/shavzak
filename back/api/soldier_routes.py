@@ -17,6 +17,7 @@ from auth import (
     can_edit_mahlaka, can_view_mahlaka, can_edit_soldier
 )
 from .utils import get_db
+from ditto_client import ditto
 
 soldier_bp = Blueprint('soldier', __name__)
 
@@ -83,6 +84,33 @@ def create_soldier(current_user):
 
         session.commit()
 
+        # Sync to Ditto
+        try:
+            soldier_data = {
+                "name": soldier.name,
+                "role": soldier.role,
+                "mahlaka_id": soldier.mahlaka_id,
+                "kita": soldier.kita,
+                "idf_id": soldier.idf_id,
+                "personal_id": soldier.personal_id,
+                "sex": soldier.sex,
+                "phone_number": soldier.phone_number,
+                "address": soldier.address,
+                "emergency_contact_name": soldier.emergency_contact_name,
+                "emergency_contact_number": soldier.emergency_contact_number,
+                "pakal": soldier.pakal,
+                "has_hatashab": soldier.has_hatashab,
+                "recruit_date": soldier.recruit_date.isoformat() if soldier.recruit_date else None,
+                "birth_date": soldier.birth_date.isoformat() if soldier.birth_date else None,
+                "home_round_date": soldier.home_round_date.isoformat() if soldier.home_round_date else None,
+                "certifications": certifications_to_add,
+                "type": "soldier",
+                "_id": str(soldier.id)
+            }
+            ditto.upsert("soldiers", soldier_data)
+        except Exception as e:
+            print(f"⚠️ Failed to sync soldier to Ditto: {e}")
+
         return jsonify({
             'message': 'חייל נוסף בהצלחה',
             'soldier': {
@@ -115,6 +143,7 @@ def create_soldiers_bulk(current_user):
 
         created = []
         errors = []
+        ditto_payloads = []
 
         for idx, soldier_data in enumerate(soldiers_list):
             try:
@@ -203,6 +232,29 @@ def create_soldiers_bulk(current_user):
                     'role': soldier.role,
                     'kita': soldier.kita
                 })
+
+                # Prepare Ditto payload
+                ditto_payloads.append({
+                    "name": soldier.name,
+                    "role": soldier.role,
+                    "mahlaka_id": soldier.mahlaka_id,
+                    "kita": soldier.kita,
+                    "idf_id": soldier.idf_id,
+                    "personal_id": soldier.personal_id,
+                    "sex": soldier.sex,
+                    "phone_number": soldier.phone_number,
+                    "address": soldier.address,
+                    "emergency_contact_name": soldier.emergency_contact_name,
+                    "emergency_contact_number": soldier.emergency_contact_number,
+                    "pakal": soldier.pakal,
+                    "has_hatashab": soldier.has_hatashab,
+                    "recruit_date": soldier.recruit_date.isoformat() if soldier.recruit_date else None,
+                    "birth_date": soldier.birth_date.isoformat() if soldier.birth_date else None,
+                    "home_round_date": soldier.home_round_date.isoformat() if soldier.home_round_date else None,
+                    "certifications": certifications_to_add,
+                    "type": "soldier",
+                    "_id": str(soldier.id)
+                })
             except Exception as e:
                 error_msg = f"שורה {idx + 1}: {str(e)}"
                 errors.append(error_msg)
@@ -210,6 +262,13 @@ def create_soldiers_bulk(current_user):
                 traceback.print_exc()
 
         session.commit()
+
+        # Sync to Ditto
+        for payload in ditto_payloads:
+            try:
+                ditto.upsert("soldiers", payload)
+            except Exception as e:
+                print(f"⚠️ Failed to sync soldier {payload.get('name')} to Ditto: {e}")
 
         return jsonify({
             'message': f'נוצרו {len(created)} חיילים',
@@ -360,6 +419,36 @@ def update_soldier(soldier_id, current_user):
 
         session.commit()
 
+        # Sync to Ditto
+        try:
+            # Fetch certifications
+            certs = [c.certification_name for c in session.query(Certification).filter_by(soldier_id=soldier.id).all()]
+            
+            soldier_data = {
+                "name": soldier.name,
+                "role": soldier.role,
+                "mahlaka_id": soldier.mahlaka_id,
+                "kita": soldier.kita,
+                "idf_id": soldier.idf_id,
+                "personal_id": soldier.personal_id,
+                "sex": soldier.sex,
+                "phone_number": soldier.phone_number,
+                "address": soldier.address,
+                "emergency_contact_name": soldier.emergency_contact_name,
+                "emergency_contact_number": soldier.emergency_contact_number,
+                "pakal": soldier.pakal,
+                "has_hatashab": soldier.has_hatashab,
+                "recruit_date": soldier.recruit_date.isoformat() if soldier.recruit_date else None,
+                "birth_date": soldier.birth_date.isoformat() if soldier.birth_date else None,
+                "home_round_date": soldier.home_round_date.isoformat() if soldier.home_round_date else None,
+                "certifications": certs,
+                "type": "soldier",
+                "_id": str(soldier.id)
+            }
+            ditto.upsert("soldiers", soldier_data)
+        except Exception as e:
+            print(f"⚠️ Failed to sync soldier update to Ditto: {e}")
+
         return jsonify({
             'message': 'חייל עודכן בהצלחה',
             'soldier': {
@@ -392,8 +481,15 @@ def delete_soldier(soldier_id, current_user):
         if not soldier:
             return jsonify({'error': 'חייל לא נמצא'}), 404
 
+        soldier_id_str = str(soldier.id)
         session.delete(soldier)
         session.commit()
+
+        # Sync to Ditto
+        try:
+            ditto.delete("soldiers", soldier_id_str)
+        except Exception as e:
+            print(f"⚠️ Failed to sync soldier deletion to Ditto: {e}")
 
         return jsonify({'message': 'חייל נמחק בהצלחה'}), 200
     except Exception as e:

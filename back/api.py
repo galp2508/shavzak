@@ -6,9 +6,13 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from dotenv import load_dotenv
 import traceback
 import os
 import sqlite3
+
+# Load environment variables
+load_dotenv()
 
 from models import init_db
 

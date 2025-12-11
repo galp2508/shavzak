@@ -1,0 +1,15 @@
+[Unit]
+Description=Gunicorn instance to serve Shavzak API
+After=network.target
+
+[Service]
+# Change 'root' to your sudo user if you created one (recommended)
+User=root
+Group=www-data
+# Adjust this path to where you cloned the repo
+WorkingDirectory=/var/www/shavzak/back
+Environment="PATH=/var/www/shavzak/venv/bin"
+ExecStart=/var/www/shavzak/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:5000 wsgi:app
+
+[Install]
+WantedBy=multi-user.target

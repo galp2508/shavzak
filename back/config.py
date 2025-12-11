@@ -13,5 +13,9 @@ class Config:
     API_PORT = int(os.getenv('API_PORT', 5000))
     DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
     
+    # Ditto Configuration
+    DITTO_API_URL = os.getenv('DITTO_API_URL', 'https://{YOUR_APP_ID}.cloud.ditto.live')
+    DITTO_API_KEY = os.getenv('DITTO_API_KEY', '')
+
     DEFAULT_MIN_REST_HOURS = 8
     DEFAULT_EMERGENCY_REST_HOURS = 4

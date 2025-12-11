@@ -58,6 +58,7 @@ const LiveSchedule = () => {
   const [viewMode, setViewMode] = useState(window.innerWidth < 768 ? 'list' : 'grid');
   const [touchStartDist, setTouchStartDist] = useState(null);
   const [touchStartZoom, setTouchStartZoom] = useState(1);
+  const [showStats, setShowStats] = useState(window.innerWidth >= 768);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -858,51 +859,62 @@ const LiveSchedule = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header with Date Navigation */}
-      <div className="card bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl border-none p-4 md:p-6">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className="bg-white bg-opacity-20 p-3 rounded-2xl backdrop-blur-sm animate-pulse-slow hidden md:block">
-              <Calendar className="w-12 h-12" />
+      <div className="card bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl border-none p-3 md:p-6">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
+          <div className="flex items-center justify-between w-full md:w-auto">
+            <div className="flex items-center gap-3">
+                <div className="bg-white bg-opacity-20 p-2 md:p-3 rounded-2xl backdrop-blur-sm animate-pulse-slow hidden md:block">
+                <Calendar className="w-8 h-8 md:w-12 md:h-12" />
+                </div>
+                <div className="text-right">
+                <div className="flex items-center gap-2">
+                    <h1 className="text-xl md:text-4xl font-bold tracking-tight">שיבוץ חי</h1>
+                    <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-[10px] md:text-xs px-2 py-0.5 md:px-3 md:py-1 rounded-full font-bold animate-pulse flex items-center gap-1">
+                    <Sparkles size={10} className="md:w-3 md:h-3" />
+                    LIVE
+                    </span>
+                </div>
+                <p className="text-purple-100 text-sm md:text-lg font-medium hidden md:block">ניווט אוטומטי בין ימים • למידת מכונה פעילה</p>
+                </div>
             </div>
-            <div className="flex-1 text-center md:text-right">
-              <div className="flex items-center justify-center md:justify-start gap-3">
-                <h1 className="text-3xl md:text-4xl font-bold tracking-tight">שיבוץ חי</h1>
-                <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs px-3 py-1 rounded-full font-bold animate-pulse flex items-center gap-1">
-                  <Sparkles size={12} />
-                  LIVE
-                </span>
-              </div>
-              <p className="text-purple-100 text-sm md:text-lg font-medium hidden md:block">ניווט אוטומטי בין ימים • למידת מכונה פעילה</p>
-            </div>
+            
+            {/* Mobile Stats Toggle */}
+            <button 
+                onClick={() => setShowStats(!showStats)}
+                className="md:hidden p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors flex items-center gap-1 text-xs font-bold"
+            >
+                <TrendingUp size={16} />
+                {showStats ? 'הסתר נתונים' : 'הצג נתונים'}
+            </button>
           </div>
 
           {/* Date Navigation */}
-          <div className="flex items-center justify-between w-full md:w-auto gap-4 bg-white bg-opacity-20 backdrop-blur-md rounded-2xl p-2 md:p-4 shadow-lg">
+          <div className="flex items-center justify-between w-full md:w-auto gap-2 md:gap-4 bg-white bg-opacity-20 backdrop-blur-md rounded-xl md:rounded-2xl p-2 md:p-4 shadow-lg">
             <button
               onClick={() => navigateDay(-1)}
-              className="p-2 md:p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
-              title="יום קודם (מקש חץ ימינה)"
+              className="p-1.5 md:p-3 hover:bg-white hover:bg-opacity-30 rounded-lg md:rounded-xl transition-all duration-300 active:scale-95 md:hover:scale-110 transform"
+              title="יום קודם"
             >
-              <ChevronRight size={24} className="md:w-7 md:h-7" />
+              <ChevronRight size={20} className="md:w-7 md:h-7" />
             </button>
 
-            <div className="text-center min-w-[120px] md:min-w-[220px]">
-              <div className="text-xl md:text-3xl font-bold tracking-wide">
+            <div className="text-center min-w-[100px] md:min-w-[220px]">
+              <div className="text-lg md:text-3xl font-bold tracking-wide">
                 {currentDate && getDayName(currentDate)}
               </div>
-              <div className="text-sm md:text-base opacity-90 font-medium mt-1">
+              <div className="text-xs md:text-base opacity-90 font-medium mt-0.5 md:mt-1">
                 {currentDate && currentDate.toLocaleDateString('he-IL')}
               </div>
             </div>
 
             <button
               onClick={() => navigateDay(1)}
-              className="p-2 md:p-3 hover:bg-white hover:bg-opacity-30 rounded-xl transition-all duration-300 hover:scale-110 transform"
-              title="יום הבא (מקש חץ שמאלה)"
+              className="p-1.5 md:p-3 hover:bg-white hover:bg-opacity-30 rounded-lg md:rounded-xl transition-all duration-300 active:scale-95 md:hover:scale-110 transform"
+              title="יום הבא"
             >
-              <ChevronLeft size={24} className="md:w-7 md:h-7" />
+              <ChevronLeft size={20} className="md:w-7 md:h-7" />
             </button>
           </div>
 
@@ -912,41 +924,41 @@ const LiveSchedule = () => {
                 <button
                   onClick={generateSmartSchedule}
                   disabled={isGenerating}
-                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-2 rounded-lg transition-all flex items-center gap-2 shadow-lg disabled:opacity-50 text-sm md:text-base"
+                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-3 py-1.5 md:py-2 rounded-lg transition-all flex items-center gap-2 shadow-lg disabled:opacity-50 text-xs md:text-base flex-1 md:flex-none justify-center"
                   title="יצירת שיבוץ חכם עם AI"
                 >
                   {isGenerating ? (
                     <>
-                      <RefreshCw size={18} className="animate-spin" />
-                      <span className="hidden sm:inline">מייצר...</span>
+                      <RefreshCw size={16} className="animate-spin md:w-[18px] md:h-[18px]" />
+                      <span className="inline">מייצר...</span>
                     </>
                   ) : (
                     <>
-                      <Brain size={18} />
-                      <span className="hidden sm:inline">שיבוץ AI</span>
+                      <Brain size={16} className="md:w-[18px] md:h-[18px]" />
+                      <span className="inline">שיבוץ AI</span>
                     </>
                   )}
                 </button>
                 <button
                   onClick={() => setShowConstraints(true)}
-                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                  className="p-1.5 md:p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
                   title="אילוצי שיבוץ"
                 >
-                  <Shield size={20} className="md:w-6 md:h-6" />
+                  <Shield size={18} className="md:w-6 md:h-6" />
                 </button>
                 <button
                   onClick={handleExportImage}
-                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                  className="p-1.5 md:p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
                   title="ייצא לתמונה"
                 >
-                  <Download size={20} className="md:w-6 md:h-6" />
+                  <Download size={18} className="md:w-6 md:h-6" />
                 </button>
                 <button
                   onClick={clearDaySoldiers}
-                  className="p-2 hover:bg-orange-500 hover:bg-opacity-20 text-orange-600 hover:text-orange-700 rounded-lg transition-colors"
+                  className="p-1.5 md:p-2 hover:bg-orange-500 hover:bg-opacity-20 text-orange-200 hover:text-orange-100 rounded-lg transition-colors"
                   title="נקה חיילים (השאר משימות)"
                 >
-                  <Eraser size={20} className="md:w-6 md:h-6" />
+                  <Eraser size={18} className="md:w-6 md:h-6" />
                 </button>
                 <button
                   onClick={deleteDaySchedule}
@@ -1002,6 +1014,9 @@ const LiveSchedule = () => {
         </div>
       )}
 
+      {/* Stats Section - Collapsible on Mobile */}
+      {showStats && (
+        <div className="space-y-4 md:space-y-6 animate-fadeIn">
       {/* ML Stats Bar - סטטיסטיקות מטורפות */}
       {mlStats && (
         <div className="card bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border-l-4 border-blue-500 shadow-xl">
@@ -1225,6 +1240,9 @@ const LiveSchedule = () => {
           )}
         </div>
       </div>
+
+        </div>
+      )}
 
       {/* Loading State */}
       {loading ? (

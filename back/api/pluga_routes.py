@@ -25,8 +25,8 @@ pluga_bp = Blueprint('pluga', __name__)
 # ============================================================================
 # PLUGA
 # ============================================================================
-    
-@pluga_bp.route('/api/plugot', methods=['POST'])         
+
+@pluga_bp.route('/api/plugot', methods=['POST'])
 @token_required
 @role_required(['מפ'])
 def create_pluga(current_user):
@@ -874,7 +874,7 @@ def delete_constraint(constraint_id, current_user):
 @token_required
 def get_recent_assignments(pluga_id, current_user):
     """קבלת משימות אחרונות מהשיבוץ האוטומטי (לצורך פידבק על אילוצים)"""
-    session = get_db()  
+    session = get_db()
     try:
         if not can_view_pluga(current_user, pluga_id):
             return jsonify({'error': 'אין לך הרשאה'}), 403

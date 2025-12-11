@@ -18,9 +18,11 @@ const Templates = () => {
   const loadTemplates = async () => {
     try {
       const response = await api.get(`/plugot/${user.pluga_id}/assignment-templates`);
-      setTemplates(response.data.templates);
+      setTemplates(response.data.templates || []);
     } catch (error) {
+      console.error('Error loading templates:', error);
       toast.error('שגיאה בטעינת תבניות');
+      setTemplates([]); // Ensure it's an array on error
     } finally {
       setLoading(false);
     }

@@ -81,7 +81,7 @@ const Dashboard = () => {
       let soldiersOnBase = 0;
       let commandersOnBase = 0;
       let driversOnBase = 0;
-      const mahalkotOnBase = new Set();
+      const mahlakaOnBaseCounts = {}; // mahlakaId -> count
       
       // New logic for active soldiers and next assignment
       const activeSoldiers = new Set();
@@ -133,10 +133,13 @@ const Dashboard = () => {
         }
 
         if (isOnBase) {
-          // הוסף את המחלקה לרשימת המחלקות בבסיס
+          // ספירת חיילים בבסיס לכל מחלקה
           const mahlaka = mahalkot.find(m => m.id === soldier.mahlaka_id);
           if (mahlaka) {
-            mahalkotOnBase.add(mahlaka.number);
+            if (!mahlakaOnBaseCounts[mahlaka.id]) {
+                mahlakaOnBaseCounts[mahlaka.id] = 0;
+            }
+            mahlakaOnBaseCounts[mahlaka.id]++;
             
             // Initialize workload for this mahlaka if needed
             if (!workloadByMahlaka[mahlaka.number]) {
@@ -162,6 +165,9 @@ const Dashboard = () => {
           }
         }
       });
+
+      // חישוב מחלקות בבסיס - רק אם יש יותר מ-3 חיילים בבסיס
+      const activeMahalkotCount = Object.values(mahlakaOnBaseCounts).filter(count => count > 3).length;
       
       // Calculate workload from assignments
       liveAssignments.forEach(assignment => {
@@ -189,6 +195,13 @@ const Dashboard = () => {
               workloadByMahlaka[mahlakaName] += assignment.length_in_hours;
           }
       });
+
+      // Get names (numbers) of active mahalkot
+      const activeMahalkotIds = Object.keys(mahlakaOnBaseCounts).filter(mid => mahlakaOnBaseCounts[mid] > 3);
+      const activeMahalkotNumbers = activeMahalkotIds.map(mid => {
+          const m = mahalkot.find(m => m.id === parseInt(mid));
+          return m ? m.number : '?';
+      }).sort((a, b) => a - b);
 
       // Format Chart Data
       // Define colors for known statuses
@@ -220,8 +233,8 @@ const Dashboard = () => {
       });
 
       setStats({
-        mahalkot_count: mahalkotOnBase.size,
-        mahalkot_names: Array.from(mahalkotOnBase).sort((a, b) => a - b),
+        mahalkot_count: activeMahalkotCount,
+        mahalkot_names: activeMahalkotNumbers,
         soldiers_on_base: soldiersOnBase,
         commanders_on_base: commandersOnBase,
         drivers_on_base: driversOnBase,

@@ -32,8 +32,12 @@ smart_scheduler = SmartScheduler()
 
 # נסה לטעון מודל קיים
 if os.path.exists(ML_MODEL_PATH):
-    smart_scheduler.load_model(ML_MODEL_PATH)
-    print("✅ Smart Scheduler (ml_bp): מודל נטען מ-ml_model.pkl")
+    try:
+        smart_scheduler.load_model(ML_MODEL_PATH)
+        print("✅ Smart Scheduler (ml_bp): מודל נטען מ-ml_model.pkl")
+    except Exception as e:
+        print(f"⚠️ Smart Scheduler (ml_bp): נכשל בטעינת המודל: {e}")
+        print("   ממשיך ללא מודל מאומן.")
 else:
     print("⚠️ Smart Scheduler (ml_bp): אין מודל קיים - יש לאמן תחילה")
 

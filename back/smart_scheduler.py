@@ -1225,7 +1225,8 @@ class SmartScheduler:
         # הפרד לפי תפקידים
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         drivers = [s for s in all_soldiers if self.is_driver(s)]
-        soldiers = [s for s in all_soldiers if not self.is_commander(s)]
+        # חיילים הם אלו שאינם מפקדים ואינם נהגים (כדי למנוע כפילות)
+        soldiers = [s for s in all_soldiers if not self.is_commander(s) and not self.is_driver(s)]
 
         # סינון לפי זמינות (אילוץ קשיח עם fallback)
         available_commanders = self.get_available_soldiers_with_fallback(commanders, task, schedules)
@@ -1327,9 +1328,11 @@ class SmartScheduler:
         missing = []
         if len(available_commanders) < commanders_needed:
             missing.append(f"מפקדים ({len(available_commanders)}/{commanders_needed})")
-        # נהגים - לא חוסם
-        # if drivers_needed > 0 and len(available_drivers) < drivers_needed:
-        #    missing.append(f"נהגים ({len(available_drivers)}/{drivers_needed})")
+        
+        # נהגים - חוסם אם נדרש
+        if drivers_needed > 0 and len(available_drivers) < drivers_needed:
+           missing.append(f"נהגים ({len(available_drivers)}/{drivers_needed})")
+           
         if len(available_soldiers) < soldiers_needed:
             missing.append(f"חיילים ({len(available_soldiers)}/{soldiers_needed})")
 

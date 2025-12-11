@@ -887,9 +887,9 @@ const LiveSchedule = () => {
   return (
     <div className={`space-y-4 md:space-y-6 ${isFullScreen ? 'fixed inset-0 z-[100] bg-gray-100 overflow-auto p-2' : ''}`}>
       {/* Header with Date Navigation */}
-      <div className="card bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl border-none p-3 md:p-6">
+      <div className={`card bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl border-none p-3 md:p-6 ${isFullScreen ? 'sticky top-0 z-50 rounded-none' : ''}`}>
         <div className="flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
-          <div className="flex items-center justify-between w-full md:w-auto">
+          <div className={`flex items-center justify-between w-full md:w-auto ${isFullScreen ? 'hidden' : ''}`}>
             <div className="flex items-center gap-3">
                 <div className="bg-white bg-opacity-20 p-2 md:p-3 rounded-2xl backdrop-blur-sm animate-pulse-slow hidden md:block">
                 <Calendar className="w-8 h-8 md:w-12 md:h-12" />
@@ -917,7 +917,7 @@ const LiveSchedule = () => {
           </div>
 
           {/* Date Navigation */}
-          <div className="flex items-center justify-between w-full md:w-auto gap-2 md:gap-4 bg-white bg-opacity-20 backdrop-blur-md rounded-xl md:rounded-2xl p-2 md:p-4 shadow-lg">
+          <div className={`flex items-center justify-between w-full md:w-auto gap-2 md:gap-4 bg-white bg-opacity-20 backdrop-blur-md rounded-xl md:rounded-2xl p-2 md:p-4 shadow-lg ${isFullScreen ? 'flex-1' : ''}`}>
             <button
               onClick={() => navigateDay(-1)}
               className="p-1.5 md:p-3 hover:bg-white hover:bg-opacity-30 rounded-lg md:rounded-xl transition-all duration-300 active:scale-95 md:hover:scale-110 transform"
@@ -1052,7 +1052,7 @@ const LiveSchedule = () => {
       )}
 
       {/* Stats Section - Collapsible on Mobile */}
-      {showStats && (
+      {showStats && !isFullScreen && (
         <div className="space-y-4 md:space-y-6 animate-fadeIn">
       {/* ML Stats Bar - סטטיסטיקות מטורפות */}
       {mlStats && (

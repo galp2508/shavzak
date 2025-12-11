@@ -886,66 +886,111 @@ def run_smart_scheduling(session, pluga_id, start_date, days_count, user_id):
         ).delete(synchronize_session=False)
         session.commit()
 
-    # הרצת ML
-    schedules = {}
-    mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
+    # הרצת ML עם ניסיונות חוזרים (Retry Logic)
+    max_attempts = 5
+    best_attempt = None
+    min_failures = float('inf')
 
     all_commanders = [c for m in mahalkot_data for c in m['commanders']]
     all_drivers = [d for m in mahalkot_data for d in m['drivers']]
     all_soldiers = [s for m in mahalkot_data for s in m['soldiers']]
 
-    created_assignments = []
-    failed_assignments = []
+    for attempt in range(1, max_attempts + 1):
+        print(f"🔄 ניסיון שיבוץ {attempt}/{max_attempts}...")
+        
+        schedules = {}
+        mahlaka_workload = {m['id']: 0 for m in mahalkot_data}
+        
+        current_created_assignments = []
+        current_failed_assignments = []
+        validation_failures = 0
 
-    for assign_data in all_assignments:
-        current_date = assign_data['date']
+        for assign_data in all_assignments:
+            current_date = assign_data['date']
 
-        available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
-        available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
-        available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
+            available_commanders = [c for c in all_commanders if is_soldier_available(c, current_date)]
+            available_drivers = [d for d in all_drivers if is_soldier_available(d, current_date)]
+            available_soldiers = [s for s in all_soldiers if is_soldier_available(s, current_date)]
 
-        all_available = available_commanders + available_drivers + available_soldiers
+            all_available = available_commanders + available_drivers + available_soldiers
 
-        result = smart_scheduler.assign_task(assign_data, all_available, schedules, mahlaka_workload)
+            # העתק של mahlaka_workload לשימוש בתוך assign_task (כי הוא משנה אותו)
+            # אבל אנחנו רוצים שהשינויים יישמרו לאורך הניסיון הנוכחי
+            result = smart_scheduler.assign_task(assign_data, all_available, schedules, mahlaka_workload)
 
-        # אם לא נמצא שיבוץ - צור משימה ריקה
-        if not result:
-            # print(f"⚠️ לא נמצא שיבוץ למשימה {assign_data['name']} ביום {assign_data['day']} שעה {assign_data['start_hour']} - יוצר משימה ריקה")
-            result = {
-                'commanders': [],
-                'drivers': [],
-                'soldiers': [],
-                'mahlaka_id': None
+            # בדיקת תקינות (Validation)
+            is_valid = True
+            if not result:
+                is_valid = False
+            else:
+                # בדוק אם עומד בדרישות
+                if len(result.get('commanders', [])) < assign_data.get('commanders_needed', 0):
+                    is_valid = False
+                if len(result.get('drivers', [])) < assign_data.get('drivers_needed', 0):
+                    is_valid = False
+                if len(result.get('soldiers', [])) < assign_data.get('soldiers_needed', 0):
+                    is_valid = False
+
+            if not is_valid:
+                validation_failures += 1
+                if not result:
+                    result = {
+                        'commanders': [],
+                        'drivers': [],
+                        'soldiers': [],
+                        'mahlaka_id': None
+                    }
+                current_failed_assignments.append(assign_data)
+            
+            # עדכן schedules
+            for role_key in ['commanders', 'drivers', 'soldiers']:
+                if role_key in result:
+                    for soldier_id in result[role_key]:
+                        if soldier_id not in schedules:
+                            schedules[soldier_id] = []
+                        schedules[soldier_id].append((
+                            assign_data['day'],
+                            assign_data['start_hour'],
+                            assign_data['start_hour'] + assign_data['length_in_hours'],
+                            assign_data['name'],
+                            assign_data['type']
+                        ))
+
+            current_created_assignments.append({
+                **assign_data,
+                'result': result
+            })
+
+        print(f"   ❌ כישלונות בניסיון {attempt}: {validation_failures}")
+
+        # שמור את הניסיון הטוב ביותר
+        if validation_failures < min_failures:
+            min_failures = validation_failures
+            best_attempt = {
+                'created_assignments': current_created_assignments,
+                'failed_assignments': current_failed_assignments
             }
-            # הוסף לרשימת הכשלונות רק לצורך סטטיסטיקה/דיווח, אבל המשימה תיווצר
-            failed_assignments.append(assign_data)
 
-        # עדכן את ה-schedules רק אם יש חיילים (במקרה של הצלחה)
-        for role_key in ['commanders', 'drivers', 'soldiers']:
-            if role_key in result:
-                for soldier_id in result[role_key]:
-                    if soldier_id not in schedules:
-                        schedules[soldier_id] = []
-                    schedules[soldier_id].append((
-                        assign_data['day'],
-                        assign_data['start_hour'],
-                        assign_data['start_hour'] + assign_data['length_in_hours'],
-                        assign_data['name'],
-                        assign_data['type']
-                    ))
+        # אם השיבוץ מושלם - עצור
+        if validation_failures == 0:
+            print("✅ נמצא שיבוץ מושלם!")
+            break
+    
+    # השתמש בניסיון הטוב ביותר
+    created_assignments = best_attempt['created_assignments']
+    failed_assignments = best_attempt['failed_assignments']
 
-        created_assignments.append({
-            **assign_data,
-            'result': result
-        })
-
+    # שמירה לדאטהבייס
+    for item in created_assignments:
+        result = item['result']
+        
         assignment = Assignment(
             shavzak_id=master_shavzak.id,
-            name=assign_data['name'],
-            assignment_type=assign_data['type'],
-            day=assign_data['day'],
-            start_hour=assign_data['start_hour'],
-            length_in_hours=assign_data['length_in_hours'],
+            name=item['name'],
+            assignment_type=item['type'],
+            day=item['day'],
+            start_hour=item['start_hour'],
+            length_in_hours=item['length_in_hours'],
             assigned_mahlaka_id=result.get('mahlaka_id')
         )
         session.add(assignment)

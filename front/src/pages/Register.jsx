@@ -59,8 +59,8 @@ const Register = () => {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError('הסיסמה חייבת להכיל לפחות 6 תווים');
+    if (formData.password.length < 8) {
+      setError('הסיסמה חייבת להכיל לפחות 8 תווים');
       return;
     }
 
@@ -221,7 +221,7 @@ const Register = () => {
                 required
                 minLength={6}
               />
-              <p className="text-xs text-gray-500 mt-1">לפחות 6 תווים</p>
+              <p className="text-xs text-gray-500 mt-1">הסיסמה חייבת להכיל לפחות 8 תווים</p>
             </div>
 
             <div>
@@ -266,7 +266,7 @@ const Register = () => {
                         value={formData.plugaName}
                         onChange={handleChange}
                         className="input-field"
-                        placeholder="לדוגמה: פלוגה א', פלוגה 1"
+                        placeholder="לדוגמה: פלוגה ב"
                         required
                       />
                     </div>
@@ -279,7 +279,7 @@ const Register = () => {
                         value={formData.gdud}
                         onChange={handleChange}
                         className="input-field"
-                        placeholder="לדוגמה: גדוד נחל, גדוד 52"
+                        placeholder="לדוגמה: גדוד פנתר"
                       />
                     </div>
 

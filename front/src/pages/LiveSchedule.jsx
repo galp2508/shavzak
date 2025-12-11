@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useDitto } from '../context/DittoContext';
 import api from '../services/api';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap, ArrowLeftRight, Download, ZoomIn, ZoomOut, Eraser, LayoutList, Grid } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Users, RefreshCw, Shield, AlertTriangle, Trash2, Plus, Edit, Brain, ThumbsUp, ThumbsDown, Sparkles, CheckCircle2, XCircle, TrendingUp, Award, Zap, ArrowLeftRight, Download, ZoomIn, ZoomOut, Eraser, LayoutList, Grid, Maximize2, Minimize2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -59,6 +59,7 @@ const LiveSchedule = () => {
   const [touchStartDist, setTouchStartDist] = useState(null);
   const [touchStartZoom, setTouchStartZoom] = useState(1);
   const [showStats, setShowStats] = useState(window.innerWidth >= 768);
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -70,6 +71,31 @@ const LiveSchedule = () => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullScreen(true);
+      }).catch(err => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => {
+          setIsFullScreen(false);
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFullScreenChange = () => {
+      setIsFullScreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullScreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullScreenChange);
+  }, []);
 
   const handleDragEnd = (event) => {
     const { active, over } = event;

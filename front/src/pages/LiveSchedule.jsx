@@ -1425,9 +1425,9 @@ const LiveSchedule = () => {
                                  assignment.soldiers.map(soldier => (
                                    <div key={soldier.id} className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
                                      <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600">
-                                       {soldier.first_name[0]}{soldier.last_name[0]}
+                                       {soldier.name ? soldier.name[0] : '?'}
                                      </div>
-                                     <span className="text-sm text-gray-700">{soldier.first_name} {soldier.last_name}</span>
+                                     <span className="text-sm text-gray-700">{soldier.name}</span>
                                    </div>
                                  ))
                                ) : (

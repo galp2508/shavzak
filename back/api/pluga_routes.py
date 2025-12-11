@@ -940,12 +940,12 @@ def get_recent_assignments(pluga_id, current_user):
 @pluga_bp.route('/api/join-requests', methods=['GET'])
 @token_required
 def get_join_requests(current_user):
-    """קבלת כל בקשות ההצטרפות (רק למפ ראשי)"""
+    """קבלת כל בקשות ההצטרפות (רק לאדמין)"""
     try:
         session = get_db()
 
-        # רק מפ ראשי יכול לראות בקשות
-        if current_user.get('role') != 'מפ' or current_user.get('pluga_id') is not None:
+        # רק אדמין יכול לראות בקשות
+        if current_user.get('role') != 'admin':
             return jsonify({'error': 'אין הרשאה'}), 403
 
         requests = session.query(JoinRequest).filter_by(status='pending').order_by(
@@ -978,8 +978,8 @@ def approve_join_request(current_user, request_id):
     try:
         session = get_db()
 
-        # רק מפ ראשי יכול לאשר בקשות
-        if current_user.get('role') != 'מפ' or current_user.get('pluga_id') is not None:
+        # רק אדמין יכול לאשר בקשות
+        if current_user.get('role') != 'admin':
             return jsonify({'error': 'אין הרשאה'}), 403
 
         join_request = session.query(JoinRequest).filter_by(id=request_id).first()
@@ -1039,8 +1039,8 @@ def reject_join_request(current_user, request_id):
     try:
         session = get_db()
 
-        # רק מפ ראשי יכול לדחות בקשות
-        if current_user.get('role') != 'מפ' or current_user.get('pluga_id') is not None:
+        # רק אדמין יכול לדחות בקשות
+        if current_user.get('role') != 'admin':
             return jsonify({'error': 'אין הרשאה'}), 403
 
         join_request = session.query(JoinRequest).filter_by(id=request_id).first()
@@ -1072,8 +1072,8 @@ def delete_join_request(current_user, request_id):
     try:
         session = get_db()
 
-        # רק מפ ראשי יכול למחוק בקשות
-        if current_user.get('role') != 'מפ' or current_user.get('pluga_id') is not None:
+        # רק אדמין יכול למחוק בקשות
+        if current_user.get('role') != 'admin':
             return jsonify({'error': 'אין הרשאה'}), 403
 
         join_request = session.query(JoinRequest).filter_by(id=request_id).first()

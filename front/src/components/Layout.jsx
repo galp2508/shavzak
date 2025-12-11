@@ -19,13 +19,13 @@ const Layout = () => {
     { name: 'שיבוץ חי', href: '/live-schedule', icon: CalendarDays, roles: ['מפ', 'ממ', 'מכ'] },
   ];
 
-  // הוסף "בקשות הצטרפות" רק למפ ראשי (מפ ללא pluga_id)
-  if (user?.role === 'מפ' && !user?.pluga_id) {
+  // הוסף "בקשות הצטרפות" רק לאדמין
+  if (user?.role === 'admin') {
     navigation.push({
       name: 'בקשות הצטרפות',
       href: '/join-requests',
       icon: UserCheck,
-      roles: ['מפ']
+      roles: ['admin']
     });
   }
 

@@ -253,7 +253,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
 
   if (showSoldiersImport) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
         <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto">
           <h2 className="text-2xl font-bold mb-4">ניהול מחלקה {formData.number}</h2>
 
@@ -671,7 +671,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
         <h2 className="text-2xl font-bold mb-6">הוספת מחלקה חדשה</h2>
         <form onSubmit={handleSubmit} className="space-y-4">

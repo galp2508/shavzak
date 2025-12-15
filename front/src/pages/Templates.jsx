@@ -315,7 +315,7 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex-none bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-xl">

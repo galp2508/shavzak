@@ -316,8 +316,9 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex-none bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
           <h2 className="text-2xl font-bold">
             {template ? 'עריכת תבנית' : 'תבנית משימה חדשה'}
           </h2>
@@ -326,267 +327,274 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="label">שם התבנית *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="input-field"
-                required
-              />
-            </div>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <form id="templateForm" onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="label">שם התבנית *</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input-field"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="label">סוג משימה *</label>
-              <select
-                value={formData.assignment_type}
-                onChange={(e) => loadPresetTemplate(e.target.value)}
-                className="input-field"
-                required
-              >
-                {assignmentTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              {presetTemplates[formData.assignment_type] && !template && (
-                <p className="text-xs text-green-600 mt-1">
-                  ✓ תבנית מומלצת נטענה אוטומטית
-                </p>
+              <div>
+                <label className="label">סוג משימה *</label>
+                <select
+                  value={formData.assignment_type}
+                  onChange={(e) => loadPresetTemplate(e.target.value)}
+                  className="input-field"
+                  required
+                >
+                  {assignmentTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                {presetTemplates[formData.assignment_type] && !template && (
+                  <p className="text-xs text-green-600 mt-1">
+                    ✓ תבנית מומלצת נטענה אוטומטית
+                  </p>
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="flex items-center gap-2 cursor-pointer mb-4">
+                  <input
+                    type="checkbox"
+                    checked={isMultiDay}
+                    onChange={(e) => {
+                      setIsMultiDay(e.target.checked);
+                      if (e.target.checked) {
+                        setFormData(prev => ({ ...prev, duration_days: 1 }));
+                      } else {
+                        setFormData(prev => ({ ...prev, duration_days: 0 }));
+                      }
+                    }}
+                    className="w-4 h-4 text-military-600"
+                  />
+                  <span className="font-bold text-gray-700">משימה רב-יומית (נמשכת יותר מיום אחד)</span>
+                </label>
+              </div>
+
+              {!isMultiDay ? (
+                <>
+                  <div>
+                    <label className="label">אורך במשמרת (שעות) *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="24"
+                      value={formData.length_in_hours}
+                      onChange={(e) => setFormData({ ...formData, length_in_hours: parseInt(e.target.value) })}
+                      className="input-field"
+                      required={!isMultiDay}
+                    />
+                    <p className="text-sm text-gray-500 mt-1">
+                      תקרה {timesPerDay} {timesPerDay === 1 ? 'פעם' : 'פעמים'} ביום (24 / {formData.length_in_hours})
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="label">שעת התחלה (אופציונלי)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={formData.start_hour}
+                      onChange={(e) => setFormData({ ...formData, start_hour: e.target.value })}
+                      className="input-field"
+                      placeholder="לדוגמה: 8"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">
+                      שעת התחלה של המשמרת הראשונה (0-23)
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="label">משך המשימה (ימים) *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={formData.duration_days}
+                      onChange={(e) => setFormData({ ...formData, duration_days: parseInt(e.target.value) })}
+                      className="input-field"
+                      required={isMultiDay}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="label">חזרה כל (ימים)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={formData.recurrence_interval}
+                      onChange={(e) => setFormData({ ...formData, recurrence_interval: parseInt(e.target.value) })}
+                      className="input-field"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">
+                      כל כמה ימים המשימה חוזרת על עצמה (1 = רצוף)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="label">התחלה ביום (Offset)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.start_day_offset}
+                      onChange={(e) => setFormData({ ...formData, start_day_offset: parseInt(e.target.value) })}
+                      className="input-field"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">
+                      התחלה ביום ה-X של השיבוץ (0 = יום ראשון)
+                    </p>
+                  </div>
+                </>
               )}
-            </div>
 
-            <div className="md:col-span-2">
-              <label className="flex items-center gap-2 cursor-pointer mb-4">
+              <div>
+                <label className="label">מספר מפקדים נדרשים</label>
                 <input
-                  type="checkbox"
-                  checked={isMultiDay}
-                  onChange={(e) => {
-                    setIsMultiDay(e.target.checked);
-                    if (e.target.checked) {
-                      setFormData(prev => ({ ...prev, duration_days: 1 }));
-                    } else {
-                      setFormData(prev => ({ ...prev, duration_days: 0 }));
-                    }
-                  }}
-                  className="w-4 h-4 text-military-600"
+                  type="number"
+                  min="0"
+                  value={formData.commanders_needed}
+                  onChange={(e) => setFormData({ ...formData, commanders_needed: parseInt(e.target.value) })}
+                  className="input-field"
                 />
-                <span className="font-bold text-gray-700">משימה רב-יומית (נמשכת יותר מיום אחד)</span>
-              </label>
+              </div>
+
+              <div>
+                <label className="label">מספר נהגים נדרשים</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.drivers_needed}
+                  onChange={(e) => setFormData({ ...formData, drivers_needed: parseInt(e.target.value) })}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="label">מספר חיילים נדרשים</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.soldiers_needed}
+                  onChange={(e) => setFormData({ ...formData, soldiers_needed: parseInt(e.target.value) })}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="label">
+                  הסמכה/תפקיד נדרש
+                  <span className="text-xs text-gray-500 mr-2">(תפקיד נוסף שחייל צריך בשביל המשימה)</span>
+                </label>
+                <select
+                  value={formData.requires_certification}
+                  onChange={(e) => setFormData({ ...formData, requires_certification: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">ללא הסמכה נדרשת</option>
+                  {availableRoles.map(role => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            {!isMultiDay ? (
-              <>
-                <div>
-                  <label className="label">אורך במשמרת (שעות) *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="24"
-                    value={formData.length_in_hours}
-                    onChange={(e) => setFormData({ ...formData, length_in_hours: parseInt(e.target.value) })}
-                    className="input-field"
-                    required={!isMultiDay}
-                  />
-                  <p className="text-sm text-gray-500 mt-1">
-                    תקרה {timesPerDay} {timesPerDay === 1 ? 'פעם' : 'פעמים'} ביום (24 / {formData.length_in_hours})
-                  </p>
-                </div>
-
-                <div>
-                  <label className="label">שעת התחלה (אופציונלי)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={formData.start_hour}
-                    onChange={(e) => setFormData({ ...formData, start_hour: e.target.value })}
-                    className="input-field"
-                    placeholder="לדוגמה: 8"
-                  />
-                  <p className="text-sm text-gray-500 mt-1">
-                    שעת התחלה של המשמרת הראשונה (0-23)
-                  </p>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="label">משך המשימה (ימים) *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.duration_days}
-                    onChange={(e) => setFormData({ ...formData, duration_days: parseInt(e.target.value) })}
-                    className="input-field"
-                    required={isMultiDay}
-                  />
-                </div>
-
-                <div>
-                  <label className="label">חזרה כל (ימים)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.recurrence_interval}
-                    onChange={(e) => setFormData({ ...formData, recurrence_interval: parseInt(e.target.value) })}
-                    className="input-field"
-                  />
-                  <p className="text-sm text-gray-500 mt-1">
-                    כל כמה ימים המשימה חוזרת על עצמה (1 = רצוף)
-                  </p>
-                </div>
-
-                <div>
-                  <label className="label">התחלה ביום (Offset)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.start_day_offset}
-                    onChange={(e) => setFormData({ ...formData, start_day_offset: parseInt(e.target.value) })}
-                    className="input-field"
-                  />
-                  <p className="text-sm text-gray-500 mt-1">
-                    התחלה ביום ה-X של השיבוץ (0 = יום ראשון)
-                  </p>
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className="label">מספר מפקדים נדרשים</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.commanders_needed}
-                onChange={(e) => setFormData({ ...formData, commanders_needed: parseInt(e.target.value) })}
-                className="input-field"
-              />
-            </div>
-
-            <div>
-              <label className="label">מספר נהגים נדרשים</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.drivers_needed}
-                onChange={(e) => setFormData({ ...formData, drivers_needed: parseInt(e.target.value) })}
-                className="input-field"
-              />
-            </div>
-
-            <div>
-              <label className="label">מספר חיילים נדרשים</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.soldiers_needed}
-                onChange={(e) => setFormData({ ...formData, soldiers_needed: parseInt(e.target.value) })}
-                className="input-field"
-              />
-            </div>
-
-            <div>
-              <label className="label">
-                הסמכה/תפקיד נדרש
-                <span className="text-xs text-gray-500 mr-2">(תפקיד נוסף שחייל צריך בשביל המשימה)</span>
-              </label>
-              <select
-                value={formData.requires_certification}
-                onChange={(e) => setFormData({ ...formData, requires_certification: e.target.value })}
-                className="input-field"
-              >
-                <option value="">ללא הסמכה נדרשת</option>
-                {availableRoles.map(role => (
-                  <option key={role} value={role}>{role}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.same_mahlaka_required}
-                onChange={(e) => setFormData({ ...formData, same_mahlaka_required: e.target.checked })}
-                className="w-4 h-4 text-military-600"
-              />
-              <span className="text-gray-700">דורש חיילים מאותה מחלקה</span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.requires_senior_commander}
-                onChange={(e) => setFormData({ ...formData, requires_senior_commander: e.target.checked })}
-                className="w-4 h-4 text-military-600"
-              />
-              <span className="text-gray-700">דורש מפקד בכיר</span>
-            </label>
-
-            {(formData.assignment_type === 'כוננות א' || formData.assignment_type === 'כוננות ב') && (
+            <div className="space-y-3">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={formData.reuse_soldiers_for_standby}
-                  onChange={(e) => setFormData({ ...formData, reuse_soldiers_for_standby: e.target.checked })}
+                  checked={formData.same_mahlaka_required}
+                  onChange={(e) => setFormData({ ...formData, same_mahlaka_required: e.target.checked })}
                   className="w-4 h-4 text-military-600"
                 />
-                <span className="text-gray-700">קח חיילים שסיימו משימה לכוננות</span>
-                <span className="text-xs text-gray-500">(המערכת תעדיף חיילים שסיימו משימה זמן קצר לפני הכוננות)</span>
-              </label>
-            )}
-
-            <div className="border-t border-gray-200 pt-3 mt-3">
-              <h4 className="text-sm font-bold text-gray-700 mb-2">הגדרות מתקדמות</h4>
-              
-              <label className="flex items-center gap-2 cursor-pointer mb-2">
-                <input
-                  type="checkbox"
-                  checked={formData.is_base_task}
-                  onChange={(e) => setFormData({ ...formData, is_base_task: e.target.checked })}
-                  className="w-4 h-4 text-green-600"
-                />
-                <div>
-                  <span className="text-gray-700 font-medium">משימת בסיס (נחשבת כמנוחה)</span>
-                  <p className="text-xs text-gray-500">משימה קלה שלא דורשת שעות מנוחה לפניה/אחריה ולא שוברת רצף מנוחה</p>
-                </div>
+                <span className="text-gray-700">דורש חיילים מאותה מחלקה</span>
               </label>
 
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={formData.can_split}
-                  onChange={(e) => setFormData({ ...formData, can_split: e.target.checked })}
-                  className="w-4 h-4 text-indigo-600"
+                  checked={formData.requires_senior_commander}
+                  onChange={(e) => setFormData({ ...formData, requires_senior_commander: e.target.checked })}
+                  className="w-4 h-4 text-military-600"
                 />
-                <div>
-                  <span className="text-gray-700 font-medium">ניתן לפיצול</span>
-                  <p className="text-xs text-gray-500">המערכת רשאית לפצל את המשימה לשני חלקים (למשל: פתיחה וסגירה) במידת הצורך</p>
-                </div>
+                <span className="text-gray-700">דורש מפקד בכיר</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer mt-2">
-                <input
-                  type="checkbox"
-                  checked={formData.is_skippable}
-                  onChange={(e) => setFormData({ ...formData, is_skippable: e.target.checked })}
-                  className="w-4 h-4 text-yellow-600"
-                />
-                <div>
-                  <span className="text-gray-700 font-medium">ניתן לוויתור (Optional)</span>
-                  <p className="text-xs text-gray-500">במקרה של חוסר בכוח אדם, המערכת תציע לוותר על משימה זו</p>
-                </div>
-              </label>
+              {(formData.assignment_type === 'כוננות א' || formData.assignment_type === 'כוננות ב') && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.reuse_soldiers_for_standby}
+                    onChange={(e) => setFormData({ ...formData, reuse_soldiers_for_standby: e.target.checked })}
+                    className="w-4 h-4 text-military-600"
+                  />
+                  <span className="text-gray-700">קח חיילים שסיימו משימה לכוננות</span>
+                  <span className="text-xs text-gray-500">(המערכת תעדיף חיילים שסיימו משימה זמן קצר לפני הכוננות)</span>
+                </label>
+              )}
+
+              <div className="border-t border-gray-200 pt-3 mt-3">
+                <h4 className="text-sm font-bold text-gray-700 mb-2">הגדרות מתקדמות</h4>
+                
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_base_task}
+                    onChange={(e) => setFormData({ ...formData, is_base_task: e.target.checked })}
+                    className="w-4 h-4 text-green-600"
+                  />
+                  <div>
+                    <span className="text-gray-700 font-medium">משימת בסיס (נחשבת כמנוחה)</span>
+                    <p className="text-xs text-gray-500">משימה קלה שלא דורשת שעות מנוחה לפניה/אחריה ולא שוברת רצף מנוחה</p>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.can_split}
+                    onChange={(e) => setFormData({ ...formData, can_split: e.target.checked })}
+                    className="w-4 h-4 text-indigo-600"
+                  />
+                  <div>
+                    <span className="text-gray-700 font-medium">ניתן לפיצול</span>
+                    <p className="text-xs text-gray-500">המערכת רשאית לפצל את המשימה לשני חלקים (למשל: פתיחה וסגירה) במידת הצורך</p>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer mt-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_skippable}
+                    onChange={(e) => setFormData({ ...formData, is_skippable: e.target.checked })}
+                    className="w-4 h-4 text-yellow-600"
+                  />
+                  <div>
+                    <span className="text-gray-700 font-medium">ניתן לוויתור (Optional)</span>
+                    <p className="text-xs text-gray-500">במקרה של חוסר בכוח אדם, המערכת תציע לוותר על משימה זו</p>
+                  </div>
+                </label>
+              </div>
             </div>
-          </div>
+          </form>
+        </div>
 
-          <div className="flex gap-3 pt-4">
+        {/* Footer - Fixed at bottom */}
+        <div className="flex-none border-t border-gray-200 p-4 bg-gray-50 rounded-b-xl">
+          <div className="flex gap-3">
             <button
               type="submit"
+              form="templateForm"
               disabled={loading}
               className="flex-1 btn-primary"
             >
@@ -600,7 +608,7 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
               ביטול
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

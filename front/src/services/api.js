@@ -41,13 +41,18 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // בדוק אם יש שגיאת רשת (השרת לא זמין)
+    // בדוק אם יש שגיאת רשת (השרת לא זמין) - רק אם אין response בכלל
     if (!error.response && error.code === 'ERR_NETWORK') {
       console.error('🔴 השרת לא זמין - שגיאת רשת');
       if (serverDownCallback) {
         serverDownCallback();
       }
       return Promise.reject(error);
+    }
+
+    // אם קיבלנו response (גם אם זה 4xx/5xx) - השרת חי, סמן אותו כזמין
+    if (error.response && serverUpCallback) {
+      serverUpCallback();
     }
 
     if (error.response?.status === 401) {

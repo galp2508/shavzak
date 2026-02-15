@@ -12,6 +12,10 @@ echo "🐍 Updating Backend..."
 source venv/bin/activate
 pip install -r back/requirements.txt
 
+# Run migrations
+python back/migrate.py
+
+
 # Update Frontend
 echo "⚛️  Updating Frontend..."
 cd front

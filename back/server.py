@@ -248,11 +248,6 @@ def check_and_run_migrations():
             conn.close()
         return False
 
-# הרצת migrations בעת אתחול
-if not check_and_run_migrations():
-    print("❌ Fatal Error: Migrations failed. Exiting.")
-    sys.exit(1)
-
 # Error handlers להצגת שגיאות מפורטות בקונסול
 @app.errorhandler(Exception)
 def handle_exception(e):
@@ -327,6 +322,11 @@ def health_check():
 
 
 if __name__ == '__main__':
+    # הרצת migrations בעת אתחול
+    if not check_and_run_migrations():
+        print("❌ Fatal Error: Migrations failed. Exiting.")
+        sys.exit(1)
+
     print("🎖️  Shavzak API Server Starting...")
     print("=" * 70)
     print("📋 Database initialized")

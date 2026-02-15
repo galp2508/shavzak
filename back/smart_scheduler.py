@@ -1500,8 +1500,9 @@ class SmartScheduler:
 
     def _assign_standby_a(self, task: Dict, all_soldiers: List[Dict],
                          schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
-        """כוננות א' - מפקד + נהג (אם נדרש) + חיילים"""
+        """כוננות א' - מפקדים + נהגים (אם נדרש) + חיילים"""
         # קריאת דרישות מהתבנית
+        commanders_needed = task.get('commanders_needed', 1)
         soldiers_needed = task.get('soldiers_needed', 7)
         drivers_needed = task.get('drivers_needed', 0)  # כמה נהגים נדרשים
         same_mahlaka_required = task.get('same_mahlaka_required', False)
@@ -1557,7 +1558,7 @@ class SmartScheduler:
                 # נהגים לא חייבים להיות מאותה מחלקה
                 mahlaka_soldiers = [s for s in available_soldiers if s.get('mahlaka_id') == mahlaka_id]
 
-                if (len(mahlaka_commanders) >= 1 and
+                if (len(mahlaka_commanders) >= commanders_needed and
                     len(mahlaka_soldiers) >= soldiers_needed):
 
                     scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
@@ -1575,8 +1576,12 @@ class SmartScheduler:
                     if not task.get('is_base_task'):
                         mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
 
+                    selected_commanders = self.select_multiple_with_exploration(
+                        scored_commanders, commanders_needed, epsilon=0.05
+                    )
+
                     result = {
-                        'commanders': [scored_commanders[0][0]['id']],
+                        'commanders': [c['id'] for c in selected_commanders],
                         'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
                         'mahlaka_id': mahlaka_id
                     }
@@ -1596,8 +1601,8 @@ class SmartScheduler:
         # אם לא דרוש אותה מחלקה
         # בדיקת אילוצים קשיחים מהתבנית
         missing = []
-        if not available_commanders:
-            missing.append(f"מפקדים (0 זמינים)")
+        if len(available_commanders) < commanders_needed:
+            missing.append(f"מפקדים ({len(available_commanders)}/{commanders_needed})")
         if drivers_needed > 0 and len(available_drivers) < drivers_needed:
             missing.append(f"נהגים ({len(available_drivers)}/{drivers_needed})")
         if len(available_soldiers) < soldiers_needed:
@@ -1619,12 +1624,14 @@ class SmartScheduler:
         scored_drivers.sort(key=lambda x: x[1], reverse=True)
         scored_soldiers.sort(key=lambda x: x[1], reverse=True)
 
-        # שמור את mahlaka_id של המפקד הנבחר
-        selected_commander = scored_commanders[0][0]
-        mahlaka_id = selected_commander.get('mahlaka_id')
+        # בחר מפקדים לפי הדרישה בתבנית
+        selected_commanders = self.select_multiple_with_exploration(
+            scored_commanders, commanders_needed, epsilon=0.05
+        )
+        mahlaka_id = selected_commanders[0].get('mahlaka_id') if selected_commanders else None
 
         result = {
-            'commanders': [selected_commander['id']],
+            'commanders': [c['id'] for c in selected_commanders],
             'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
             'mahlaka_id': mahlaka_id
         }
@@ -1638,7 +1645,8 @@ class SmartScheduler:
 
     def _assign_standby_b(self, task: Dict, all_soldiers: List[Dict],
                          schedules: Dict, mahlaka_workload: Dict) -> Optional[Dict]:
-        """כוננות ב' - מפקד + חיילים (ללא נהג)"""
+        """כוננות ב' - מפקדים + חיילים (ללא נהג)"""
+        commanders_needed = task.get('commanders_needed', 1)
         soldiers_needed = task.get('soldiers_needed', 5)
         same_mahlaka_required = task.get('same_mahlaka_required', False)
 
@@ -1664,7 +1672,7 @@ class SmartScheduler:
                 mahlaka_commanders = [c for c in available_commanders if c.get('mahlaka_id') == mahlaka_id]
                 mahlaka_soldiers = [s for s in available_soldiers if s.get('mahlaka_id') == mahlaka_id]
 
-                if (len(mahlaka_commanders) >= 1 and
+                if (len(mahlaka_commanders) >= commanders_needed and
                     len(mahlaka_soldiers) >= soldiers_needed):
 
                     scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
@@ -1675,10 +1683,15 @@ class SmartScheduler:
                     scored_commanders.sort(key=lambda x: x[1], reverse=True)
                     scored_soldiers.sort(key=lambda x: x[1], reverse=True)
 
-                    mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
+                    if not task.get('is_base_task'):
+                        mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
+
+                    selected_commanders = self.select_multiple_with_exploration(
+                        scored_commanders, commanders_needed, epsilon=0.05
+                    )
 
                     return {
-                        'commanders': [scored_commanders[0][0]['id']],
+                        'commanders': [c['id'] for c in selected_commanders],
                         'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
                         'mahlaka_id': mahlaka_id
                     }
@@ -1687,8 +1700,8 @@ class SmartScheduler:
             return None
 
         # אם לא דרוש אותה מחלקה
-        if not available_commanders or len(available_soldiers) < soldiers_needed:
-            # print(f"⚠️  כוננות ב' יום {task['day']}: חסרים - מפקדים: {len(available_commanders)}, חיילים: {len(available_soldiers)}/{soldiers_needed}")
+        if len(available_commanders) < commanders_needed or len(available_soldiers) < soldiers_needed:
+            # print(f"⚠️  כוננות ב' יום {task['day']}: חסרים - מפקדים: {len(available_commanders)}/{commanders_needed}, חיילים: {len(available_soldiers)}/{soldiers_needed}")
             return None
 
         scored_commanders = [(c, self.calculate_soldier_score(c, task, schedules, mahlaka_workload, all_soldiers))
@@ -1699,12 +1712,17 @@ class SmartScheduler:
         scored_commanders.sort(key=lambda x: x[1], reverse=True)
         scored_soldiers.sort(key=lambda x: x[1], reverse=True)
 
-        # שמור את mahlaka_id של המפקד הנבחר
-        selected_commander = scored_commanders[0][0]
-        mahlaka_id = selected_commander.get('mahlaka_id')
+        # בחר מפקדים לפי הדרישה בתבנית
+        selected_commanders = self.select_multiple_with_exploration(
+            scored_commanders, commanders_needed, epsilon=0.05
+        )
+        mahlaka_id = selected_commanders[0].get('mahlaka_id') if selected_commanders else None
+
+        if not task.get('is_base_task') and mahlaka_id:
+            mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
 
         return {
-            'commanders': [selected_commander['id']],
+            'commanders': [c['id'] for c in selected_commanders],
             'soldiers': [s[0]['id'] for s in scored_soldiers[:soldiers_needed]],
             'mahlaka_id': mahlaka_id
         }

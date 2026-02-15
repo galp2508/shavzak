@@ -287,6 +287,25 @@ def ml_feedback(current_user):
         session.close()
 
 
+# ============================================================================
+# ML STATS
+# ============================================================================
+
+@ml_bp.route('/api/ml/stats', methods=['GET'])
+@token_required
+def ml_stats(current_user):
+    """
+    קבלת סטטיסטיקות ML - אחוזי אישור, דפוסים שנלמדו, פידבקים
+    """
+    try:
+        stats = smart_scheduler.get_stats()
+        return jsonify({'stats': stats}), 200
+    except Exception as e:
+        print(f"🔴 שגיאה בקבלת סטטיסטיקות ML: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @ml_bp.route('/api/ml/regenerate-schedule', methods=['POST'])
 @token_required
 def ml_regenerate_schedule(current_user):

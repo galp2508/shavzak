@@ -1237,14 +1237,20 @@ class SmartScheduler:
             # משימה רגילה - סנן החוצה חיילים ממחלקה מיוחדת
             candidates = [s for s in candidates if not s.get('mahlaka_is_special')]
 
+        # טיפול במשימות כוננות המאפשרות שימוש חוזר בחיילים שסיימו משימה
+        initial_min_rest = None
+        if task.get('reuse_soldiers_for_standby'):
+             initial_min_rest = 0
+
         # ניסיון 1: אילוצים רגילים (ברירת מחדל)
         available = [s for s in candidates
                     if self.check_availability(s, task['day'], task['start_hour'],
                                              task['length_in_hours'], schedules, task.get('date'),
+                                             min_rest_override=initial_min_rest,
                                              is_base_task=task.get('is_base_task', False))]
         
-        if not available:
-            # ניסיון 2: אילוצים מקלים (fallback)
+        if not available and initial_min_rest is None:
+            # ניסיון 2: אילוצים מקלים (fallback) - רק אם לא השתמשנו כבר ב-override (כוננות)
             # print(f"⚠️ {task['name']} יום {task['day']}: אין חיילים זמינים עם מנוחה מלאה - מנסה עם {min_rest_fallback} שעות")
             available = [s for s in candidates
                         if self.check_availability(s, task['day'], task['start_hour'],
@@ -1382,7 +1388,8 @@ class SmartScheduler:
                     )
 
                     # עדכן עומס מחלקה
-                    mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
+                    if not task.get('is_base_task'):
+                        mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
 
                     result = {
                         'commanders': [c['id'] for c in selected_commanders],
@@ -1447,7 +1454,8 @@ class SmartScheduler:
         # עדכן עומס מחלקה
         mahlaka_id = selected_commanders[0].get('mahlaka_id') if selected_commanders else None
         if mahlaka_id:
-            mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
+            if not task.get('is_base_task'):
+                mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
 
         result = {
             'commanders': [c['id'] for c in selected_commanders],
@@ -1563,7 +1571,8 @@ class SmartScheduler:
                     scored_drivers.sort(key=lambda x: x[1], reverse=True)
                     scored_soldiers.sort(key=lambda x: x[1], reverse=True)
 
-                    mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
+                    if not task.get('is_base_task'):
+                        mahlaka_workload[mahlaka_id] = mahlaka_workload.get(mahlaka_id, 0) + task['length_in_hours']
 
                     result = {
                         'commanders': [scored_commanders[0][0]['id']],

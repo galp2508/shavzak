@@ -1508,7 +1508,8 @@ class SmartScheduler:
 
         commanders = [s for s in all_soldiers if self.is_commander(s)]
         drivers = [s for s in all_soldiers if self.is_driver(s)]
-        soldiers = [s for s in all_soldiers if not self.is_commander(s)]
+        # חיילים הם אלו שאינם מפקדים ואינם נהגים (כדי למנוע כפילות)
+        soldiers = [s for s in all_soldiers if not self.is_commander(s) and not self.is_driver(s)]
 
         # סינון (עם fallback)
         available_commanders = self.get_available_soldiers_with_fallback(commanders, task, schedules)
@@ -1642,7 +1643,8 @@ class SmartScheduler:
         same_mahlaka_required = task.get('same_mahlaka_required', False)
 
         commanders = [s for s in all_soldiers if self.is_commander(s)]
-        soldiers = [s for s in all_soldiers if not self.is_commander(s)]
+        # חיילים הם אלו שאינם מפקדים ואינם נהגים (כדי למנוע כפילות)
+        soldiers = [s for s in all_soldiers if not self.is_commander(s) and not self.is_driver(s)]
 
         # סינון (עם fallback)
         available_commanders = self.get_available_soldiers_with_fallback(commanders, task, schedules)

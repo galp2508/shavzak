@@ -366,12 +366,16 @@ def generate_shavzak(shavzak_id, current_user):
                     if not assignment.id:
                         raise ValueError(f"שגיאה ביצירת משימה '{assign_data['name']}' ליום {assign_data['day']} - לא ניתן היה לשמור את המשימה במסד הנתונים")
 
-                    # הוספת חיילים
+                    # הוספת חיילים (עם מניעת כפילויות)
                     all_soldier_ids = []
+                    seen_soldier_ids = set()
                     for role_key in ['commanders', 'drivers', 'soldiers']:
                         if role_key in result:
                             role_name = role_key[:-1]  # הסרת 's'
                             for soldier_id in result[role_key]:
+                                if soldier_id in seen_soldier_ids:
+                                    continue  # מניעת כפילות - חייל כבר משובץ במשימה זו
+                                seen_soldier_ids.add(soldier_id)
                                 assign_soldier = AssignmentSoldier(
                                     assignment_id=assignment.id,
                                     soldier_id=soldier_id,

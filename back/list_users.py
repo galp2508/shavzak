@@ -26,15 +26,16 @@ def list_users():
         print("אין משתמשים במערכת")
         return
 
-    print(f"\n{'='*70}")
-    print(f"{'ID':>4} | {'שם משתמש':<20} | {'שם מלא':<20} | {'תפקיד':<6} | {'כניסה אחרונה':<20}")
-    print(f"{'='*70}")
+    print(f"\n{'='*90}")
+    print(f"{'ID':>4} | {'שם משתמש':<20} | {'שם מלא':<20} | {'תפקיד':<6} | {'סיסמה (hash)':<30}")
+    print(f"{'='*90}")
     for u in users:
-        last_login = u.last_login.strftime('%Y-%m-%d %H:%M') if u.last_login else 'אף פעם'
-        print(f"{u.id:>4} | {u.username:<20} | {u.full_name:<20} | {u.role:<6} | {last_login:<20}")
-    print(f"{'='*70}")
+        # מציג את 20 התווים הראשונים של ה-hash
+        hash_preview = u.password_hash[:25] + '...' if u.password_hash else 'N/A'
+        print(f"{u.id:>4} | {u.username:<20} | {u.full_name:<20} | {u.role:<6} | {hash_preview:<30}")
+    print(f"{'='*90}")
     print(f"סה\"כ: {len(users)} משתמשים\n")
-    print("הערה: הסיסמאות מוצפנות ב-bcrypt ולא ניתנות לשחזור.")
+    print("⚠️  הסיסמאות מוצפנות ב-bcrypt ולא ניתנות לשחזור!")
     print("לאיפוס סיסמה: python back/list_users.py reset <username> <new_password>")
 
 

@@ -122,6 +122,25 @@ def check_and_run_migrations():
         else:
             print("✅ start_hour כבר קיים")
 
+        # בדיקה 4.5: הוספת is_special לטבלת mahalkot
+        cursor.execute("PRAGMA table_info(mahalkot)")
+        mahlaka_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'is_special' not in mahlaka_columns:
+            print("⚠️  מזהה עמודה חסרה: is_special בטבלת mahalkot")
+            print("🔧 מריץ migration אוטומטי להוספת is_special...")
+            conn.close()
+            from migrate_add_is_special import migrate_database as migrate_add_special
+            if migrate_add_special(DB_PATH):
+                print("✅ Migration להוספת is_special הושלם בהצלחה")
+            else:
+                print("❌ Migration להוספת is_special נכשל")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        else:
+            print("✅ is_special כבר קיים")
+
         # בדיקה 5: הוספת reuse_soldiers_for_standby לטבלת shavzakim
         cursor.execute("PRAGMA table_info(shavzakim)")
         shavzak_columns = [column[1] for column in cursor.fetchall()]

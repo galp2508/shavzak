@@ -198,7 +198,7 @@ def get_current_user(current_user):
     session = None
     try:
         session = get_db()
-        user = session.query(User).filter_by(id=current_user.id).first()
+        user = session.query(User).filter_by(id=current_user['user_id']).first()
         
         if not user:
             return jsonify({'error': 'משתמש לא נמצא'}), 404
@@ -223,7 +223,7 @@ def update_current_user(current_user):
     try:
         data = request.json
         session = get_db()
-        user = session.query(User).filter_by(id=current_user.id).first()
+        user = session.query(User).filter_by(id=current_user['user_id']).first()
 
         if not user:
             return jsonify({'error': 'משתמש לא נמצא'}), 404

@@ -56,9 +56,12 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
-      // Unauthorized - redirect to login
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Unauthorized - redirect to login, BUT not on the login endpoint itself
+      const requestUrl = error.config?.url || '';
+      if (!requestUrl.includes('/login')) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

@@ -159,8 +159,12 @@ def login():
     """התחברות - מוגבל ל-5 ניסיונות בדקה למניעת brute-force"""
     session = None
     try:
-        # אימות נתונים
-        validated_data, errors = validate_data(UserLoginSchema, request.json)
+        # אימות נתונים - שימוש ב-get_json(silent=True) כדי לא לקרוס על JSON פגום
+        json_data = request.get_json(silent=True)
+        if json_data is None:
+            return jsonify({'error': 'בקשה לא תקינה - חסר JSON body'}), 400
+
+        validated_data, errors = validate_data(UserLoginSchema, json_data)
         if errors:
             return jsonify({'errors': errors}), 400
 

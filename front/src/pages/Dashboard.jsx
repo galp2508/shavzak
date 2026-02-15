@@ -33,8 +33,8 @@ const Dashboard = () => {
 
   const loadStats = async () => {
     try {
-      // נסה את נקודת הקצה /stats אם קיימת
-      const res = await api.get('/stats').catch(() => null);
+      // נסה את נקודת הקצה /ml/stats אם קיימת
+      const res = await api.get('/ml/stats').catch(() => null);
       if (res && res.data && res.data.stats) {
         setStats(res.data.stats);
         return;

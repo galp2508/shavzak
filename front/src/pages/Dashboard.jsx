@@ -33,14 +33,7 @@ const Dashboard = () => {
 
   const loadStats = async () => {
     try {
-      // נסה את נקודת הקצה /ml/stats אם קיימת
-      const res = await api.get('/ml/stats').catch(() => null);
-      if (res && res.data && res.data.stats) {
-        setStats(res.data.stats);
-        return;
-      }
-
-      // Fallback: חישוב סטטיסטיקות בעזרת נקודות הקצה הקיימות
+      // חישוב סטטיסטיקות בעזרת נקודות הקצה הקיימות
       if (!user?.pluga_id) {
         setStats({});
         return;

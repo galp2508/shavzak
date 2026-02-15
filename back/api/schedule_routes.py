@@ -1762,7 +1762,8 @@ def get_live_schedule(pluga_id, current_user):
                 'display_start_hour': display_start_hour,
                 'display_length_in_hours': display_length,
                 'assigned_mahlaka_id': assignment.assigned_mahlaka_id,
-                'soldiers': soldiers_list
+                'soldiers': soldiers_list,
+                'is_base_task': template.is_base_task if template else False
             })
 
         return jsonify({

@@ -425,12 +425,14 @@ const LiveSchedule = () => {
     };
   };
 
-  // חישוב עומס שעות לחייל
+  // חישוב עומס שעות לחייל (ללא משימות בסיס)
   const calculateSoldierWorkload = (soldierId) => {
     if (!scheduleData || !scheduleData.assignments) return 0;
 
     let totalHours = 0;
     scheduleData.assignments.forEach(assignment => {
+      // משימות בסיס (מנוחה) לא נספרות בעומס
+      if (assignment.is_base_task) return;
       if (assignment.soldiers) {
         const isSoldierInAssignment = assignment.soldiers.some(s => s.id === soldierId);
         if (isSoldierInAssignment) {

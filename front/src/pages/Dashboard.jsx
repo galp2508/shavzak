@@ -171,6 +171,9 @@ const Dashboard = () => {
       
       // Calculate workload from assignments
       liveAssignments.forEach(assignment => {
+          // משימות בסיס (מנוחה) לא נספרות בעומס
+          if (assignment.is_base_task) return;
+          
           // Try to attribute to a mahlaka
           // If assigned_mahlaka_id exists, use it
           // Otherwise, look at the soldiers

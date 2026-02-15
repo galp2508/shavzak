@@ -197,6 +197,26 @@ def check_and_run_migrations():
         else:
              print("✅ requires_special_mahlaka כבר קיים")
 
+        # בדיקה 7.5: הוספת requires_special_mahlaka לטבלת assignments (המשימות עצמן)
+        # זה קריטי כי הקוד מנסה לקרוא את העמודה הזו בכל שליפה של משימות
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(assignments)")
+        assignment_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'requires_special_mahlaka' not in assignment_columns:
+            print("⚠️  מזהה עמודה חסרה: requires_special_mahlaka בטבלת assignments")
+            print("🔧 מריץ migration אוטומטי להוספת requires_special_mahlaka למשימות...")
+            conn.close()
+            from migrate_add_special_to_assignments import migrate_database as migrate_special_assignments
+            if migrate_special_assignments(DB_PATH):
+                print("✅ Migration להוספת requires_special_mahlaka למשימות הושלם בהצלחה")
+            else:
+                print("❌ Migration להוספת requires_special_mahlaka למשימות נכשל")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+        else:
+             print("✅ requires_special_mahlaka כבר קיים ב-assignments")
+
         conn.close()
         return True
     

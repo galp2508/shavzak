@@ -98,6 +98,25 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateProfile = async (data) => {
+    try {
+      const response = await api.put('/me', data);
+      
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        setToken(response.data.token);
+      }
+      
+      setUser(response.data.user);
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.error || 'שגיאה בעדכון הפרופיל' 
+      };
+    }
+  };
+
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
@@ -128,10 +147,11 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     updateUser,
+    updateProfile,
     isRole,
     // ✅ שינוי קריטי: isAuthenticated מבוסס על token בלבד!
     isAuthenticated: !!token,
-  }), [user, token, loading, login, register, logout, updateUser, isRole]);
+  }), [user, token, loading, login, register, logout, updateUser, updateProfile, isRole]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

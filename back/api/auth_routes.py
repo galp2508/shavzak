@@ -198,14 +198,14 @@ def get_current_user(current_user):
     session = None
     try:
         session = get_db()
-        user = session.query(User).filter_by(id=current_user.get('user_id')).first()
-
+        user = session.query(User).filter_by(id=current_user.id).first()
+        
         if not user:
             return jsonify({'error': 'משתמש לא נמצא'}), 404
-
+            
         return jsonify({
             'user': build_user_response(user)
-        }), 200
+        })
     except Exception as e:
         print(f"🔴 שגיאה: {str(e)}")
         traceback.print_exc()
@@ -213,6 +213,71 @@ def get_current_user(current_user):
     finally:
         if session:
             session.close()
+
+
+@auth_bp.route('/api/me', methods=['PUT'])
+@token_required
+def update_current_user(current_user):
+    """עדכון פרטי המשתמש הנוכחי"""
+    session = None
+    try:
+        data = request.json
+        session = get_db()
+        user = session.query(User).filter_by(id=current_user.id).first()
+
+        if not user:
+            return jsonify({'error': 'משתמש לא נמצא'}), 404
+
+        # Update fields if provided
+        if 'full_name' in data and data['full_name']:
+            user.full_name = data['full_name']
+        
+        if 'username' in data and data['username'] and data['username'] != user.username:
+            # Check if username exists
+            existing = session.query(User).filter(User.username == data['username'], User.id != user.id).first()
+            if existing:
+                return jsonify({'error': 'שם המשתמש כבר קיים במערכת'}), 400
+            user.username = data['username']
+
+        if 'password' in data and data['password']:
+            user.set_password(data['password'])
+
+        session.commit()
+
+        # Generate new token
+        token = create_token(user)
+
+        # Sync to Ditto
+        try:
+            ditto.upsert("users", {
+                "username": user.username,
+                "full_name": user.full_name,
+                "role": user.role,
+                "pluga_id": user.pluga_id,
+                "type": "user",
+                "_id": user.username
+            })
+        except Exception as e:
+            print(f"⚠️ Failed to sync user to Ditto: {e}")
+
+        return jsonify({
+            'message': 'פרטי המשתמש עודכנו בהצלחה',
+            'token': token,
+            'user': build_user_response(user)
+        })
+
+    except Exception as e:
+        print(f"🔴 שגיאה: {str(e)}")
+        traceback.print_exc()
+        try:
+            session.rollback()
+        except:
+            pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if session:
+            session.close()
+
 
 
 @auth_bp.route('/api/users', methods=['POST'])

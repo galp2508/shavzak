@@ -9,7 +9,7 @@ WorkingDirectory=/root/shavzak/back
 Environment="PATH=/root/shavzak/venv/bin"
 Environment="SECRET_KEY=7f8a9d1c2b3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9"
 Environment="DEBUG=False"
-ExecStart=/root/shavzak/venv/bin/gunicorn --workers 3 --bind unix:shavzak.sock -m 007 wsgi:app
+ExecStart=/root/shavzak/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:5000 -m 007 wsgi:app
 
 [Install]
 WantedBy=multi-user.target

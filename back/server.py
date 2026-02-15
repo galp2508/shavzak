@@ -193,18 +193,15 @@ def check_and_run_migrations():
                 print("❌ Migration להוספת requires_special_mahlaka לתבניות נכשל")
                 return False
             conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
+            # cursor = conn.cursor()
         else:
              print("✅ requires_special_mahlaka כבר קיים")
 
-        return True
-
-        else:
-            print("✅ reuse_soldiers_for_standby בטבלת assignment_templates כבר קיים")
-
         conn.close()
         return True
+    
     except Exception as e:
+
         print(f"⚠️  שגיאה בבדיקת schema: {e}")
         traceback.print_exc()
         if 'conn' in locals():

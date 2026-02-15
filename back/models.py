@@ -75,6 +75,7 @@ class Mahlaka(Base):
     id = Column(Integer, primary_key=True)
     number = Column(Integer, nullable=False)
     color = Column(String(20), default="#FFFFFF")
+    is_special = Column(Boolean, default=False)  # האם זו מחלקה מיוחדת
     pluga_id = Column(Integer, ForeignKey('plugot.id'), nullable=False)
     
     pluga = relationship("Pluga", back_populates="mahalkot")
@@ -208,6 +209,7 @@ class AssignmentTemplate(Base):
     requires_certification = Column(String(100), nullable=True)
     requires_senior_commander = Column(Boolean, default=False)
     reuse_soldiers_for_standby = Column(Boolean, default=False)  # האם לקחת חיילים שסיימו משימה לכוננות
+    requires_special_mahlaka = Column(Boolean, default=False)  # האם דורש מחלקה מיוחדת
     
     # תמיכה במשימות רב-יומיות
     duration_days = Column(Integer, default=0)  # 0 = לפי שעות, >0 = מספר ימים
@@ -254,6 +256,7 @@ class Assignment(Base):
     day = Column(Integer, nullable=False)
     start_hour = Column(Integer, nullable=False)
     length_in_hours = Column(Integer, nullable=False)
+    requires_special_mahlaka = Column(Boolean, default=False)  # האם דורש מחלקה מיוחדת
 
     assigned_mahlaka_id = Column(Integer, ForeignKey('mahalkot.id'), nullable=True)
 

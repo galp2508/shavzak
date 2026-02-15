@@ -31,11 +31,10 @@ class SmartScheduler:
         self.min_rest_hours = min_rest_hours
 
         # הגבלות גודל למניעת memory leak
-        # בהתחלה נשמור היסטוריה קצרה (30) כדי שהמודל ילמד מהר משינויים אחרונים
-        # ולא יתקבע על דפוסים ישנים. בהמשך אפשר להגדיל.
-        self.MAX_TRAINING_EXAMPLES = 30 
-        self.MAX_FEEDBACK_HISTORY = 30
-        self.MAX_REJECTED_ASSIGNMENTS = 30
+        # הגדלתי מ-30 כדי לאפשר למידה משמעותית יותר, אך עדיין לשמור על ביצועים
+        self.MAX_TRAINING_EXAMPLES = 100 
+        self.MAX_FEEDBACK_HISTORY = 100
+        self.MAX_REJECTED_ASSIGNMENTS = 50
 
         # נתוני למידה
         self.training_examples = []  # דוגמאות שיבוץ טובות
@@ -521,6 +520,12 @@ class SmartScheduler:
         soldier_id = soldier['id']
         end_hour = start_hour + length
         
+        # בדיקת סטטוס (בקורס, וכו')
+        status_type = soldier.get('status_type')
+        if status_type == 'בקורס':
+             # print(f"🚫 {soldier['name']} בסטטוס '{status_type}' ולכן לא זמין")
+             return False
+
         # קבע שעות מנוחה מינימליות (ברירת מחדל או דריסה)
         min_rest = min_rest_override if min_rest_override is not None else self.min_rest_hours
 
@@ -568,14 +573,29 @@ class SmartScheduler:
                         return False
 
         # בדיקת חפיפה - אסור שחייל יהיה משובץ פעמיים באותו זמן
+        # המרה לשעות אבסולוטיות מתחילת השיבוץ
+        current_start_abs = day * 24 + start_hour
+        current_end_abs = current_start_abs + length
+
         if soldier_id in schedules:
             for item in schedules[soldier_id]:
                 assign_day, assign_start, assign_end = item[:3]
-                # בדוק חפיפה בזמן
-                if assign_day == day:
-                    if not (end_hour <= assign_start or start_hour >= assign_end):
-                        # print(f"⚠️  חייל {soldier_id} כבר משובץ ביום {day} בשעה {assign_start}-{assign_end}")
-                        return False  # חפיפה! חייל משובץ פעמיים
+                
+                # חישוב שעות אבסולוטיות למשימה הקיימת
+                existing_start_abs = assign_day * 24 + assign_start
+                # assign_end הוא כבר start + length, אבל הוא יחסי ליום ההתחלה אם הוא לא > 24?
+                # לא, ב-schedule_routes אנחנו שומרים start + length.
+                # אבל רגע, אם length הוא 72, אז end הוא 80.
+                # אם זה יום 0, אז אבסולוטי זה 80.
+                # אם זה יום 1, start 8, length 8 -> end 16. אבסולוטי: 24+8=32 עד 24+16=40.
+                # הנוסחה ל-existing_end_abs צריכה להיות:
+                existing_end_abs = assign_day * 24 + assign_end
+
+                # בדיקת חפיפה בין טווחים
+                # חפיפה קורית אם: (StartA < EndB) וגם (EndA > StartB)
+                if current_start_abs < existing_end_abs and current_end_abs > existing_start_abs:
+                     # print(f"⚠️  חייל {soldier_id} כבר משובץ: {assign_day} {assign_start}-{assign_end} (חופף ל-{day} {start_hour}-{start_hour+length})")
+                     return False  # חפיפה!
 
         # בדיקת מנוחה מינימלית (16 שעות ללבנות - 2 לבנות של 8 שעות)
         # לבנה = 8 שעות עבודה + 16 שעות מנוחה
@@ -692,8 +712,11 @@ class SmartScheduler:
             return 100.0  # אין משימות = מנוחה מקסימלית
 
         last_assign = max(schedule, key=lambda x: (x[0], x[2]))
-        last_day, _, last_end, _, _ = last_assign
-
+        # Use indexing to avoid unpacking errors if tuple size changes (5 vs 6 items)
+        last_day = last_assign[0]
+        # skip start (index 1)
+        last_end = last_assign[2]
+        
         if last_day == day:
             return start_hour - last_end
         else:
@@ -707,8 +730,9 @@ class SmartScheduler:
         if not schedule:
             return 0.0
 
-        # סכום שעות בשבוע האחרון
-        total_hours = sum(end - start for day, start, end, name, type_ in schedule)
+        # סכום שעות בשבוע האחרון - Use indexing for robustness
+        # item structure: (day, start, end, name, type, [is_base_task])
+        total_hours = sum(item[2] - item[1] for item in schedule)
         return total_hours
 
     def _get_pattern_score(self, soldier: Dict, task: Dict) -> float:
@@ -1156,6 +1180,13 @@ class SmartScheduler:
         קבלת רשימת חיילים זמינים עם מנגנון fallback
         אם אין חיילים זמינים עם מנוחה מלאה, מנסה עם מנוחה מקוצרת
         """
+        # סינון לפי מחלקה מיוחדת (אם נדרש)
+        if task.get('requires_special_mahlaka'):
+            candidates = [s for s in candidates if s.get('mahlaka_is_special')]
+        else:
+            # משימה רגילה - סנן החוצה חיילים ממחלקה מיוחדת
+            candidates = [s for s in candidates if not s.get('mahlaka_is_special')]
+
         # ניסיון 1: אילוצים רגילים (ברירת מחדל)
         available = [s for s in candidates
                     if self.check_availability(s, task['day'], task['start_hour'],
@@ -1201,6 +1232,8 @@ class SmartScheduler:
             return self._assign_operations(task, available_soldiers, schedules, mahlaka_workload)
         elif task_type == 'תורן מטבח':
             return self._assign_kitchen(task, available_soldiers, schedules, mahlaka_workload)
+        elif task_type == 'קצין תורן' or task_type == 'Officer on Duty':
+            return self._assign_operations(task, available_soldiers, schedules, mahlaka_workload)
         else:
             # ברירת מחדל - שמירה
             return self._assign_guard(task, available_soldiers, schedules, mahlaka_workload)
@@ -1643,10 +1676,9 @@ class SmartScheduler:
             }
 
         # התבנית דורשת הסמכה - חובה!
-        # חשוב: רק חיילים רגילים (לא מפקדים) יכולים לשמש בחמ"ל
+        # הוסר הסינון של מפקדים כדי לאפשר קצין תורן
         certified = [s for s in all_soldiers
-                    if not self.is_commander(s) and
-                       self.has_certification(s, cert_name)]
+                    if self.has_certification(s, cert_name)]
         
         available = self.get_available_soldiers_with_fallback(certified, task, schedules)
 

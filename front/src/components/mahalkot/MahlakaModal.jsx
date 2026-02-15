@@ -6,6 +6,7 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     number: '',
     color: '#' + Math.floor(Math.random()*16777215).toString(16),
+    is_special: false,
   });
   const [loading, setLoading] = useState(false);
   const [createdMahlakaId, setCreatedMahlakaId] = useState(null);
@@ -703,6 +704,21 @@ const MahlakaModal = ({ plugaId, onClose, onSave }) => {
                 className="input-field flex-1"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.is_special}
+                onChange={(e) => setFormData({ ...formData, is_special: e.target.checked })}
+                className="w-4 h-4 text-military-600"
+              />
+              <span className="text-gray-700 font-medium">מחלקה מיוחדת</span>
+            </label>
+            <p className="text-xs text-gray-500 mr-6">
+              מחלקה זו תוכל לבצע משימות המוגדרות כדורשות מחלקה מיוחדת
+            </p>
           </div>
 
           <div className="flex gap-3 pt-4">

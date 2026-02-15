@@ -11,7 +11,12 @@ class Config:
     
     API_HOST = os.getenv('API_HOST', '0.0.0.0')
     API_PORT = int(os.getenv('API_PORT', 5000))
-    DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
+    # Security: Default to False in production unless explicitly enabled
+    DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+    
+    # Check for weak secret key in production
+    if not DEBUG and SECRET_KEY == 'your-secret-key-change-in-production':
+        raise ValueError("CRITICAL SECURITY ERROR: You are running in production (DEBUG=False) with the default SECRET_KEY. Please set the SECRET_KEY environment variable.")
     
     # Ditto Configuration
     DITTO_API_URL = os.getenv('DITTO_API_URL', 'https://{YOUR_APP_ID}.cloud.ditto.live')

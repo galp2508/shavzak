@@ -213,6 +213,7 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
     is_base_task: template?.is_base_task || false,
     can_split: template?.can_split || false,
     is_skippable: template?.is_skippable || false,
+    requires_special_mahlaka: template?.requires_special_mahlaka || false,
   });
   const [loading, setLoading] = useState(false);
   const [availableRoles, setAvailableRoles] = useState([]);
@@ -518,6 +519,16 @@ const TemplateModal = ({ template, plugaId, onClose, onSave }) => {
                   className="w-4 h-4 text-military-600"
                 />
                 <span className="text-gray-700">דורש חיילים מאותה מחלקה</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.requires_special_mahlaka}
+                  onChange={(e) => setFormData({ ...formData, requires_special_mahlaka: e.target.checked })}
+                  className="w-4 h-4 text-military-600"
+                />
+                <span className="text-gray-700">דורש מחלקה מיוחדת</span>
               </label>
 
               <label className="flex items-center gap-2 cursor-pointer">

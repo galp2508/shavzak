@@ -8,6 +8,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 import traceback
+import sys  # Added for exit
 import os
 import sqlite3
 
@@ -15,8 +16,10 @@ import sqlite3
 load_dotenv()
 
 from models import init_db
+from config import Config  # Import Config
 
 app = Flask(__name__)
+app.config.from_object(Config)  # Load configuration
 CORS(app)
 
 # Rate Limiting Configuration
@@ -169,7 +172,9 @@ def check_and_run_migrations():
         return False
 
 # הרצת migrations בעת אתחול
-check_and_run_migrations()
+if not check_and_run_migrations():
+    print("❌ Fatal Error: Migrations failed. Exiting.")
+    sys.exit(1)
 
 # Error handlers להצגת שגיאות מפורטות בקונסול
 @app.errorhandler(Exception)
@@ -280,7 +285,8 @@ if __name__ == '__main__':
 
     # הרצת השרת
     try:
-        app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+        # Use debug setting from config
+        app.run(debug=app.config['DEBUG'], host=app.config['API_HOST'], port=app.config['API_PORT'], threaded=True)
     except KeyboardInterrupt:
         print("\n👋 Server shutting down...")
         cleanup_on_exit()

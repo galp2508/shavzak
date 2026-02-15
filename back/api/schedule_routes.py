@@ -2,10 +2,12 @@
 Schedule Routes Blueprint
 כל ה-routes הקשורים לשיבוצים, משימות, ולוח זמנים חי
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from datetime import datetime, timedelta
 import traceback
 import re
+import csv
+import io
 
 from models import (
     get_session, Shavzak, Assignment, AssignmentSoldier, Pluga, Mahlaka,
@@ -112,7 +114,8 @@ def generate_shavzak(shavzak_id, current_user):
     try:
         session = get_db()
 
-        shavzak = session.query(Shavzak).filter_by(id=shavzak_id).first()
+        # Lock the shavzak row to prevent concurrent generation race conditions
+        shavzak = session.query(Shavzak).filter_by(id=shavzak_id).with_for_update().first()
         if not shavzak:
             return jsonify({'error': 'שיבוץ לא נמצא'}), 404
 
@@ -176,7 +179,8 @@ def generate_shavzak(shavzak_id, current_user):
                     'status_type': status.status_type if status else 'בבסיס',
                     'status_end_date': status.end_date if status else None,
                     'status_return_date': status.return_date if status else None,
-                    'mahlaka_id': mahlaka.id  # חשוב ל-ML!
+                    'mahlaka_id': mahlaka.id,  # חשוב ל-ML!
+                    'mahlaka_is_special': mahlaka.is_special
                 }
 
                 # כל חייל מופיע רק ברשימה אחת
@@ -1195,7 +1199,9 @@ def get_live_schedule(pluga_id, current_user):
                                 'certifications': cert_list,
                                 'unavailable_dates': unavailable_dates,
                                 'hatash_2_days': soldier.hatash_2_days,
-                                'status_type': status.status_type if status else 'בבסיס'
+                                'status_type': status.status_type if status else 'בבסיס',
+                                'mahlaka_id': mahlaka.id,
+                                'mahlaka_is_special': mahlaka.is_special
                             }
 
                             # כל חייל מופיע רק ברשימה אחת
@@ -1304,6 +1310,7 @@ def get_live_schedule(pluga_id, current_user):
                                         'requires_certification': template.requires_certification,
                                         'requires_senior_commander': template.requires_senior_commander,
                                         'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
+                                        'requires_special_mahlaka': template.requires_special_mahlaka,
                                         'date': current_date,
                                         'is_base_task': template.is_base_task
                                     }
@@ -1338,6 +1345,7 @@ def get_live_schedule(pluga_id, current_user):
                                     'requires_certification': template.requires_certification,
                                     'requires_senior_commander': template.requires_senior_commander,
                                     'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
+                                    'requires_special_mahlaka': template.requires_special_mahlaka,
                                     'date': current_date,
                                     'is_base_task': template.is_base_task
                                 }
@@ -1362,6 +1370,7 @@ def get_live_schedule(pluga_id, current_user):
                                     'requires_certification': template.requires_certification,
                                     'requires_senior_commander': template.requires_senior_commander,
                                     'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
+                                    'requires_special_mahlaka': template.requires_special_mahlaka,
                                     'date': current_date,
                                     'is_base_task': template.is_base_task
                                 }
@@ -1391,6 +1400,7 @@ def get_live_schedule(pluga_id, current_user):
                                     'requires_certification': template.requires_certification,
                                     'requires_senior_commander': template.requires_senior_commander,
                                     'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
+                                    'requires_special_mahlaka': template.requires_special_mahlaka,
                                     'date': current_date,
                                     'is_base_task': template.is_base_task
                                 }
@@ -1521,6 +1531,7 @@ def get_live_schedule(pluga_id, current_user):
                                     day=assign_data['day'],
                                     start_hour=assign_data['start_hour'],
                                     length_in_hours=assign_data['length_in_hours'],
+                                    requires_special_mahlaka=assign_data.get('requires_special_mahlaka', False),
                                     assigned_mahlaka_id=result.get('mahlaka_id')
                                 )
                                 session.add(assignment)
@@ -2290,5 +2301,93 @@ def clear_day_soldiers(pluga_id, date_str, current_user):
         print(f"Error in clear_day_soldiers: {str(e)}")
         traceback.print_exc()
         return jsonify({'error': f'שגיאה בניקוי השיבוץ ליום: {str(e)}'}), 500
+    finally:
+        session.close()
+
+
+@schedule_bp.route('/api/plugot/<int:pluga_id>/export/csv', methods=['GET'])
+@token_required
+def export_shavzak_csv(pluga_id, current_user):
+    """ייצוא שיבוץ ל-CSV (עבור Excel/Sheets)"""
+    session = get_db()
+    try:
+        if not can_view_pluga(current_user, pluga_id):
+            return jsonify({'error': 'אין לך הרשאה'}), 403
+
+        start_date_str = request.args.get('start_date')
+        days_count = int(request.args.get('days_count', 1))
+
+        if not start_date_str:
+            return jsonify({'error': 'חובה לציין תאריך התחלה'}), 400
+
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = start_date + timedelta(days=days_count)
+
+        # מצא את השיבוץ האוטומטי
+        master_shavzak = session.query(Shavzak).filter(
+            Shavzak.pluga_id == pluga_id,
+            Shavzak.name == 'שיבוץ אוטומטי'
+        ).first()
+
+        if not master_shavzak:
+            return jsonify({'error': 'לא נמצא שיבוץ אוטומטי'}), 404
+
+        # חישוב טווח ימים בשיבוץ
+        start_day_idx = (start_date - master_shavzak.start_date).days
+        end_day_idx = start_day_idx + days_count
+
+        # שליפת משימות
+        assignments = session.query(Assignment).filter(
+            Assignment.shavzak_id == master_shavzak.id,
+            Assignment.day >= start_day_idx,
+            Assignment.day < end_day_idx
+        ).order_by(Assignment.day, Assignment.start_hour).all()
+
+        # הכנת CSV
+        output = io.StringIO()
+        writer = csv.writer(output, encoding='utf-8-sig') # utf-8-sig for Excel Hebrew support
+
+        # כותרות
+        writer.writerow(['תאריך', 'יום', 'שעה', 'משימה', 'סוג', 'חיילים משובצים', 'הערות'])
+
+        days_map = {0: 'ראשון', 1: 'שני', 2: 'שלישי', 3: 'רביעי', 4: 'חמישי', 5: 'שישי', 6: 'שבת'}
+
+        for assignment in assignments:
+            assign_date = master_shavzak.start_date + timedelta(days=assignment.day)
+            day_name = days_map[assign_date.weekday()]
+            
+            # שליפת חיילים
+            soldiers_names = []
+            for sa in assignment.soldiers_assigned:
+                soldier = session.query(Soldier).get(sa.soldier_id)
+                if soldier:
+                    role_suffix = f" ({sa.role_in_assignment})" if sa.role_in_assignment and sa.role_in_assignment != 'חייל' else ""
+                    soldiers_names.append(f"{soldier.name}{role_suffix}")
+            
+            soldiers_str = ", ".join(soldiers_names)
+            
+            writer.writerow([
+                assign_date.strftime('%d/%m/%Y'),
+                day_name,
+                f"{assignment.start_hour:02d}:00",
+                assignment.name,
+                assignment.assignment_type,
+                soldiers_str,
+                "" # הערות placeholder
+            ])
+
+        output.seek(0)
+        
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8-sig')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'shavzak_export_{start_date_str}.csv'
+        )
+
+    except Exception as e:
+        print(f"Error exporting CSV: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
     finally:
         session.close()

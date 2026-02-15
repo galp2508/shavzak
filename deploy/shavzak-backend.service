@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 # Change 'root' to your sudo user if you created one (recommended)
-User=root
+User=www-data
 Group=www-data
 # Adjust this path to where you cloned the repo
 WorkingDirectory=/var/www/shavzak/back

@@ -145,6 +145,7 @@ def create_mahlaka(current_user):
         mahlaka = Mahlaka(
             number=data['number'],
             color=data.get('color', '#FFFFFF'),
+            is_special=data.get('is_special', False),
             pluga_id=pluga_id
         )
 
@@ -156,7 +157,8 @@ def create_mahlaka(current_user):
             'mahlaka': {
                 'id': mahlaka.id,
                 'number': mahlaka.number,
-                'color': mahlaka.color
+                'color': mahlaka.color,
+                'is_special': mahlaka.is_special
             }
         }), 201
     except Exception as e:
@@ -192,6 +194,10 @@ def update_mahlaka(mahlaka_id, current_user):
         if 'number' in data:
             mahlaka.number = data['number']
 
+        # עדכון האם מיוחדת
+        if 'is_special' in data:
+            mahlaka.is_special = data['is_special']
+
         session.commit()
 
         return jsonify({
@@ -199,7 +205,8 @@ def update_mahlaka(mahlaka_id, current_user):
             'mahlaka': {
                 'id': mahlaka.id,
                 'number': mahlaka.number,
-                'color': mahlaka.color
+                'color': mahlaka.color,
+                'is_special': mahlaka.is_special
             }
         }), 200
     except Exception as e:
@@ -421,6 +428,7 @@ def create_assignment_template(pluga_id, current_user):
             requires_certification=data.get('requires_certification'),
             requires_senior_commander=data.get('requires_senior_commander', False),
             reuse_soldiers_for_standby=data.get('reuse_soldiers_for_standby', False),
+            requires_special_mahlaka=data.get('requires_special_mahlaka', False),
             duration_days=data.get('duration_days', 0),
             recurrence_interval=data.get('recurrence_interval', 1),
             start_day_offset=data.get('start_day_offset', 0),
@@ -479,6 +487,7 @@ def list_assignment_templates(pluga_id, current_user):
             'requires_certification': t.requires_certification,
             'requires_senior_commander': t.requires_senior_commander,
             'reuse_soldiers_for_standby': t.reuse_soldiers_for_standby,
+            'requires_special_mahlaka': t.requires_special_mahlaka,
             'duration_days': t.duration_days,
             'recurrence_interval': t.recurrence_interval,
             'start_day_offset': t.start_day_offset,
@@ -537,6 +546,8 @@ def update_assignment_template(template_id, current_user):
             template.requires_senior_commander = data['requires_senior_commander']
         if 'reuse_soldiers_for_standby' in data:
             template.reuse_soldiers_for_standby = data['reuse_soldiers_for_standby']
+        if 'requires_special_mahlaka' in data:
+            template.requires_special_mahlaka = data['requires_special_mahlaka']
         if 'duration_days' in data:
             template.duration_days = data['duration_days']
         if 'recurrence_interval' in data:

@@ -153,46 +153,94 @@ const LiveSchedule = () => {
     }
   };
 
-  const handleExportImage = async () => {
-    const element = document.getElementById('schedule-grid');
-    if (!element) return;
+  const [showExportModal, setShowExportModal] = useState(false);
 
-    try {
-      // Clone the element to capture full content
-      const clone = element.cloneNode(true);
-      
-      // Reset zoom on clone for export
-      const innerDiv = clone.querySelector('.min-w-max');
-      if (innerDiv) {
-        innerDiv.style.zoom = '1';
+  const handleExportClick = () => {
+    setShowExportModal(true);
+  };
+
+  const handleExportSubmit = async (type, days) => {
+    setShowExportModal(false);
+    
+    if (type === 'excel') {
+      try {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const response = await api.get(`/plugot/${user.pluga_id}/export/csv?start_date=${dateStr}&days_count=${days}`, {
+          responseType: 'blob'
+        });
+        
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `shavzak_export_${dateStr}_${days}days.csv`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        toast.success('הקובץ ירד בהצלחה');
+      } catch (error) {
+        console.error('Export excel error:', error);
+        toast.error('שגיאה בייצוא לאקסל');
       }
-
-      clone.style.width = 'fit-content';
-      clone.style.height = 'auto';
-      clone.style.overflow = 'visible';
-      clone.style.position = 'absolute';
-      clone.style.top = '-9999px';
-      clone.style.left = '-9999px';
-      document.body.appendChild(clone);
-
-      const canvas = await html2canvas(clone, {
-        scale: 2, // Higher quality
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        windowWidth: clone.scrollWidth,
-        windowHeight: clone.scrollHeight
-      });
+    } else {
+      // Image Export
+      if (days > 1) {
+        toast.info('ייצוא תמונה מרובה ימים בפיתוח. מייצא את היום הנוכחי בלבד.');
+      }
       
-      document.body.removeChild(clone);
-      
-      const link = document.createElement('a');
-      link.download = `shavzak-${currentDate.toISOString().split('T')[0]}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-      toast.success('התמונה נשמרה בהצלחה!');
-    } catch (error) {
-      console.error('Export error:', error);
-      toast.error('שגיאה בייצוא התמונה');
+      // Existing image export logic
+      const element = document.getElementById('schedule-grid');
+      if (!element) return;
+
+      try {
+        const clone = element.cloneNode(true);
+        const innerDiv = clone.querySelector('.min-w-max');
+        if (innerDiv) innerDiv.style.zoom = '1';
+
+        clone.style.width = 'fit-content';
+        clone.style.height = 'auto';
+        clone.style.overflow = 'visible';
+        clone.style.position = 'absolute';
+        clone.style.top = '-9999px';
+        clone.style.left = '-9999px';
+        document.body.appendChild(clone);
+
+        const canvas = await html2canvas(clone, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          windowWidth: clone.scrollWidth,
+          windowHeight: clone.scrollHeight
+        });
+        
+        document.body.removeChild(clone);
+        
+        const link = document.createElement('a');
+        link.download = `shavzak-${currentDate.toISOString().split('T')[0]}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        
+        // WhatsApp sharing hint
+        if (/Android|iPhone/i.test(navigator.userAgent)) {
+           try {
+             const blob = await (await fetch(canvas.toDataURL('image/png'))).blob();
+             const file = new File([blob], "shavzak.png", { type: "image/png" });
+             if (navigator.canShare && navigator.canShare({ files: [file] })) {
+               await navigator.share({
+                 files: [file],
+                 title: 'שיבוץ קרבי',
+                 text: 'השיבוץ היומי מוכן!'
+               });
+             }
+           } catch (e) {
+             console.log('Sharing failed', e);
+           }
+        }
+        
+        toast.success('התמונה נשמרה בהצלחה!');
+      } catch (error) {
+        console.error('Export error:', error);
+        toast.error('שגיאה בייצוא התמונה');
+      }
     }
   };
 
@@ -973,7 +1021,7 @@ const LiveSchedule = () => {
                   <Shield size={18} className="md:w-6 md:h-6" />
                 </button>
                 <button
-                  onClick={handleExportImage}
+                  onClick={handleExportClick}
                   className="p-1.5 md:p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
                   title="ייצא לתמונה"
                 >
@@ -1846,6 +1894,14 @@ const LiveSchedule = () => {
           onSave={handleAssignmentSave}
         />
       )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <ExportModal
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExportSubmit}
+        />
+      )}
     </div>
   );
 };
@@ -1931,6 +1987,96 @@ const FeedbackReasonModal = ({ onClose, onSubmit, onEdit }) => {
             <Edit size={18} />
             שלח פידבק וערוך שיבוץ
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ExportModal = ({ onClose, onExport }) => {
+  const [days, setDays] = useState(1);
+  const [type, setType] = useState('image'); // 'image' or 'excel'
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <Download className="w-6 h-6 text-blue-600" />
+          ייצוא שיבוץ
+        </h2>
+
+        <div className="space-y-6">
+          <div>
+            <label className="label">סוג ייצוא</label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setType('image')}
+                className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${
+                  type === 'image'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                }`}
+              >
+                <div className="bg-blue-100 p-2 rounded-full">
+                  <Download className="w-6 h-6 text-blue-600" />
+                </div>
+                <span className="font-bold">תמונה (WhatsApp)</span>
+              </button>
+
+              <button
+                onClick={() => setType('excel')}
+                className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${
+                  type === 'excel'
+                    ? 'border-green-500 bg-green-50 text-green-700'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                }`}
+              >
+                <div className="bg-green-100 p-2 rounded-full">
+                  <LayoutList className="w-6 h-6 text-green-600" />
+                </div>
+                <span className="font-bold">אקסל (Sheets)</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="label">מספר ימים לייצוא</label>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setDays(Math.max(1, days - 1))}
+                className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200"
+              >
+                -
+              </button>
+              <span className="text-xl font-bold w-12 text-center">{days}</span>
+              <button
+                onClick={() => setDays(Math.min(14, days + 1))}
+                className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200"
+              >
+                +
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mt-2">
+              {type === 'image' 
+                ? 'התמונה תכיל את כל הימים שנבחרו ברצף.' 
+                : 'קובץ האקסל יכיל את כל המשימות בטווח הימים שנבחר.'}
+            </p>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              onClick={() => onExport(type, days)}
+              className={`flex-1 btn-primary flex items-center justify-center gap-2 ${
+                type === 'excel' ? 'bg-green-600 hover:bg-green-700' : ''
+              }`}
+            >
+              <Download size={20} />
+              {type === 'image' ? 'הורד תמונה' : 'הורד אקסל'}
+            </button>
+            <button onClick={onClose} className="flex-1 btn-secondary">
+              ביטול
+            </button>
+          </div>
         </div>
       </div>
     </div>

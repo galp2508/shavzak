@@ -214,8 +214,28 @@ def check_and_run_migrations():
                 print("❌ Migration להוספת requires_special_mahlaka למשימות נכשל")
                 return False
             conn = sqlite3.connect(DB_PATH)
+            # Re-fetch columns
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(assignment_templates)")
+            template_columns = [column[1] for column in cursor.fetchall()]
         else:
              print("✅ requires_special_mahlaka כבר קיים ב-assignments")
+
+        # בדיקה 8: הוספת is_standby_task לטבלת assignment_templates
+        # זה מאפשר להגדיר משימות כ"כוננות" שלא דורשות מנוחה אחריהן
+        if 'is_standby_task' not in template_columns:
+            print("⚠️  מזהה עמודה חסרה: is_standby_task בטבלת assignment_templates")
+            print("🔧 מריץ migration אוטומטי להוספת is_standby_task לתבניות...")
+            conn.close()
+            from migrate_add_standby_to_templates import migrate_database as migrate_standby_templates
+            if migrate_standby_templates(DB_PATH):
+                print("✅ Migration להוספת is_standby_task לתבניות הושלם בהצלחה")
+            else:
+                print("❌ Migration להוספת is_standby_task לתבניות נכשל")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+        else:
+            print("✅ is_standby_task כבר קיים")
 
         conn.close()
         return True

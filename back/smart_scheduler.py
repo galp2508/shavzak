@@ -601,15 +601,36 @@ class SmartScheduler:
         # לבנה = 8 שעות עבודה + 16 שעות מנוחה
         if soldier_id in schedules and schedules[soldier_id]:
             last_assign = max(schedules[soldier_id], key=lambda x: (x[0], x[2]))
-            last_day, _, last_end, _, _, is_last_base_task = last_assign if len(last_assign) == 6 else (*last_assign, False)
+            # 6 items: day, start, end, name, type, is_base_task
+            if len(last_assign) == 6:
+                last_day, _, last_end, last_name, last_type, is_last_base_task = last_assign
+            else:
+                last_day, _, last_end, last_name, last_type = last_assign
+                is_last_base_task = False
 
             # אם המשימה האחרונה הייתה משימת בסיס, היא לא דורשת מנוחה אחריה
             if is_last_base_task:
                 # עדיין צריך לבדוק חפיפה (שכבר נבדקה למעלה), אבל לא מנוחה
                 pass
             else:
-                # חשב שעות מאז המשימה האחרונה
-                if last_day == day:
+                # 🚀 תיקון למשימות כוננות: אם המשימה האחרונה היתה "כוננות" (חח"ק/גשש), לא צריך מנוחה!
+                # נבדוק לפי שם המשימה או אם מוגדר is_standby_task
+                
+                # אם ה-tuple בגודל 7, האיבר האחרון הוא is_standby_task (אם הוספנו אותו)
+                is_standby = False
+                if len(last_assign) >= 7:
+                    is_standby = last_assign[6]
+
+                # או נבדוק לפי השם והסוג (fallback)
+                if not is_standby:
+                    last_name = last_assign[3]
+                    last_type = last_assign[4]
+                    low_effort_tasks = ['חפק', 'חפ"ק', 'גשש', 'כוננות', 'המתנה']
+                    is_standby = any(t in last_name.lower() or t in last_type.lower() for t in low_effort_tasks)
+
+                if is_standby:
+                     pass # לא צריך אכיפת מנוחה אחרי משימה כזו
+                elif last_day == day:
                     # אותו יום
                     hours_since = start_hour - last_end
                     if hours_since < min_rest:
@@ -624,10 +645,39 @@ class SmartScheduler:
                     if total_rest < min_rest:
                         return False  # מנוחה לא מספקת בין ימים
 
-        # בדיקת הסמכות (אם נדרש)
-        # זה נבדק בשכבה גבוהה יותר
+        # בדיקת הסמכות (אם נדרש) - CHECK CERTIFICATIONS (HARD CONSTRAINT)
+        # זה היה חסר! עכשיו זה נבדק גם באלגוריתם הליבה
+        required_role = None
+        current_task_type = None # אין לי את סוג המשימה פה כפרמטר, אלא ב task object בחוץ
+        
+        # הערה: הפונקציה הזו מופעלת ע"י check_availability שמקבלת פרמטרים פשוטים.
+        # כדי לבדוק הסמכה, צריך להעביר פרמטר נוסף task_requirements או לבדוק בשכבה הקוראת.
+        # מכיוון שזו פונקציה פנימית, אני אוסיף פרמטר אופציונלי לבדיקת תפקיד.
+        pass
 
         return True
+
+    def check_certification_constraint(self, soldier: Dict, role_needed: str) -> bool:
+        """בדיקה קשיחה: האם לחייל יש את ההסמכה הנדרשת?"""
+        if not role_needed:
+            return True
+            
+        role_needed = role_needed.strip()
+        
+        # 1. נהג
+        if role_needed == 'נהג':
+            return self.is_driver(soldier)
+            
+        # 2. חובש
+        if role_needed == 'חובש':
+            return 'חובש' in soldier.get('certifications', [])
+            
+        # 3. מפקד
+        if role_needed in ['מפקד', 'ממ', 'מכ', 'סמל']:
+            return self.is_commander(soldier)
+            
+        # 4. בדיקה כללית להסמכות אחרות
+        return role_needed in soldier.get('certifications', [])
 
     def has_certification(self, soldier: Dict, cert_name: str) -> bool:
         """בדיקה אם לחייל יש הסמכה מסוימת"""

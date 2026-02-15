@@ -161,7 +161,7 @@ def check_and_run_migrations():
         else:
             print("✅ reuse_soldiers_for_standby בטבלת shavzakim כבר קיים")
 
-        # בדיקה 6: הוספת reuse_soldiers_for_standby לטבלת assignment_templates
+        # בדיקה 6: הוספת reuse_soldiers_for_standby ו-requires_special_mahlaka לטבלת assignment_templates
         cursor.execute("PRAGMA table_info(assignment_templates)")
         template_columns = [column[1] for column in cursor.fetchall()]
 
@@ -177,7 +177,28 @@ def check_and_run_migrations():
                 print(f"❌ Migration להוספת reuse_soldiers_for_standby לתבניות נכשל: {e}")
                 return False
             conn = sqlite3.connect(DB_PATH)
+            # Re-fetch columns to be safe for next check
             cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(assignment_templates)")
+            template_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'requires_special_mahlaka' not in template_columns:
+            print("⚠️  מזהה עמודה חסרה: requires_special_mahlaka בטבלת assignment_templates")
+            print("🔧 מריץ migration אוטומטי להוספת requires_special_mahlaka לתבניות...")
+            conn.close()
+            from migrate_add_special_to_templates import migrate_database as migrate_special_templates
+            if migrate_special_templates(DB_PATH):
+                print("✅ Migration להוספת requires_special_mahlaka לתבניות הושלם בהצלחה")
+            else:
+                print("❌ Migration להוספת requires_special_mahlaka לתבניות נכשל")
+                return False
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+        else:
+             print("✅ requires_special_mahlaka כבר קיים")
+
+        return True
+
         else:
             print("✅ reuse_soldiers_for_standby בטבלת assignment_templates כבר קיים")
 

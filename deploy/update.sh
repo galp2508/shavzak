@@ -20,7 +20,9 @@ npm run build
 cd ..
 
 # Restart Services
-echo "🔄 Restarting Server..."
+echo "🔄 Updating Systemd Services..."
+cp deploy/shavzak.service /etc/systemd/system/shavzak.service
+systemctl daemon-reload
 systemctl restart shavzak
 systemctl restart nginx
 

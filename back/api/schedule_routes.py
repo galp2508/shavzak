@@ -286,6 +286,7 @@ def generate_shavzak(shavzak_id, current_user):
                         'requires_certification': template.requires_certification,
                         'requires_senior_commander': template.requires_senior_commander,
                         'reuse_soldiers_for_standby': template.reuse_soldiers_for_standby,
+                        'is_base_task': template.is_base_task,
                         'date': current_date
                     }
 
